@@ -148,6 +148,30 @@ codebase_list() {
   done < "$codebases_file"
 }
 
+create_feature_branch() {
+  local repo="$1"
+  local feature="$2"
+
+  local repo_path="$CODEBASE_DIR/$repo"
+  if [[ ! -d "$repo_path/.git" ]]; then
+    err "repo '$repo' not found in codebase"
+    return 1
+  fi
+
+  local branch_name="feature/$feature"
+  local base_ref
+  base_ref=$(git -C "$repo_path" rev-parse HEAD)
+
+  if git -C "$repo_path" checkout -b "$branch_name" 2>/dev/null; then
+    echo "$base_ref"
+    return 0
+  else
+    log "branch '$branch_name' already exists in '$repo'"
+    echo "$base_ref"
+    return 0
+  fi
+}
+
 init_workspace() {
   mkdir -p "$DAPEI_DIR/workflows" "$DAPEI_DIR/rules"
   mkdir -p "$WORKSPACE_DIR/codebase" "$WORKSPACE_DIR/features"
@@ -355,8 +379,9 @@ write_feature_manifest() {
   local feature_dir="$FEATURES_DIR/$feature"
 
   IFS=',' read -r -a repos <<<"$repos_csv"
+
   {
-    echo 'version: "0.1"'
+    echo 'version: "0.2"'
     echo "feature:"
     echo "  name: \"$feature\""
     echo "  objective: \"${objective:-TBD}\""
@@ -364,7 +389,19 @@ write_feature_manifest() {
     echo "  repos:"
     for r in "${repos[@]}"; do
       r="$(echo "$r" | xargs)"
-      [[ -n "$r" ]] && echo "    - \"$r\""
+      [[ -z "$r" ]] && continue
+      local repo_path="$CODEBASE_DIR/$r"
+      local base_ref="unknown"
+      local base_time
+      base_time="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+      if [[ -d "$repo_path/.git" ]]; then
+        base_ref=$(git -C "$repo_path" rev-parse HEAD)
+        base_time=$(git -C "$repo_path" log -1 --format="%aI" HEAD 2>/dev/null || echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ")")
+      fi
+      echo "    - name: \"$r\""
+      echo "      branch: \"feature/$feature\""
+      echo "      base-ref: \"$base_ref\""
+      echo "      base-time: \"$base_time\""
     done
     echo "  scope:"
     echo "    in: []"
@@ -414,6 +451,7 @@ create_feature() {
     fi
 
     ln -sfn "$CODEBASE_DIR/$repo" "$feature_dir/repos/$repo"
+    create_feature_branch "$repo" "$name" || exit 1
     log "mapped repo: $repo"
   done
 
