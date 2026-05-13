@@ -427,14 +427,14 @@ EOF_CTX
 - Keep changes scoped to this feature.
 EOF_CTX
 
-  cat > "$feature_dir/memory/decisions.md" <<'EOF_MEM'
-# Decisions
+  cat > "$feature_dir/memory/decision-log.md" <<'EOF_MEM'
+# Decision Log
 EOF_MEM
   cat > "$feature_dir/memory/tradeoff.md" <<'EOF_MEM'
 # Tradeoffs
 EOF_MEM
-  cat > "$feature_dir/memory/risks.md" <<'EOF_MEM'
-# Risks
+  cat > "$feature_dir/memory/risk.md" <<'EOF_MEM'
+# Risk Log
 EOF_MEM
   cat > "$feature_dir/memory/open-questions.md" <<'EOF_MEM'
 # Open Questions
@@ -463,6 +463,130 @@ EOF_REP
   cat > "$feature_dir/reports/architecture-review.md" <<'EOF_REP'
 # Architecture Review
 EOF_REP
+
+  local current_date
+  current_date=$(date '+%Y-%m-%d')
+
+  cat > "$feature_dir/docs/01-current-state.md" <<EOF_DOC
+# 01. Current State
+
+Date: $current_date
+
+## Objective
+${objective:-TBD}
+
+## Touched Repositories
+<!-- List repositories -->
+
+## Current Module Structure
+<!-- List key modules and their responsibilities -->
+
+## Dependencies
+<!-- List external dependencies -->
+
+## Existing Tests
+<!-- List existing test suites -->
+
+## Unknowns
+- [ ] Unknown item 1
+
+## Evidence
+<!-- Facts gathered from code analysis -->
+EOF_DOC
+
+  cat > "$feature_dir/docs/02-gap-analysis.md" <<'EOF_DOC'
+# 02. Gap Analysis
+
+Date: $current_date
+
+## Related Documents
+- Previous: [01. Current State](./01-current-state.md)
+
+## Business Gaps
+<!-- What business capabilities are missing? -->
+- [ ] Gap 1
+
+## Technical Gaps
+<!-- What technical deficiencies exist? -->
+- [ ] Gap 1
+
+## Risks
+- Risk 1
+
+## Open Questions
+- [ ] Question 1
+EOF_DOC
+
+  cat > "$feature_dir/docs/03-business-design.md" <<'EOF_DOC'
+# 03. Business Design
+
+Date: $current_date
+
+## Related Documents
+- Previous: [02. Gap Analysis](./02-gap-analysis.md)
+
+## Problem Statement
+<!-- What business problem are we solving? -->
+
+## Success Criteria
+- [ ] Criterion 1
+
+## User Stories
+- US-1: As a ... I want ... so that ...
+EOF_DOC
+
+  cat > "$feature_dir/docs/04-technical-design.md" <<'EOF_DOC'
+# 04. Technical Design
+
+Date: $current_date
+
+## Related Documents
+- Previous: [03. Business Design](./03-business-design.md)
+
+## Architecture Overview
+<!-- High-level architecture -->
+
+## Component Design
+### Component 1
+- Responsibility:
+- Public API:
+EOF_DOC
+
+  cat > "$feature_dir/docs/05-task-breakdown.md" <<'EOF_DOC'
+# 05. Task Breakdown
+
+Date: $current_date
+
+## Related Documents
+- Previous: [04. Technical Design](./04-technical-design.md)
+
+## Task Backlog
+
+### Phase 1
+- [ ] Task 1.1: Description (estimated: Xh)
+
+## Effort Estimate
+| Task | Estimate |
+|------|----------|
+| Total | X days |
+EOF_DOC
+
+  cat > "$feature_dir/docs/06-acceptance.md" <<'EOF_DOC'
+# 06. Acceptance Criteria
+
+Date: $current_date
+
+## Related Documents
+- Previous: [05. Task Breakdown](./05-task-breakdown.md)
+
+## Acceptance Checklist
+
+### Functional Requirements
+- [ ] AC-1: Description
+
+### Non-Functional Requirements
+- [ ] AC-2: Description
+EOF_DOC
 
   cat > "$feature_dir/agents.md" <<EOF_AG
 # Feature Agents
@@ -517,6 +641,7 @@ write_feature_manifest() {
     echo "    - \"define acceptance criteria\""
     echo '  risk_level: "medium"'
     echo "  dependencies: []"
+    echo '  last-review-at: ""'
   } > "$feature_dir/feature.yaml"
 }
 
@@ -572,22 +697,56 @@ run_workflow_stage() {
   local feature="$1"
   local stage="$2"
   local feature_dir="$FEATURES_DIR/$feature"
+  local workflow_file="$DAPEI_DIR/workflows/feature-lifecycle.yaml"
 
   if [[ ! -d "$feature_dir" ]]; then
     err "feature not found: $feature"
     exit 1
   fi
 
-  local report="$feature_dir/reports/feature-progress.md"
+  if [[ ! -f "$workflow_file" ]]; then
+    err "workflow file not found: $workflow_file"
+    exit 1
+  fi
+
+  local stage_line
+  stage_line=$(grep -n "^\s*- id: $stage$" "$workflow_file" | cut -d: -f1)
+  if [[ -z "$stage_line" ]]; then
+    err "stage '$stage' not found in workflow"
+    exit 1
+  fi
+
+  local next_line=$((stage_line + 1))
+  local requires_line
+  requires_line=$(awk -v start="$stage_line" 'NR==start+1 && /^(\s*)requires:/ { print NR":"$0 }' "$workflow_file")
+
+  if [[ "$requires_line" =~ requires:\s*\[([^\]]*)\] ]]; then
+    local requires_str="${BASH_REMATCH[1]}"
+    if [[ -n "$requires_str" ]]; then
+      IFS=',' read -r -a requires_array <<< "$requires_str"
+      for req in "${requires_array[@]}"; do
+        req="$(echo "$req" | xargs | tr -d '\"')"
+        [[ -z "$req" ]] && continue
+        local req_report="$feature_dir/reports/stage-$req.completed"
+        if [[ ! -f "$req_report" ]]; then
+          err "required stage '$req' not completed before running '$stage'"
+          err "please complete '$req' first"
+          exit 1
+        fi
+      done
+    fi
+  fi
+
+  mkdir -p "$feature_dir/reports"
+
   {
     echo ""
-    echo "## Stage Update"
-    echo "- Stage: $stage"
+    echo "## Stage: $stage"
     echo "- Time: $(date '+%Y-%m-%d %H:%M:%S %z')"
-    echo "- Result: stage checkpoint recorded"
-  } >> "$report"
+    echo "- Status: started"
+  } >> "$feature_dir/reports/feature-progress.md"
 
-  log "workflow stage recorded: feature=$feature stage=$stage"
+  log "workflow stage started: feature=$feature stage=$stage"
 }
 
 report_feature() {
@@ -611,7 +770,7 @@ report_feature() {
 - Feature: $feature
 - Generated At: $(date '+%Y-%m-%d %H:%M:%S %z')
 - Progress Source: reports/feature-progress.md
-- Risks Source: memory/risks.md
+- Risks Source: memory/risk.md
 - Open Questions Source: memory/open-questions.md
 - Guardrail Source: reports/guardrail-report.md
 EOF_D

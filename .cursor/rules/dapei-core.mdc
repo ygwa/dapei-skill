@@ -1,0 +1,10 @@
+---
+description: dapei.skill 全局工程核心规则
+globs: ["**/*"]
+alwaysApply: true
+---
+# dapei.skill 全局规范
+
+- 架构原则：遵循 DDD (Domain-Driven Design) 分层。
+- 工作流：AI 禁止直接修改 `workspace/codebase`，必须通过 `@dapei create-feature` 开启新任务。
+- 上下文：在开始任何任务前，必须使用 `@docs` 引用相关设计文档。

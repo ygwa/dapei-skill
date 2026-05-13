@@ -1,0 +1,18 @@
+version: "0.2"
+feature:
+  name: "payment-refactor"
+  objective: "stabilize callback flow"
+  owner: "unassigned"
+  repos:
+    - name: "demo-repo"
+      branch: "feature/payment-refactor"
+      base-ref: "c5742ec3c56b4fb05d4ecd5ec91d5e7fc6131388"
+      base-time: "2026-05-14T07:01:12+08:00"
+  scope:
+    in: []
+    out: []
+  acceptance:
+    - "define acceptance criteria"
+  risk_level: "medium"
+  dependencies: []
+  last-review-at: ""

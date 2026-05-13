@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WORKSPACE_DIR="$ROOT_DIR/workspace"
+FEATURES_DIR="$WORKSPACE_DIR/features"
+
+usage() {
+  echo "Usage: dapei-guardrail <feature-name>"
+}
+
+feature="${1:-}"
+if [[ -z "$feature" ]]; then
+  usage
+  exit 1
+fi
+
+feature_dir="$FEATURES_DIR/$feature"
+if [[ ! -d "$feature_dir" ]]; then
+  echo "[guardrail][error] feature not found: $feature" >&2
+  exit 1
+fi
+
+status="PASS"
+findings=()
+
+if [[ ! -f "$feature_dir/feature.yaml" ]]; then
+  status="WARN"
+  findings+=("LAYER-002 missing feature.yaml")
+fi
+
+if [[ ! -f "$feature_dir/context/constraints.md" ]]; then
+  status="WARN"
+  findings+=("LAYER-002 missing context/constraints.md")
+fi
+
+if [[ ! "$feature" =~ ^[a-z0-9-]+$ ]]; then
+  status="WARN"
+  findings+=("NAME-001 feature folder name not kebab-case")
+fi
+
+if [[ ! -d "$feature_dir/repos" ]]; then
+  status="WARN"
+  findings+=("LAYER-001 missing repos mapping directory")
+fi
+
+report_file="$feature_dir/reports/guardrail-report.md"
+{
+  echo "# Guardrail Report"
+  echo
+  echo "- Feature: $feature"
+  echo "- Mode: report"
+  echo "- Status: $status"
+  echo "- Generated At: $(date '+%Y-%m-%d %H:%M:%S %z')"
+  echo
+  echo "## Findings"
+  if [[ ${#findings[@]} -eq 0 ]]; then
+    echo "- none"
+  else
+    for f in "${findings[@]}"; do
+      echo "- $f"
+    done
+  fi
+} > "$report_file"
+
+echo "[guardrail] report generated: $report_file"

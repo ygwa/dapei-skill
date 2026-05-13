@@ -1,0 +1,19 @@
+version: 0.1
+rule_set: ddd
+mode: report
+rules:
+  - id: DDD-001
+    title: cross-domain dependency requires decision record
+    severity: high
+    check:
+      type: evidence-required
+      evidence_file: "workspace/features/<feature>/memory/decisions.md"
+      condition: "cross-domain-change=true"
+    message: record rationale before introducing cross-domain coupling
+
+  - id: DDD-002
+    title: ubiquitous language alignment
+    severity: low
+    check:
+      type: glossary-match
+      source: "docs/glossary"

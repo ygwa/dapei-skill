@@ -1,0 +1,18 @@
+version: "0.2"
+feature:
+  name: "<feature-name>"
+  objective: "<describe objective min 10 chars>"
+  owner: "unassigned"
+  repos:
+    - name: "<repo1>"
+      branch: "feature/<feature-name>"
+      base-ref: "<auto-filled>"
+      base-time: "<auto-filled>"
+  scope:
+    in: []
+    out: []
+  acceptance:
+    - "<define acceptance criteria>"
+  risk_level: "medium"
+  dependencies: []
+  last-review-at: ""

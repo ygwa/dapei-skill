@@ -1,0 +1,11 @@
+version: 0.1
+rule_set: naming
+mode: report
+rules:
+  - id: NAME-001
+    title: feature folder naming convention
+    severity: medium
+    check:
+      type: folder-name-regex
+      regex: "^[a-z0-9-]+$"
+    message: use kebab-case for feature names

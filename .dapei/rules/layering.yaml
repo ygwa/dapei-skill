@@ -1,0 +1,21 @@
+version: 0.1
+rule_set: layering
+mode: report
+rules:
+  - id: LAYER-001
+    title: no direct edits in workspace/codebase by agent
+    severity: high
+    check:
+      type: path-deny
+      patterns:
+        - "workspace/codebase/**"
+    message: agent must work in workspace/features/* only
+
+  - id: LAYER-002
+    title: feature must declare repo boundaries
+    severity: medium
+    check:
+      type: file-required
+      files:
+        - "workspace/features/<feature>/feature.yaml"
+        - "workspace/features/<feature>/context/constraints.md"

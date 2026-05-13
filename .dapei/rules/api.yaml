@@ -1,0 +1,12 @@
+version: 0.1
+rule_set: api
+mode: report
+rules:
+  - id: API-001
+    title: api change needs compatibility note
+    severity: medium
+    check:
+      type: file-required
+      files:
+        - "workspace/features/<feature>/memory/tradeoff.md"
+    message: include backward compatibility strategy in tradeoff notes

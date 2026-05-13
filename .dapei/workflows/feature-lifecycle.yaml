@@ -1,0 +1,73 @@
+version: 0.1
+name: feature-lifecycle
+description: AI SDLC lifecycle for one isolated feature workspace
+
+stages:
+  - id: analyze-current-state
+    requires: []
+    inputs:
+      - feature manifest
+      - layered context
+    outputs:
+      - docs/01-current-state.md
+      - context/repo-context.md
+
+  - id: gap-analysis
+    requires: [analyze-current-state]
+    inputs:
+      - docs/01-current-state.md
+      - context/constraints.md
+    outputs:
+      - docs/02-gap-analysis.md
+
+  - id: solution-design
+    requires: [gap-analysis]
+    inputs:
+      - docs/02-gap-analysis.md
+      - context/architecture-context.md
+    outputs:
+      - docs/03-business-design.md
+      - docs/04-technical-design.md
+
+  - id: task-breakdown
+    requires: [solution-design]
+    inputs:
+      - docs/04-technical-design.md
+    outputs:
+      - docs/05-task-breakdown.md
+      - tasks/backlog.md
+
+  - id: implementation
+    requires: [task-breakdown]
+    inputs:
+      - docs/05-task-breakdown.md
+      - repos/ (symlinks)
+    outputs:
+      - implementation-log.md (in reports/)
+      - code changes
+
+  - id: local-validation
+    requires: [implementation]
+    inputs:
+      - code changes
+      - docs/06-acceptance.md
+    outputs:
+      - reports/validation-report.md
+      - reports/test-report.md
+
+  - id: architecture-review
+    requires: [local-validation]
+    inputs:
+      - reports/validation-report.md
+      - .dapei/rules/
+    outputs:
+      - reports/architecture-review.md
+
+  - id: acceptance
+    requires: [architecture-review]
+    inputs:
+      - all reports
+      - docs/06-acceptance.md
+    outputs:
+      - reports/acceptance-report.md
+      - release-notes.md
