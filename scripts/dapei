@@ -14,10 +14,11 @@ Usage:
   dapei create feature <name> --repos repo1,repo2 [--objective "..."]
   dapei run workflow <feature> --stage <stage>
   dapei report feature <name>
-
-Notes:
-  - For missing repos in workspace/codebase, create feature will offer interactive clone.
-  - Credentials are only used for current clone session and not persisted by this tool.
+  dapei codebase add <name> <git-url>
+  dapei codebase sync <name>
+  dapei codebase list
+  dapei review feature <name>
+  dapei status feature
 USAGE
 }
 
@@ -170,6 +171,112 @@ create_feature_branch() {
     echo "$base_ref"
     return 0
   fi
+}
+
+feature_review() {
+  local feature="$1"
+  local feature_dir="$FEATURES_DIR/$feature"
+
+  if [[ ! -d "$feature_dir" ]]; then
+    err "feature not found: $feature"
+    return 1
+  fi
+
+  local feature_yaml="$feature_dir/feature.yaml"
+  if [[ ! -f "$feature_yaml" ]]; then
+    err "feature.yaml not found for $feature"
+    return 1
+  fi
+
+  local report="$feature_dir/reports/daily-report.md"
+  mkdir -p "$feature_dir/reports"
+
+  local review_date
+  review_date=$(date '+%Y-%m-%d %H:%M:%S %z')
+
+  echo "# Daily Review: $feature" > "$report"
+  echo "Date: $review_date" >> "$report"
+  echo "" >> "$report"
+
+  local last_review
+  last_review=$(grep "last-review-at:" "$feature_yaml" 2>/dev/null | cut -d'"' -f2 || echo "")
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ name:\ \"([^\"]+)\" ]]; then
+      local repo="${BASH_REMATCH[1]}"
+      local repo_path="$CODEBASE_DIR/$repo"
+      if [[ -d "$repo_path/.git" ]]; then
+        echo "## Repo: $repo" >> "$report"
+        echo "" >> "$report"
+
+        local branch="feature/$feature"
+        local base_ref
+        base_ref=$(grep -A5 "name: \"$repo\"" "$feature_yaml" 2>/dev/null | grep "base-ref:" | head -1 | cut -d'"' -f2)
+
+        if [[ -n "$last_review" ]]; then
+          echo "### Commits since last review ($last_review)" >> "$report"
+          git -C "$repo_path" log --since="$last_review" --oneline "$branch" 2>/dev/null | while IFS read -r commit_line; do
+            echo "- $commit_line" >> "$report"
+          done
+        else
+          echo "### All commits on branch (no prior review)" >> "$report"
+          git -C "$repo_path" log --oneline "$branch" 2>/dev/null | head -20 | while IFS read -r commit_line; do
+            echo "- $commit_line" >> "$report"
+          done
+        fi
+
+        local diff_stats
+        diff_stats=$(git -C "$repo_path" diff --stat "$base_ref..$branch" 2>/dev/null | tail -1 || echo "no diff")
+        echo "" >> "$report"
+        echo "**Changes:** \`$diff_stats\`" >> "$report"
+        echo "" >> "$report"
+      fi
+    fi
+  done < "$feature_yaml"
+
+  sed -i "s/last-review-at:.*/last-review-at: \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"/" "$feature_yaml" 2>/dev/null || true
+
+  log "review report generated: $report"
+}
+
+feature_status() {
+  local features_dir="$FEATURES_DIR"
+
+  if [[ ! -d "$features_dir" ]]; then
+    echo "No features found."
+    return 0
+  fi
+
+  local count
+  count=$(find "$features_dir" -maxdepth 1 -type d -not -name features | wc -l)
+  echo "📋 Features ($count):"
+
+  for feat_dir in "$features_dir"/*; do
+    [[ ! -d "$feat_dir" ]] && continue
+    [[ "$(basename "$feat_dir")" == ".templates" ]] && continue
+
+    local feature="$(basename "$feat_dir")"
+    local feature_yaml="$feat_dir/feature.yaml"
+
+    echo "  🔵 $feature"
+
+    if [[ -f "$feature_yaml" ]]; then
+      while IFS read -r line; do
+        if [[ "$line" =~ name:\ \"([^\"]+)\" ]]; then
+          local repo="${BASH_REMATCH[1]}"
+          local repo_path="$CODEBASE_DIR/$repo"
+          if [[ -d "$repo_path/.git" ]]; then
+            local branch="feature/$feature"
+            local head
+            head=$(git -C "$repo_path" rev-parse --short "$branch" 2>/dev/null || echo "???")
+            local base_ref
+            base_ref=$(grep -A5 "name: \"$repo\"" "$feature_yaml" 2>/dev/null | grep "base-ref:" | head -1 | cut -d'"' -f2 | cut -c1-8)
+            echo "    └── $repo - $branch ($base_ref...→$head)"
+          fi
+        fi
+      done < "$feature_yaml"
+    fi
+  done
 }
 
 init_workspace() {
@@ -627,6 +734,18 @@ main() {
       ;;
     "codebase list")
       codebase_list
+      ;;
+
+    "review feature")
+      if [[ ${#args[@]} -lt 3 ]]; then
+        err "usage: dapei review feature <name>"
+        exit 1
+      fi
+      feature_review "${args[2]}"
+      ;;
+
+    "status feature")
+      feature_status
       ;;
 
     *)
