@@ -48,9 +48,9 @@ codebase_add() {
   mkdir -p "$CODEBASE_DIR"
 
   if [[ "$url" =~ ^https?:// ]]; then
-    git clone "$url" "$target"
+    git clone "$url" "$target" || { err "clone failed"; return 1; }
   else
-    git clone "$url" "$target"
+    git clone "$url" "$target" || { err "clone failed"; return 1; }
   fi
 
   if [[ ! -d "$target/.git" ]]; then
@@ -108,7 +108,10 @@ codebase_sync() {
   fi
 
   log "syncing $name..."
-  git -C "$target" fetch origin
+  if ! git -C "$target" fetch origin; then
+    err "fetch failed for '$name'"
+    return 1
+  fi
   local head
   head=$(git -C "$target" rev-parse --abbrev-ref HEAD)
   local hash
@@ -129,8 +132,9 @@ codebase_list() {
   echo "📦 Codebases ($count):"
 
   while IFS read -r line; do
-    if [[ "$line" =~ name:\ ]]; then
-      name=$(echo "$line" | sed 's/.*name: //' | tr -d ' ')
+    if [[ "$line" =~ name:\ * ]]; then
+      local name
+      name=$(echo "$line" | sed 's/.*name: *//' | tr -d ' ')
       if [[ -d "$CODEBASE_DIR/$name/.git" ]]; then
         local hash
         hash=$(git -C "$CODEBASE_DIR/$name" rev-parse --short HEAD 2>/dev/null || echo "???")
