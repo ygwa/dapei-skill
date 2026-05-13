@@ -1,0 +1,597 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WORKSPACE_DIR="$ROOT_DIR/workspace"
+CODEBASE_DIR="$WORKSPACE_DIR/codebase"
+FEATURES_DIR="$WORKSPACE_DIR/features"
+DAPEI_DIR="$ROOT_DIR/.dapei"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  dapei init workspace
+  dapei create feature <name> --repos repo1,repo2 [--objective "..."]
+  dapei run workflow <feature> --stage <stage>
+  dapei report feature <name>
+
+Notes:
+  - For missing repos in workspace/codebase, create feature will offer interactive clone.
+  - Credentials are only used for current clone session and not persisted by this tool.
+USAGE
+}
+
+log() { echo "[dapei] $*"; }
+err() { echo "[dapei][error] $*" >&2; }
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || { err "missing command: $1"; exit 1; }
+}
+
+codebase_add() {
+  local name="$1"
+  local url="$2"
+
+  if [[ -z "$name" || -z "$url" ]]; then
+    err "usage: dapei codebase add <name> <git-url>"
+    return 1
+  fi
+
+  local target="$CODEBASE_DIR/$name"
+  local codebases_file="$DAPEI_DIR/codebases.yaml"
+
+  if [[ -d "$target/.git" ]]; then
+    err "codebase '$name' already exists"
+    return 1
+  fi
+
+  mkdir -p "$CODEBASE_DIR"
+
+  if [[ "$url" =~ ^https?:// ]]; then
+    git clone "$url" "$target"
+  else
+    git clone "$url" "$target"
+  fi
+
+  if [[ ! -d "$target/.git" ]]; then
+    err "clone failed for '$name'"
+    return 1
+  fi
+
+  mkdir -p "$DAPEI_DIR"
+
+  if [[ -f "$codebases_file" ]]; then
+    if grep -q "name: $name" "$codebases_file" 2>/dev/null; then
+      log "codebase '$name' already in registry"
+    else
+      local added_at
+      added_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+      local default_branch
+      default_branch=$(git -C "$target" rev-parse --abbrev-ref HEAD)
+      cat >> "$codebases_file" <<EOF
+
+  - name: $name
+    path: $target
+    url: $url
+    added-at: $added_at
+    default-branch: $default_branch
+EOF
+    fi
+  else
+    cat > "$codebases_file" <<EOF
+version: "0.1"
+codebases:
+  - name: $name
+    path: $target
+    url: $url
+    added-at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    default-branch: $(git -C "$target" rev-parse --abbrev-ref HEAD)
+EOF
+  fi
+
+  log "codebase '$name' added from $url"
+}
+
+codebase_sync() {
+  local name="$1"
+
+  if [[ -z "$name" ]]; then
+    err "usage: dapei codebase sync <name>"
+    return 1
+  fi
+
+  local target="$CODEBASE_DIR/$name"
+
+  if [[ ! -d "$target/.git" ]]; then
+    err "codebase '$name' not found. Run 'dapei codebase add' first."
+    return 1
+  fi
+
+  log "syncing $name..."
+  git -C "$target" fetch origin
+  local head
+  head=$(git -C "$target" rev-parse --abbrev-ref HEAD)
+  local hash
+  hash=$(git -C "$target" rev-parse --short HEAD)
+  log "codebase '$name' synced, $head at $hash"
+}
+
+codebase_list() {
+  local codebases_file="$DAPEI_DIR/codebases.yaml"
+
+  if [[ ! -f "$codebases_file" ]]; then
+    echo "No codebases registered."
+    return 0
+  fi
+
+  local count
+  count=$(grep -c "name:" "$codebases_file" 2>/dev/null || echo 0)
+  echo "📦 Codebases ($count):"
+
+  while IFS read -r line; do
+    if [[ "$line" =~ name:\ ]]; then
+      name=$(echo "$line" | sed 's/.*name: //' | tr -d ' ')
+      if [[ -d "$CODEBASE_DIR/$name/.git" ]]; then
+        local hash
+        hash=$(git -C "$CODEBASE_DIR/$name" rev-parse --short HEAD 2>/dev/null || echo "???")
+        local branch
+        branch=$(git -C "$CODEBASE_DIR/$name" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "???")
+        echo "  • $name - $branch ($hash)"
+      else
+        echo "  • $name - (not cloned)"
+      fi
+    fi
+  done < "$codebases_file"
+}
+
+init_workspace() {
+  mkdir -p "$DAPEI_DIR/workflows" "$DAPEI_DIR/rules"
+  mkdir -p "$WORKSPACE_DIR/codebase" "$WORKSPACE_DIR/features"
+  mkdir -p "$ROOT_DIR/docs/workflows" "$ROOT_DIR/docs/decisions" "$ROOT_DIR/docs/glossary"
+  mkdir -p "$ROOT_DIR/dos/templates" "$ROOT_DIR/dos/ai-rules"
+
+  if [[ ! -f "$DAPEI_DIR/workspace.yaml" ]]; then
+    err "missing $DAPEI_DIR/workspace.yaml; please sync repository baseline files first"
+    exit 1
+  fi
+
+  log "workspace initialized at $WORKSPACE_DIR"
+}
+
+prompt_yes_no() {
+  local prompt="$1"
+  local ans
+  read -r -p "$prompt [y/N]: " ans
+  [[ "$ans" =~ ^[Yy]$ ]]
+}
+
+repo_exists() {
+  local repo="$1"
+  [[ -d "$CODEBASE_DIR/$repo/.git" ]]
+}
+
+clone_repo_interactive() {
+  local repo="$1"
+  local target="$CODEBASE_DIR/$repo"
+
+  if repo_exists "$repo"; then
+    log "repo '$repo' already exists in codebase"
+    return 0
+  fi
+
+  if ! prompt_yes_no "repo '$repo' not found. clone now?"; then
+    err "repo '$repo' is required for mapping"
+    return 1
+  fi
+
+  local remote_url
+  read -r -p "remote git url for '$repo': " remote_url
+  if [[ -z "$remote_url" ]]; then
+    err "remote url is required"
+    return 1
+  fi
+
+  require_cmd git
+
+  mkdir -p "$CODEBASE_DIR"
+
+  if [[ "$remote_url" =~ ^https?:// ]]; then
+    local mode
+    read -r -p "auth mode: 1) token 2) username/password 3) git prompt [default:3]: " mode
+    mode="${mode:-3}"
+
+    if [[ "$mode" == "1" ]]; then
+      local username token
+      read -r -p "git username: " username
+      read -r -s -p "personal access token (hidden): " token
+      echo
+      GIT_ASKPASS="$(mktemp)"
+      cat > "$GIT_ASKPASS" <<'ASKPASS'
+#!/usr/bin/env bash
+case "$1" in
+  *Username*) echo "$DAPEI_GIT_USERNAME" ;;
+  *Password*) echo "$DAPEI_GIT_PASSWORD" ;;
+  *) echo "" ;;
+esac
+ASKPASS
+      chmod 700 "$GIT_ASKPASS"
+      DAPEI_GIT_USERNAME="$username" DAPEI_GIT_PASSWORD="$token" GIT_ASKPASS="$GIT_ASKPASS" GIT_TERMINAL_PROMPT=0 \
+        git clone "$remote_url" "$target" || { rm -f "$GIT_ASKPASS"; return 1; }
+      rm -f "$GIT_ASKPASS"
+      log "cloned '$repo' into $target"
+      return 0
+    fi
+
+    if [[ "$mode" == "2" ]]; then
+      local username password
+      read -r -p "git username: " username
+      read -r -s -p "git password (hidden): " password
+      echo
+      GIT_ASKPASS="$(mktemp)"
+      cat > "$GIT_ASKPASS" <<'ASKPASS'
+#!/usr/bin/env bash
+case "$1" in
+  *Username*) echo "$DAPEI_GIT_USERNAME" ;;
+  *Password*) echo "$DAPEI_GIT_PASSWORD" ;;
+  *) echo "" ;;
+esac
+ASKPASS
+      chmod 700 "$GIT_ASKPASS"
+      DAPEI_GIT_USERNAME="$username" DAPEI_GIT_PASSWORD="$password" GIT_ASKPASS="$GIT_ASKPASS" GIT_TERMINAL_PROMPT=0 \
+        git clone "$remote_url" "$target" || { rm -f "$GIT_ASKPASS"; return 1; }
+      rm -f "$GIT_ASKPASS"
+      log "cloned '$repo' into $target"
+      return 0
+    fi
+
+    git clone "$remote_url" "$target"
+    log "cloned '$repo' into $target"
+    return 0
+  fi
+
+  git clone "$remote_url" "$target"
+  log "cloned '$repo' into $target"
+}
+
+init_feature_files() {
+  local feature="$1"
+  local objective="$2"
+  local feature_dir="$FEATURES_DIR/$feature"
+
+  mkdir -p "$feature_dir"/{repos,docs,context,memory,tests/regression,reports,tasks}
+
+  cat > "$feature_dir/context/business-context.md" <<'EOF_CTX'
+# Business Context
+
+Describe business constraints and expected outcomes.
+EOF_CTX
+
+  cat > "$feature_dir/context/architecture-context.md" <<'EOF_CTX'
+# Architecture Context
+
+Describe architecture boundaries and integration constraints.
+EOF_CTX
+
+  cat > "$feature_dir/context/repo-context.md" <<'EOF_CTX'
+# Repo Context
+
+Describe touched repositories and modules.
+EOF_CTX
+
+  cat > "$feature_dir/context/feature-context.md" <<EOF_CTX
+# Feature Context
+
+Feature: $feature
+Objective: ${objective:-TBD}
+EOF_CTX
+
+  cat > "$feature_dir/context/constraints.md" <<'EOF_CTX'
+# Constraints
+
+- Do not break architecture layering.
+- Keep changes scoped to this feature.
+EOF_CTX
+
+  cat > "$feature_dir/memory/decisions.md" <<'EOF_MEM'
+# Decisions
+EOF_MEM
+  cat > "$feature_dir/memory/tradeoff.md" <<'EOF_MEM'
+# Tradeoffs
+EOF_MEM
+  cat > "$feature_dir/memory/risks.md" <<'EOF_MEM'
+# Risks
+EOF_MEM
+  cat > "$feature_dir/memory/open-questions.md" <<'EOF_MEM'
+# Open Questions
+EOF_MEM
+  cat > "$feature_dir/memory/timeline.md" <<'EOF_MEM'
+# Timeline
+EOF_MEM
+
+  cat > "$feature_dir/tasks/backlog.md" <<'EOF_TASK'
+# Backlog
+EOF_TASK
+  cat > "$feature_dir/tasks/plan.md" <<'EOF_TASK'
+# Plan
+EOF_TASK
+
+  cat > "$feature_dir/reports/feature-progress.md" <<'EOF_REP'
+# Feature Progress
+
+- Status: initialized
+EOF_REP
+
+  cat > "$feature_dir/reports/daily-report.md" <<'EOF_REP'
+# Daily Report
+EOF_REP
+
+  cat > "$feature_dir/reports/architecture-review.md" <<'EOF_REP'
+# Architecture Review
+EOF_REP
+
+  cat > "$feature_dir/agents.md" <<EOF_AG
+# Feature Agents
+
+Feature: $feature
+Objective: ${objective:-TBD}
+
+## Roles
+
+1. PM Agent: scope and acceptance.
+2. Architect Agent: boundary and design review.
+3. Implementer Agent: code changes and validation.
+4. QA Agent: testing and regression analysis.
+EOF_AG
+}
+
+write_feature_manifest() {
+  local feature="$1"
+  local repos_csv="$2"
+  local objective="$3"
+  local feature_dir="$FEATURES_DIR/$feature"
+
+  IFS=',' read -r -a repos <<<"$repos_csv"
+  {
+    echo 'version: "0.1"'
+    echo "feature:"
+    echo "  name: \"$feature\""
+    echo "  objective: \"${objective:-TBD}\""
+    echo '  owner: "unassigned"'
+    echo "  repos:"
+    for r in "${repos[@]}"; do
+      r="$(echo "$r" | xargs)"
+      [[ -n "$r" ]] && echo "    - \"$r\""
+    done
+    echo "  scope:"
+    echo "    in: []"
+    echo "    out: []"
+    echo "  acceptance:"
+    echo "    - \"define acceptance criteria\""
+    echo '  risk_level: "medium"'
+    echo "  dependencies: []"
+  } > "$feature_dir/feature.yaml"
+}
+
+create_feature() {
+  local name="$1"
+  local repos_csv="$2"
+  local objective="$3"
+
+  if [[ ! "$name" =~ ^[a-z0-9-]+$ ]]; then
+    err "feature name must match ^[a-z0-9-]+$"
+    exit 1
+  fi
+
+  local feature_dir="$FEATURES_DIR/$name"
+  if [[ -d "$feature_dir" ]]; then
+    err "feature already exists: $name"
+    exit 1
+  fi
+
+  IFS=',' read -r -a repos <<<"$repos_csv"
+  if [[ ${#repos[@]} -eq 0 ]]; then
+    err "--repos is required"
+    exit 1
+  fi
+
+  mkdir -p "$feature_dir/repos"
+
+  for repo in "${repos[@]}"; do
+    repo="$(echo "$repo" | xargs)"
+    [[ -z "$repo" ]] && continue
+
+    if ! repo_exists "$repo"; then
+      clone_repo_interactive "$repo"
+    fi
+
+    if [[ ! -d "$CODEBASE_DIR/$repo" ]]; then
+      err "repo missing after clone attempt: $repo"
+      exit 1
+    fi
+
+    ln -sfn "$CODEBASE_DIR/$repo" "$feature_dir/repos/$repo"
+    log "mapped repo: $repo"
+  done
+
+  init_feature_files "$name" "$objective"
+  write_feature_manifest "$name" "$repos_csv" "$objective"
+
+  log "feature workspace created: $feature_dir"
+}
+
+run_workflow_stage() {
+  local feature="$1"
+  local stage="$2"
+  local feature_dir="$FEATURES_DIR/$feature"
+
+  if [[ ! -d "$feature_dir" ]]; then
+    err "feature not found: $feature"
+    exit 1
+  fi
+
+  local report="$feature_dir/reports/feature-progress.md"
+  {
+    echo ""
+    echo "## Stage Update"
+    echo "- Stage: $stage"
+    echo "- Time: $(date '+%Y-%m-%d %H:%M:%S %z')"
+    echo "- Result: stage checkpoint recorded"
+  } >> "$report"
+
+  log "workflow stage recorded: feature=$feature stage=$stage"
+}
+
+report_feature() {
+  local feature="$1"
+  local feature_dir="$FEATURES_DIR/$feature"
+
+  if [[ ! -d "$feature_dir" ]]; then
+    err "feature not found: $feature"
+    exit 1
+  fi
+
+  local daily="$feature_dir/reports/daily-report.md"
+  local arch="$feature_dir/reports/architecture-review.md"
+  local guardrail_report="$feature_dir/reports/guardrail-report.md"
+
+  "$ROOT_DIR/scripts/dapei-guardrail" "$feature" >/dev/null
+
+  cat > "$daily" <<EOF_D
+# Daily Report
+
+- Feature: $feature
+- Generated At: $(date '+%Y-%m-%d %H:%M:%S %z')
+- Progress Source: reports/feature-progress.md
+- Risks Source: memory/risks.md
+- Open Questions Source: memory/open-questions.md
+- Guardrail Source: reports/guardrail-report.md
+EOF_D
+
+  cat > "$arch" <<EOF_A
+# Architecture Review
+
+- Feature: $feature
+- Generated At: $(date '+%Y-%m-%d %H:%M:%S %z')
+- Guardrails:
+  - layering: .dapei/rules/layering.yaml
+  - ddd: .dapei/rules/ddd.yaml
+  - api: .dapei/rules/api.yaml
+  - naming: .dapei/rules/naming.yaml
+- Mode: report (non-blocking)
+- Guardrail Report: $guardrail_report
+EOF_A
+
+  log "report pack generated for feature: $feature"
+}
+
+main() {
+  if [[ $# -lt 1 ]]; then
+    usage
+    exit 1
+  fi
+
+  local args=("$@")
+  if [[ "${args[0]:-}" == "@dapei" ]]; then
+    args=("${args[@]:1}")
+  fi
+
+  if [[ ${#args[@]} -lt 2 ]]; then
+    usage
+    exit 1
+  fi
+
+  case "${args[0]} ${args[1]}" in
+    "init workspace")
+      init_workspace
+      ;;
+
+    "create feature")
+      if [[ ${#args[@]} -lt 3 ]]; then
+        err "missing feature name"
+        exit 1
+      fi
+      local feature_name="${args[2]}"
+      local repos=""
+      local objective=""
+      local i=3
+      while [[ $i -lt ${#args[@]} ]]; do
+        case "${args[$i]}" in
+          --repos)
+            i=$((i + 1))
+            repos="${args[$i]:-}"
+            ;;
+          --objective)
+            i=$((i + 1))
+            objective="${args[$i]:-}"
+            ;;
+          *)
+            ;;
+        esac
+        i=$((i + 1))
+      done
+      if [[ -z "$repos" ]]; then
+        err "--repos is required"
+        exit 1
+      fi
+      create_feature "$feature_name" "$repos" "$objective"
+      ;;
+
+    "run workflow")
+      if [[ ${#args[@]} -lt 3 ]]; then
+        err "missing feature name"
+        exit 1
+      fi
+      local feature="${args[2]}"
+      local stage=""
+      local i=3
+      while [[ $i -lt ${#args[@]} ]]; do
+        case "${args[$i]}" in
+          --stage)
+            i=$((i + 1))
+            stage="${args[$i]:-}"
+            ;;
+          *) ;;
+        esac
+        i=$((i + 1))
+      done
+      if [[ -z "$stage" ]]; then
+        err "--stage is required"
+        exit 1
+      fi
+      run_workflow_stage "$feature" "$stage"
+      ;;
+
+    "report feature")
+      if [[ ${#args[@]} -lt 3 ]]; then
+        err "missing feature name"
+        exit 1
+      fi
+      report_feature "${args[2]}"
+      ;;
+
+    "codebase add")
+      if [[ ${#args[@]} -lt 4 ]]; then
+        err "usage: dapei codebase add <name> <git-url>"
+        exit 1
+      fi
+      codebase_add "${args[2]}" "${args[3]}"
+      ;;
+    "codebase sync")
+      if [[ ${#args[@]} -lt 3 ]]; then
+        err "usage: dapei codebase sync <name>"
+        exit 1
+      fi
+      codebase_sync "${args[2]}"
+      ;;
+    "codebase list")
+      codebase_list
+      ;;
+
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"
