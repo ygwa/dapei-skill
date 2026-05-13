@@ -1,0 +1,64 @@
+version: 0.1
+workspace:
+  name: dapei-skill
+  root: workspace
+  default_branch: main
+  locale: zh-CN
+  codebases_file: .dapei/codebases.yaml
+
+repos:
+  codebase_root: workspace/codebase
+  managed_repos: []
+
+context_loading:
+  strategy: layered
+  layers:
+    - name: global
+      priority: 10
+      merge_policy: deny
+      sources:
+        - docs/standards
+        - dos/ai-rules
+    - name: workspace
+      priority: 20
+      merge_policy: append
+      sources:
+        - docs/architecture
+        - docs/workflows
+    - name: domain
+      priority: 30
+      merge_policy: append
+      sources:
+        - docs/business
+    - name: repo
+      priority: 40
+      merge_policy: append
+      sources: []
+    - name: feature
+      priority: 50
+      merge_policy: override
+      sources:
+        - workspace/features/<feature>/context
+    - name: runtime
+      priority: 60
+      merge_policy: override
+      sources:
+        - workspace/features/<feature>/tasks
+
+agent_runtime:
+  default_profile: implementer
+  profiles:
+    - name: implementer
+      responsibilities:
+        - implement scoped tasks
+        - respect architecture boundaries
+    - name: reviewer
+      responsibilities:
+        - validate architecture and risks
+        - produce findings report
+
+quality_gates:
+  guardrail_mode: report
+  required_reports:
+    - feature-progress
+    - risk-summary

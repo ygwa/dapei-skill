@@ -1,0 +1,31 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: dapei codebases registry
+type: object
+required:
+  - version
+  - codebases
+properties:
+  version:
+    type: string
+    enum: ["0.1"]
+  codebases:
+    type: array
+    items:
+      type: object
+      required:
+        - name
+        - path
+        - url
+        - added-at
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        url:
+          type: string
+        added-at:
+          type: string
+          format: date-time
+        default-branch:
+          type: string
