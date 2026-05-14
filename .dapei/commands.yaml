@@ -29,8 +29,8 @@ commands:
       - init-context-memory-task-report
       - create-feature-agent-context
     outputs:
-      - workspace/features/<feature>/feature.yaml
-      - workspace/features/<feature>/agents.md
+      - features/<feature>/feature.yaml
+      - features/<feature>/agents.md
 
   - name: run-workflow
     cli: "@dapei run workflow <feature> --stage <stage>"
@@ -44,7 +44,7 @@ commands:
       - persist-memory
       - update-progress-report
     outputs:
-      - workspace/features/<feature>/reports/feature-progress.md
+      - features/<feature>/reports/feature-progress.md
 
   - name: report-feature
     cli: "@dapei report feature <name>"
@@ -57,5 +57,5 @@ commands:
       - run-guardrails
       - emit-report-pack
     outputs:
-      - workspace/features/<feature>/reports/daily-report.md
-      - workspace/features/<feature>/reports/architecture-review.md
+      - features/<feature>/reports/daily-report.md
+      - features/<feature>/reports/architecture-review.md

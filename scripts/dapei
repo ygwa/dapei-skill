@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WORKSPACE_DIR="$ROOT_DIR/workspace"
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="${DAPEI_WORKSPACE_ROOT:-$(pwd)}"
+WORKSPACE_DIR="$ROOT_DIR"
 CODEBASE_DIR="$WORKSPACE_DIR/codebase"
 FEATURES_DIR="$WORKSPACE_DIR/features"
 DAPEI_DIR="$ROOT_DIR/.dapei"
+SOURCE_DAPEI_DIR="$SCRIPT_ROOT/.dapei"
+SOURCE_TEMPLATES_DIR="$SCRIPT_ROOT/dos/templates"
+SOURCE_DOS_DIR="$SCRIPT_ROOT/dos"
 
 usage() {
   cat <<'USAGE'
@@ -27,6 +31,42 @@ err() { echo "[dapei][error] $*" >&2; }
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || { err "missing command: $1"; exit 1; }
+}
+
+template_dir() {
+  if [[ -d "$ROOT_DIR/dos/templates" ]]; then
+    printf '%s\n' "$ROOT_DIR/dos/templates"
+    return 0
+  fi
+  printf '%s\n' "$SOURCE_TEMPLATES_DIR"
+}
+
+is_effectively_empty_dir() {
+  local dir="$1"
+  [[ -z "$(find "$dir" -mindepth 1 -maxdepth 1 ! -name ".DS_Store" ! -name ".gitkeep" -print -quit 2>/dev/null)" ]]
+}
+
+is_conforming_workspace_dir() {
+  local dir="$1"
+  if [[ -d "$dir/.dapei" ]]; then
+    return 0
+  fi
+
+  local count=0
+  [[ -d "$dir/codebase" ]] && count=$((count + 1))
+  [[ -d "$dir/docs" ]] && count=$((count + 1))
+  [[ -d "$dir/features" ]] && count=$((count + 1))
+  [[ $count -ge 2 ]]
+}
+
+copy_if_missing() {
+  local source_path="$1"
+  local target_path="$2"
+  if [[ -e "$target_path" || ! -e "$source_path" ]]; then
+    return 0
+  fi
+  mkdir -p "$(dirname "$target_path")"
+  cp "$source_path" "$target_path"
 }
 
 feature_repo_names() {
@@ -391,10 +431,121 @@ feature_status() {
 }
 
 init_workspace() {
+  if ! is_effectively_empty_dir "$ROOT_DIR" && ! is_conforming_workspace_dir "$ROOT_DIR"; then
+    err "current directory is not empty and does not look like a dapei workspace: $ROOT_DIR"
+    err "initialize dapei in an empty directory, or migrate this directory explicitly before running init."
+    exit 1
+  fi
+
   mkdir -p "$DAPEI_DIR/workflows" "$DAPEI_DIR/rules"
-  mkdir -p "$WORKSPACE_DIR/codebase" "$WORKSPACE_DIR/features"
-  mkdir -p "$ROOT_DIR/docs/workflows" "$ROOT_DIR/docs/decisions" "$ROOT_DIR/docs/glossary"
+  mkdir -p "$CODEBASE_DIR" "$FEATURES_DIR"
+  mkdir -p "$ROOT_DIR/docs/as-is" "$ROOT_DIR/docs/architecture" "$ROOT_DIR/docs/standards"
+  mkdir -p "$ROOT_DIR/docs/workflows" "$ROOT_DIR/docs/decisions" "$ROOT_DIR/docs/glossary" "$ROOT_DIR/docs/feature-impact"
   mkdir -p "$ROOT_DIR/dos/templates" "$ROOT_DIR/dos/ai-rules"
+
+  if [[ ! -f "$DAPEI_DIR/workspace.yaml" ]]; then
+    local workspace_name
+    workspace_name="$(basename "$ROOT_DIR")"
+    cat > "$DAPEI_DIR/workspace.yaml" <<EOF_WORKSPACE
+version: 0.1
+workspace:
+  name: $workspace_name
+  root: .
+  default_branch: main
+  locale: zh-CN
+  codebases_file: .dapei/codebases.yaml
+
+repos:
+  codebase_root: codebase
+  managed_repos: []
+
+context_loading:
+  strategy: layered
+  layers:
+    - name: global
+      priority: 10
+      merge_policy: deny
+      sources:
+        - docs/standards
+        - dos/ai-rules
+    - name: workspace
+      priority: 20
+      merge_policy: append
+      sources:
+        - docs/as-is
+        - docs/architecture
+        - docs/workflows
+    - name: domain
+      priority: 30
+      merge_policy: append
+      sources:
+        - docs/business
+    - name: repo
+      priority: 40
+      merge_policy: append
+      sources: []
+    - name: feature
+      priority: 50
+      merge_policy: override
+      sources:
+        - features/<feature>/context
+    - name: runtime
+      priority: 60
+      merge_policy: override
+      sources:
+        - features/<feature>/tasks
+
+agent_runtime:
+  default_profile: implementer
+  profiles:
+    - name: implementer
+      responsibilities:
+        - implement scoped tasks
+        - respect architecture boundaries
+    - name: reviewer
+      responsibilities:
+        - validate architecture and risks
+        - produce findings report
+
+quality_gates:
+  guardrail_mode: report
+  required_reports:
+    - feature-progress
+    - risk-summary
+EOF_WORKSPACE
+  fi
+  copy_if_missing "$SOURCE_DAPEI_DIR/commands.yaml" "$DAPEI_DIR/commands.yaml"
+  copy_if_missing "$SOURCE_DAPEI_DIR/feature.schema.yaml" "$DAPEI_DIR/feature.schema.yaml"
+  copy_if_missing "$SOURCE_DAPEI_DIR/codebases.schema.yaml" "$DAPEI_DIR/codebases.schema.yaml"
+  copy_if_missing "$SOURCE_DAPEI_DIR/workflows/feature-lifecycle.yaml" "$DAPEI_DIR/workflows/feature-lifecycle.yaml"
+  copy_if_missing "$SOURCE_DAPEI_DIR/rules/api.yaml" "$DAPEI_DIR/rules/api.yaml"
+  copy_if_missing "$SOURCE_DAPEI_DIR/rules/ddd.yaml" "$DAPEI_DIR/rules/ddd.yaml"
+  copy_if_missing "$SOURCE_DAPEI_DIR/rules/layering.yaml" "$DAPEI_DIR/rules/layering.yaml"
+  copy_if_missing "$SOURCE_DAPEI_DIR/rules/naming.yaml" "$DAPEI_DIR/rules/naming.yaml"
+
+  if [[ -d "$SOURCE_TEMPLATES_DIR" ]]; then
+    while IFS= read -r template_file; do
+      copy_if_missing "$template_file" "$ROOT_DIR/dos/templates/$(basename "$template_file")"
+    done < <(find "$SOURCE_TEMPLATES_DIR" -mindepth 1 -maxdepth 1 -type f | sort)
+  fi
+
+  if [[ -f "$SOURCE_DOS_DIR/ai-rules/README.md" ]]; then
+    copy_if_missing "$SOURCE_DOS_DIR/ai-rules/README.md" "$ROOT_DIR/dos/ai-rules/README.md"
+  fi
+
+  if [[ ! -f "$ROOT_DIR/docs/agents.md" ]]; then
+    cat > "$ROOT_DIR/docs/agents.md" <<'EOF_DOC'
+# Workspace Agents
+
+Use this workspace as the durable source of context.
+
+- `codebase/` contains managed Git repositories.
+- `docs/` contains current business, architecture, technology, standards, and decisions.
+- `features/` contains feature-specific execution workspaces.
+
+Feature work should start from `features/<feature>/agents.md` after the feature context pack is created.
+EOF_DOC
+  fi
 
   if [[ ! -f "$DAPEI_DIR/workspace.yaml" ]]; then
     err "missing $DAPEI_DIR/workspace.yaml; please sync repository baseline files first"
@@ -577,6 +728,8 @@ EOF_REP
 
   local current_date
   current_date=$(date '+%Y-%m-%d')
+  local templates
+  templates="$(template_dir)"
   local repos_summary=""
   if [[ -d "$feature_dir/repos" ]]; then
     while IFS= read -r repo_name; do
@@ -589,12 +742,12 @@ EOF_REP
   fi
   [[ -z "$repos_summary" ]] && repos_summary="none"
 
-  render_doc_template "$ROOT_DIR/dos/templates/01-current-state.md.template" "$feature_dir/docs/01-current-state.md" "$current_date" "${objective:-TBD}" "$repos_summary"
-  render_doc_template "$ROOT_DIR/dos/templates/02-gap-analysis.md.template" "$feature_dir/docs/02-gap-analysis.md" "$current_date" "${objective:-TBD}" "$repos_summary"
-  render_doc_template "$ROOT_DIR/dos/templates/03-business-design.md.template" "$feature_dir/docs/03-business-design.md" "$current_date" "${objective:-TBD}" "$repos_summary"
-  render_doc_template "$ROOT_DIR/dos/templates/04-technical-design.md.template" "$feature_dir/docs/04-technical-design.md" "$current_date" "${objective:-TBD}" "$repos_summary"
-  render_doc_template "$ROOT_DIR/dos/templates/05-task-breakdown.md.template" "$feature_dir/docs/05-task-breakdown.md" "$current_date" "${objective:-TBD}" "$repos_summary"
-  render_doc_template "$ROOT_DIR/dos/templates/06-acceptance.md.template" "$feature_dir/docs/06-acceptance.md" "$current_date" "${objective:-TBD}" "$repos_summary"
+  render_doc_template "$templates/01-current-state.md.template" "$feature_dir/docs/01-current-state.md" "$current_date" "${objective:-TBD}" "$repos_summary"
+  render_doc_template "$templates/02-gap-analysis.md.template" "$feature_dir/docs/02-gap-analysis.md" "$current_date" "${objective:-TBD}" "$repos_summary"
+  render_doc_template "$templates/03-business-design.md.template" "$feature_dir/docs/03-business-design.md" "$current_date" "${objective:-TBD}" "$repos_summary"
+  render_doc_template "$templates/04-technical-design.md.template" "$feature_dir/docs/04-technical-design.md" "$current_date" "${objective:-TBD}" "$repos_summary"
+  render_doc_template "$templates/05-task-breakdown.md.template" "$feature_dir/docs/05-task-breakdown.md" "$current_date" "${objective:-TBD}" "$repos_summary"
+  render_doc_template "$templates/06-acceptance.md.template" "$feature_dir/docs/06-acceptance.md" "$current_date" "${objective:-TBD}" "$repos_summary"
 
   cat > "$feature_dir/agents.md" <<EOF_AG
 # Feature Agents

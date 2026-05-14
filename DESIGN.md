@@ -22,8 +22,34 @@ System objective:
 ## Runtime Unit
 
 - Workspace is runtime universe.
+- Workspace root is the user's current directory after initialization.
 - Feature is execution unit.
 - Context is durable infrastructure.
+
+## Workspace Root Contract
+
+`dapei` must initialize the current directory as the workspace root. It must not create a nested `workspace/` runtime directory.
+
+Root-level runtime directories:
+
+- `codebase/`: managed Git repositories.
+- `docs/`: durable as-is business, architecture, technology, standards, decisions, and feature impact knowledge.
+- `features/`: feature execution workspaces.
+
+Initialization policy:
+
+- Empty directory: create the workspace contract.
+- Non-empty conforming directory: complete missing dapei metadata and reports.
+- Non-empty non-conforming directory: stop and ask the user to use an empty directory or run an explicit migration flow.
+
+The intended knowledge loop is:
+
+1. Import repositories into `codebase/`.
+2. Analyze codebases to bootstrap and refresh `docs/`.
+3. Discuss and design new requirements using `docs` as durable context.
+4. Create `features/<feature>` with relevant repo branches or worktrees plus dynamic context.
+5. Implement and validate locally inside the feature workspace.
+6. Close out the feature by updating `docs` with accepted design, decisions, constraints, and cross-feature impact.
 
 ## Context Layering Protocol
 

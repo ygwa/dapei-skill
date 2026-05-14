@@ -8,5 +8,5 @@ rules:
     check:
       type: file-required
       files:
-        - "workspace/features/<feature>/memory/tradeoff.md"
+        - "features/<feature>/memory/tradeoff.md"
     message: include backward compatibility strategy in tradeoff notes

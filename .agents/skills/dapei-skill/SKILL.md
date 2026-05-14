@@ -23,7 +23,10 @@ description: AI Native Engineering Context OS - 管理 Workspace 和 Feature 生
 
 ## 行为准则
 1. 始终优先阅读 `docs/` 中的架构文档。
-2. 所有代码修改必须在 `workspace/features/<name>` 下进行。
-3. 遵循 `dos/ai-rules/` 中的安全与规范限制。
-4. 在 `solution-design`、`implementation`、`acceptance` 前默认先给用户确认点。
-5. 每次阶段回报统一包含：`结论 / 风险 / 待确认 / 下一步`。
+2. Workspace Root 是当前初始化目录，不应再额外创建 `workspace/` 子目录。
+3. Workspace Root 的一级运行目录应为 `codebase/`、`docs/`、`features/`。
+4. 所有 Feature 开发代码修改必须在 `features/<name>/repos/<repo>` 下进行。
+5. Feature 完成后，应将已验收的业务、架构、约束和影响回写到 `docs/`。
+6. 遵循 `dos/ai-rules/` 中的安全与规范限制。
+7. 在 `solution-design`、`implementation`、`acceptance` 前默认先给用户确认点。
+8. 每次阶段回报统一包含：`结论 / 风险 / 待确认 / 下一步`。

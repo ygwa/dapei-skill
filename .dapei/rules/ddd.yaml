@@ -7,7 +7,7 @@ rules:
     severity: high
     check:
       type: evidence-required
-      evidence_file: "workspace/features/<feature>/memory/decisions.md"
+      evidence_file: "features/<feature>/memory/decision-log.md"
       condition: "cross-domain-change=true"
     message: record rationale before introducing cross-domain coupling
 

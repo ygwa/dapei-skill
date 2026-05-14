@@ -1,13 +1,13 @@
 version: 0.1
 workspace:
   name: dapei-skill
-  root: workspace
+  root: .
   default_branch: main
   locale: zh-CN
   codebases_file: .dapei/codebases.yaml
 
 repos:
-  codebase_root: workspace/codebase
+  codebase_root: codebase
   managed_repos: []
 
 context_loading:
@@ -23,6 +23,7 @@ context_loading:
       priority: 20
       merge_policy: append
       sources:
+        - docs/as-is
         - docs/architecture
         - docs/workflows
     - name: domain
@@ -38,12 +39,12 @@ context_loading:
       priority: 50
       merge_policy: override
       sources:
-        - workspace/features/<feature>/context
+        - features/<feature>/context
     - name: runtime
       priority: 60
       merge_policy: override
       sources:
-        - workspace/features/<feature>/tasks
+        - features/<feature>/tasks
 
 agent_runtime:
   default_profile: implementer
