@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feature/*]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Shell Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check shell script syntax
+        run: |
+          for f in scripts/*.sh; do
+            echo "Checking $f..."
+            bash -n "$f" || { echo "SYNTAX ERROR in $f"; exit 1; }
+          done
+          echo "All shell scripts passed syntax check"
+
+  dapei-commands:
+    name: Dapei CLI Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup test repo
+        run: |
+          mkdir -p workspace/codebase
+          git init workspace/codebase/test-repo
+          cd workspace/codebase/test-repo
+          git config user.email "test@test.com"
+          git config user.name "Test User"
+          echo "# Test" > README.md
+          git add README.md
+          git commit -m "initial"
+
+      - name: Test dapei create feature
+        run: |
+          ./scripts/dapei create feature smoke-test \
+            --repos test-repo \
+            --objective "smoke test for dapei CLI" \
+            --owner "CI"
+
+      - name: Verify feature workspace
+        run: |
+          test -f workspace/features/smoke-test/feature.yaml || { echo "feature.yaml not found"; exit 1; }
+          test -d workspace/features/smoke-test/docs || { echo "docs not found"; exit 1; }
+          echo "Feature workspace structure verified"
+
+  guardrail:
+    name: Dapei Guardrail Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run guardrail on existing features
+        run: |
+          if [ -d "workspace/features/payment-refactor" ]; then
+            ./scripts/dapei-guardrail payment-refactor || echo "Guardrail completed with findings"
+          else
+            echo "No features to check"
+          fi
