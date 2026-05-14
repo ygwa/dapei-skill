@@ -1,0 +1,18 @@
+version: "0.2"
+feature:
+  name: "user-claim-coupon"
+  objective: "用户自主领取优惠券功能：支持用户在客户端自主领取优惠券，提升优惠券发放效率和用户体验"
+  owner: "ygwang"
+  repos:
+    - name: "dapei-skill"
+      branch: "feature/user-claim-coupon"
+      base-ref: "cf778c5330cc5e6ec7ee2e4143b2d0d85255168d"
+      base-time: "2026-05-14T07:59:08+0800"
+  scope:
+    in: []
+    out: []
+  acceptance:
+    - "定义验收标准"
+  risk_level: "medium"
+  dependencies: []
+  last-review-at: null

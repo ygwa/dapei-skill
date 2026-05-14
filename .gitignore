@@ -1,1 +1,15 @@
 /.agent-shell/
+
+# dapei workspace
+workspace/codebase/
+workspace/features/*/.reports/
+workspace/features/*/.cache/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

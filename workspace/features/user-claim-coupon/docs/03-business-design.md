@@ -1,0 +1,29 @@
+# 03. Business Design
+
+Date: 2026-05-14
+
+## Related Documents
+- Previous: [02. Gap Analysis](./02-gap-analysis.md)
+
+## Problem Statement
+<!-- What business problem are we solving? -->
+
+## Success Criteria
+<!-- How do we know we've succeeded? -->
+- [ ] Criterion 1
+- [ ] Criterion 2
+
+## User Stories / Use Cases
+<!-- Who benefits and how? -->
+- US-1: As a ... I want ... so that ...
+- US-2: ...
+
+## Business Rules
+<!-- What constraints must be followed? -->
+1. Rule 1
+2. Rule 2
+
+## Metrics
+<!-- How do we measure success? -->
+- Metric 1: target value
+- Metric 2: target value
