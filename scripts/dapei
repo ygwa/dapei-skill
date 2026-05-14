@@ -29,6 +29,93 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || { err "missing command: $1"; exit 1; }
 }
 
+feature_repo_names() {
+  local feature_yaml="$1"
+  awk '
+    BEGIN { in_repos=0 }
+    /^[[:space:]]+repos:[[:space:]]*$/ { in_repos=1; next }
+    in_repos && /^[[:space:]]{2}[a-zA-Z0-9_-]+:[[:space:]]*.*$/ { in_repos=0 }
+    in_repos {
+      if (match($0, /name:[[:space:]]*"([^"]+)"/, m)) {
+        print m[1]
+      }
+    }
+  ' "$feature_yaml"
+}
+
+render_doc_template() {
+  local template_path="$1"
+  local output_path="$2"
+  local date_value="$3"
+  local objective_value="$4"
+  local repos_value="$5"
+
+  awk -v date="$date_value" -v objective="$objective_value" -v repos="$repos_value" '
+    {
+      gsub(/\{\{date\}\}/, date)
+      gsub(/\{\{objective\}\}/, objective)
+      if ($0 ~ /\{\{repos\}\}/) {
+        print repos
+        next
+      }
+      print
+    }
+  ' "$template_path" > "$output_path"
+}
+
+sanitize_stage_output_path() {
+  local raw="$1"
+  raw="$(echo "$raw" | sed -E 's/[[:space:]]*\(.*\)[[:space:]]*$//')"
+  raw="$(echo "$raw" | xargs)"
+  printf '%s\n' "$raw"
+}
+
+extract_stage_block() {
+  local workflow_file="$1"
+  local stage="$2"
+  awk -v stage="$stage" '
+    BEGIN { in_stage=0 }
+    $0 ~ "^[[:space:]]*- id: " stage "$" { in_stage=1; next }
+    in_stage && $0 ~ "^[[:space:]]*- id: " { exit }
+    in_stage { print }
+  ' "$workflow_file"
+}
+
+validate_stage_outputs() {
+  local feature_dir="$1"
+  local workflow_file="$2"
+  local stage="$3"
+  local missing=0
+  local in_outputs=0
+  local line raw_out output_path
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^[[:space:]]*outputs:[[:space:]]*$ ]]; then
+      in_outputs=1
+      continue
+    fi
+    if (( in_outputs == 0 )); then
+      continue
+    fi
+    if [[ "$line" =~ ^[[:space:]]{2}[a-zA-Z_-]+:[[:space:]]*$ ]]; then
+      break
+    fi
+    if [[ "$line" =~ ^[[:space:]]*-[[:space:]]+(.+)$ ]]; then
+      raw_out="${BASH_REMATCH[1]}"
+      output_path="$(sanitize_stage_output_path "$raw_out")"
+      if [[ "$output_path" == "code changes" || "$output_path" == "all reports" || "$output_path" == "layered context" || "$output_path" == "feature manifest" ]]; then
+        continue
+      fi
+      if [[ -n "$output_path" && ! -e "$feature_dir/$output_path" ]]; then
+        err "stage '$stage' missing declared output: $output_path"
+        missing=1
+      fi
+    fi
+  done < <(extract_stage_block "$workflow_file" "$stage")
+
+  return $missing
+}
+
 codebase_add() {
   local name="$1"
   local url="$2"
@@ -199,42 +286,66 @@ feature_review() {
   echo "" >> "$report"
 
   local last_review
-  last_review=$(grep "last-review-at:" "$feature_yaml" 2>/dev/null | cut -d'"' -f2 || echo "")
+  last_review=$(awk -F'"' '/^[[:space:]]*last-review-at:[[:space:]]*"/ { print $2 }' "$feature_yaml" | head -1 || true)
 
-  while IFS= read -r line; do
-    if [[ "$line" =~ name:\ \"([^\"]+)\" ]]; then
-      local repo="${BASH_REMATCH[1]}"
-      local repo_path="$CODEBASE_DIR/$repo"
-      if [[ -d "$repo_path/.git" ]]; then
-        echo "## Repo: $repo" >> "$report"
-        echo "" >> "$report"
+  while IFS= read -r repo; do
+    [[ -z "$repo" ]] && continue
+    local repo_path="$CODEBASE_DIR/$repo"
+    if [[ -d "$repo_path/.git" ]]; then
+      echo "## Repo: $repo" >> "$report"
+      echo "" >> "$report"
 
-        local branch="feature/$feature"
-        local base_ref
-        base_ref=$(grep -A5 "name: \"$repo\"" "$feature_yaml" 2>/dev/null | grep "base-ref:" | head -1 | cut -d'"' -f2)
+      local branch="feature/$feature"
+      local base_ref
+      base_ref=$(awk -v target="$repo" '
+        BEGIN { in_repo=0 }
+        $0 ~ "name: \"" target "\"" { in_repo=1; next }
+        in_repo && /base-ref:/ {
+          split($0, a, "\"")
+          print a[2]
+          exit
+        }
+      ' "$feature_yaml")
 
-        if [[ -n "$last_review" ]]; then
-          echo "### Commits since last review ($last_review)" >> "$report"
-          git -C "$repo_path" log --since="$last_review" --oneline "$branch" 2>/dev/null | while IFS= read -r commit_line; do
-            echo "- $commit_line" >> "$report"
-          done
-        else
-          echo "### All commits on branch (no prior review)" >> "$report"
-          git -C "$repo_path" log --oneline "$branch" 2>/dev/null | head -20 | while IFS= read -r commit_line; do
-            echo "- $commit_line" >> "$report"
-          done
-        fi
-
-        local diff_stats
-        diff_stats=$(git -C "$repo_path" diff --stat "$base_ref..$branch" 2>/dev/null | tail -1 || echo "no diff")
-        echo "" >> "$report"
-        echo "**Changes:** \`$diff_stats\`" >> "$report"
-        echo "" >> "$report"
+      if [[ -n "$last_review" ]]; then
+        echo "### Commits since last review ($last_review)" >> "$report"
+        git -C "$repo_path" log --since="$last_review" --oneline "$branch" 2>/dev/null | while IFS= read -r commit_line; do
+          echo "- $commit_line" >> "$report"
+        done
+      else
+        echo "### All commits on branch (no prior review)" >> "$report"
+        git -C "$repo_path" log --oneline "$branch" 2>/dev/null | head -20 | while IFS= read -r commit_line; do
+          echo "- $commit_line" >> "$report"
+        done
       fi
-    fi
-  done < "$feature_yaml"
 
-  sed -i "s/last-review-at:.*/last-review-at: \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"/" "$feature_yaml" 2>/dev/null || true
+      local diff_stats
+      diff_stats=$(git -C "$repo_path" diff --stat "$base_ref..$branch" 2>/dev/null | tail -1 || echo "no diff")
+      echo "" >> "$report"
+      echo "**Changes:** \`$diff_stats\`" >> "$report"
+      echo "" >> "$report"
+    fi
+  done < <(feature_repo_names "$feature_yaml")
+
+  local review_ts
+  review_ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  local tmp_file
+  tmp_file="$(mktemp)"
+  awk -v ts="$review_ts" '
+    BEGIN { updated=0 }
+    /^[[:space:]]*last-review-at:/ {
+      print "  last-review-at: \"" ts "\""
+      updated=1
+      next
+    }
+    { print }
+    END {
+      if (!updated) {
+        print "  last-review-at: \"" ts "\""
+      }
+    }
+  ' "$feature_yaml" > "$tmp_file"
+  mv "$tmp_file" "$feature_yaml"
 
   log "review report generated: $report"
 }
@@ -248,7 +359,7 @@ feature_status() {
   fi
 
   local count
-  count=$(find "$features_dir" -maxdepth 1 -type d -not -name features | wc -l)
+  count=$(find "$features_dir" -mindepth 1 -maxdepth 1 -type d -not -name ".templates" | wc -l | xargs)
   echo "📋 Features ($count):"
 
   for feat_dir in "$features_dir"/*; do
@@ -466,127 +577,24 @@ EOF_REP
 
   local current_date
   current_date=$(date '+%Y-%m-%d')
+  local repos_summary=""
+  if [[ -d "$feature_dir/repos" ]]; then
+    while IFS= read -r repo_name; do
+      if [[ -z "$repos_summary" ]]; then
+        repos_summary="$repo_name"
+      else
+        repos_summary="$repos_summary, $repo_name"
+      fi
+    done < <(find "$feature_dir/repos" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
+  fi
+  [[ -z "$repos_summary" ]] && repos_summary="none"
 
-  cat > "$feature_dir/docs/01-current-state.md" <<EOF_DOC
-# 01. Current State
-
-Date: $current_date
-
-## Objective
-${objective:-TBD}
-
-## Touched Repositories
-<!-- List repositories -->
-
-## Current Module Structure
-<!-- List key modules and their responsibilities -->
-
-## Dependencies
-<!-- List external dependencies -->
-
-## Existing Tests
-<!-- List existing test suites -->
-
-## Unknowns
-- [ ] Unknown item 1
-
-## Evidence
-<!-- Facts gathered from code analysis -->
-EOF_DOC
-
-  cat > "$feature_dir/docs/02-gap-analysis.md" <<'EOF_DOC'
-# 02. Gap Analysis
-
-Date: $current_date
-
-## Related Documents
-- Previous: [01. Current State](./01-current-state.md)
-
-## Business Gaps
-<!-- What business capabilities are missing? -->
-- [ ] Gap 1
-
-## Technical Gaps
-<!-- What technical deficiencies exist? -->
-- [ ] Gap 1
-
-## Risks
-- Risk 1
-
-## Open Questions
-- [ ] Question 1
-EOF_DOC
-
-  cat > "$feature_dir/docs/03-business-design.md" <<'EOF_DOC'
-# 03. Business Design
-
-Date: $current_date
-
-## Related Documents
-- Previous: [02. Gap Analysis](./02-gap-analysis.md)
-
-## Problem Statement
-<!-- What business problem are we solving? -->
-
-## Success Criteria
-- [ ] Criterion 1
-
-## User Stories
-- US-1: As a ... I want ... so that ...
-EOF_DOC
-
-  cat > "$feature_dir/docs/04-technical-design.md" <<'EOF_DOC'
-# 04. Technical Design
-
-Date: $current_date
-
-## Related Documents
-- Previous: [03. Business Design](./03-business-design.md)
-
-## Architecture Overview
-<!-- High-level architecture -->
-
-## Component Design
-### Component 1
-- Responsibility:
-- Public API:
-EOF_DOC
-
-  cat > "$feature_dir/docs/05-task-breakdown.md" <<'EOF_DOC'
-# 05. Task Breakdown
-
-Date: $current_date
-
-## Related Documents
-- Previous: [04. Technical Design](./04-technical-design.md)
-
-## Task Backlog
-
-### Phase 1
-- [ ] Task 1.1: Description (estimated: Xh)
-
-## Effort Estimate
-| Task | Estimate |
-|------|----------|
-| Total | X days |
-EOF_DOC
-
-  cat > "$feature_dir/docs/06-acceptance.md" <<'EOF_DOC'
-# 06. Acceptance Criteria
-
-Date: $current_date
-
-## Related Documents
-- Previous: [05. Task Breakdown](./05-task-breakdown.md)
-
-## Acceptance Checklist
-
-### Functional Requirements
-- [ ] AC-1: Description
-
-### Non-Functional Requirements
-- [ ] AC-2: Description
-EOF_DOC
+  render_doc_template "$ROOT_DIR/dos/templates/01-current-state.md.template" "$feature_dir/docs/01-current-state.md" "$current_date" "${objective:-TBD}" "$repos_summary"
+  render_doc_template "$ROOT_DIR/dos/templates/02-gap-analysis.md.template" "$feature_dir/docs/02-gap-analysis.md" "$current_date" "${objective:-TBD}" "$repos_summary"
+  render_doc_template "$ROOT_DIR/dos/templates/03-business-design.md.template" "$feature_dir/docs/03-business-design.md" "$current_date" "${objective:-TBD}" "$repos_summary"
+  render_doc_template "$ROOT_DIR/dos/templates/04-technical-design.md.template" "$feature_dir/docs/04-technical-design.md" "$current_date" "${objective:-TBD}" "$repos_summary"
+  render_doc_template "$ROOT_DIR/dos/templates/05-task-breakdown.md.template" "$feature_dir/docs/05-task-breakdown.md" "$current_date" "${objective:-TBD}" "$repos_summary"
+  render_doc_template "$ROOT_DIR/dos/templates/06-acceptance.md.template" "$feature_dir/docs/06-acceptance.md" "$current_date" "${objective:-TBD}" "$repos_summary"
 
   cat > "$feature_dir/agents.md" <<EOF_AG
 # Feature Agents
@@ -641,7 +649,7 @@ write_feature_manifest() {
     echo "    - \"define acceptance criteria\""
     echo '  risk_level: "medium"'
     echo "  dependencies: []"
-    echo '  last-review-at: ""'
+    echo '  last-review-at: null'
   } > "$feature_dir/feature.yaml"
 }
 
@@ -716,9 +724,8 @@ run_workflow_stage() {
     exit 1
   fi
 
-  local next_line=$((stage_line + 1))
   local requires_line
-  requires_line=$(awk -v start="$stage_line" 'NR==start+1 && /^(\s*)requires:/ { print NR":"$0 }' "$workflow_file")
+  requires_line="$(extract_stage_block "$workflow_file" "$stage" | awk '/^[[:space:]]*requires:[[:space:]]*\[/ { print; exit }')"
 
   if [[ "$requires_line" =~ requires:\s*\[([^\]]*)\] ]]; then
     local requires_str="${BASH_REMATCH[1]}"
@@ -746,7 +753,26 @@ run_workflow_stage() {
     echo "- Status: started"
   } >> "$feature_dir/reports/feature-progress.md"
 
-  log "workflow stage started: feature=$feature stage=$stage"
+  if ! validate_stage_outputs "$feature_dir" "$workflow_file" "$stage"; then
+    {
+      echo "- Status: failed"
+      echo "- Reason: missing declared outputs"
+    } >> "$feature_dir/reports/feature-progress.md"
+    exit 1
+  fi
+
+  local marker_file="$feature_dir/reports/stage-$stage.completed"
+  cat > "$marker_file" <<EOF_MARKER
+stage: $stage
+completed-at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+EOF_MARKER
+
+  {
+    echo "- Status: completed"
+    echo "- Marker: reports/stage-$stage.completed"
+  } >> "$feature_dir/reports/feature-progress.md"
+
+  log "workflow stage completed: feature=$feature stage=$stage"
 }
 
 report_feature() {

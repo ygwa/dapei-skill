@@ -66,6 +66,8 @@ properties:
         type: array
         items: { type: string }
       last-review-at:
-        type: string
-        format: date-time
+        oneOf:
+          - type: string
+            format: date-time
+          - type: "null"
 additionalProperties: false

@@ -57,8 +57,12 @@ alwaysApply: true
 - 上下文：在开始任务前，先读取 `docs/` 与 `.dapei/`。
 RULE
 
-# 5) 基础文档占位
-: > DESIGN.md
-: > README.md
+# 5) 基础文档占位（仅在文件不存在时创建，避免覆盖已有内容）
+if [ ! -f "DESIGN.md" ]; then
+  : > DESIGN.md
+fi
+if [ ! -f "README.md" ]; then
+  : > README.md
+fi
 
 echo "初始化完成。下一步：填充 .dapei/workspace.yaml 并创建第一个 feature。"

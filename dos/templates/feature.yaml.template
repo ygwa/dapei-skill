@@ -15,4 +15,4 @@ feature:
     - "<define acceptance criteria>"
   risk_level: "medium"
   dependencies: []
-  last-review-at: ""
+  last-review-at: null
