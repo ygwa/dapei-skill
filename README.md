@@ -1,187 +1,195 @@
 # dapei.skill
 
-`dapei.skill` 是一个面向 AI 协作开发的 Context OS。
+**AI Native Engineering Context OS** — 管理 Workspace 和 Feature 生命周期的 Agent Skill。
 
-它的核心不是让你手写脚本命令，而是让你通过自然语言和 AI 对话，把一个 Feature 从“需求”推进到“交付与沉淀”。
+`dapei` 是一个遵循 [Agent Skills](https://agentskills.io) 开放标准的技能包，可以在 Claude Code、Cursor、Codex CLI、Gemini CLI 等任何兼容 Agent Skills 标准的 AI 编程工具中使用。
 
-## 先说清楚：你和谁交互
+你不需要学习任何命令行工具。你只需要在 AI 对话中说 `@dapei`，Agent 会自动加载技能并按工程规范执行。
 
-在这个项目里，推荐交互方式是：
+---
 
-- 你和 AI 对话
-- AI 按你的意图调用 `dapei` 脚本和工程约束
-- AI 回写 Feature 文档、上下文、任务、报告
+## 安装
 
-也就是说：脚本是 AI 的执行工具，不是主要的人机入口。
+`dapei.skill` 遵循 Agent Skills 标准，支持主流 AI 编程工具的原生安装方式。
 
-## 对话入口（Wake-up Protocol）
+### Claude Code
 
-为了让 AI 稳定进入 dapei 工作模式，建议统一使用唤醒前缀：
+```bash
+# 方式 1：从 GitHub 安装（推荐）
+/install-skill https://github.com/ygwa/dapei-skill
 
-- `@dapei <你的意图>`
+# 方式 2：手动安装 — 将 skill 文件放入 Claude Code skills 目录
+git clone https://github.com/ygwa/dapei-skill.git /tmp/dapei-skill
+cp -r /tmp/dapei-skill/.agents/skills/dapei-skill ~/.claude/skills/dapei-skill
+rm -rf /tmp/dapei-skill
 
-示例：
+# 安装后重启 Claude Code 会话，输入 /skills 验证
+```
+
+### Cursor
+
+```bash
+# 方式 1：通过 npx skills 安装
+npx skills add ygwa/dapei-skill
+
+# 方式 2：手动安装 — 将 skill 文件放入项目目录
+git clone https://github.com/ygwa/dapei-skill.git /tmp/dapei-skill
+mkdir -p .cursor/skills/dapei-skill
+cp -r /tmp/dapei-skill/.agents/skills/dapei-skill/* .cursor/skills/dapei-skill/
+rm -rf /tmp/dapei-skill
+
+# 重新打开 Cursor 会话验证
+```
+
+### Codex CLI
+
+```bash
+# 从 GitHub 安装
+$skill-installer install https://github.com/ygwa/dapei-skill/tree/main/.agents/skills/dapei-skill
+
+# 或手动放置到 .agents/skills/ 目录
+git clone https://github.com/ygwa/dapei-skill.git /tmp/dapei-skill
+mkdir -p .agents/skills/dapei-skill
+cp -r /tmp/dapei-skill/.agents/skills/dapei-skill/* .agents/skills/dapei-skill/
+rm -rf /tmp/dapei-skill
+```
+
+### 项目级安装（团队共享）
+
+如果希望团队所有成员自动获得 `dapei` 技能，可以将 Skill 文件直接提交到项目仓库中：
+
+```bash
+# 在项目根目录
+mkdir -p .agents/skills/dapei-skill
+# 从 dapei-skill 仓库复制 SKILL.md、scripts/、references/ 等到 .agents/skills/dapei-skill/
+```
+
+Agent Skills 标准定义了跨工具通用的 skill 查找路径：
+
+| 工具 | 项目级路径 | 用户级路径 |
+|------|-----------|-----------|
+| Claude Code | `.claude/skills/<name>/` | `~/.claude/skills/<name>/` |
+| Cursor | `.cursor/skills/<name>/` | `~/.cursor/skills/<name>/` |
+| Codex CLI | `.agents/skills/<name>/` | 按用户配置 |
+| 通用（Agent Skills 标准） | `.agents/skills/<name>/` | — |
+
+> **说明**：安装后 Agent 在启动时只加载 skill 的 `name` 和 `description`（约 100 tokens）。当用户消息匹配到 skill 的描述时，Agent 才会动态加载完整的 `SKILL.md` 指令。这是 Agent Skills 标准的 Progressive Disclosure 机制，不会增加日常上下文负担。
+
+---
+
+## 快速开始
+
+安装完成后，在你的 AI 编程工具中开始对话：
 
 ```text
 @dapei 初始化当前项目 workspace
-@dapei 接入 mall-payment 和 mall-order 两个仓库
-@dapei 创建 feature payment-refactor，目标是稳定支付回调
-@dapei 推进 payment-refactor 到 gap-analysis
-@dapei review payment-refactor 并生成日报
 ```
 
-推荐约定：
+Agent 会：
 
-- 一条消息只表达一个主意图（创建 / 推进 / 审查 / 报告）。
-- 带上 feature 名称，避免 AI 误判上下文。
-- 涉及高风险改动时，明确要求“先方案后实现”。
+1. 检查当前目录状态
+2. 创建 `.dapei/`、`codebase/`、`docs/`、`features/` 等目录结构
+3. 生成工程配置和 Agent 行为指引
+4. 告诉你下一步该做什么
 
-## 已实现能力（从用户视角）
+然后你可以继续：
 
-当前已经实现并可用于日常协作的能力：
+```text
+@dapei 把 mall-payment 和 mall-order 接入当前 workspace
+```
 
-1. 用对话拉起 Workspace 和代码库管理
-- 你告诉 AI 想接入哪些仓库。
-- AI 可以初始化 workspace、登记 codebase、同步仓库状态。
+```text
+@dapei 创建 feature payment-refactor，目标是稳定支付回调，涉及 mall-payment,mall-order
+```
 
-2. 用对话创建 Feature 工作区
-- 你告诉 AI Feature 名称、目标、涉及仓库。
-- AI 会创建隔离工作区、映射 repos、准备分支和文档骨架。
+```text
+@dapei 推进 payment-refactor 到 solution-design，先做现状分析和 gap 分析
+```
 
-3. 用对话推进生命周期阶段
-- 你可以让 AI 执行“现状分析/Gap 分析/方案设计/任务拆解”等阶段。
-- AI 会校验阶段依赖，输出阶段记录和完成标记。
+---
 
-4. 用对话做进展审查和报告
-- 你可以让 AI 做 feature review（提交与变更摘要）。
-- 你可以让 AI 生成日报和架构审查报告。
+## 核心概念
 
-5. 用对话获取全局态势
-- 你可以随时问 AI：当前有哪些 Feature 在推进、每个 Feature 的分支和状态是什么。
+### Workspace
 
-## 你应该怎么和 AI 说
+Workspace 就是你的项目根目录。初始化后包含三个一级运行目录：
 
-下面这些是可以直接复制给 AI 的表达方式。
+- **`codebase/`** — 托管的 Git 代码库
+- **`docs/`** — 持久化的工程知识（业务、架构、标准、决策）
+- **`features/`** — Feature 执行工作区
 
-### 场景 1：初始化一个新项目协作空间
+### Feature
 
-可直接对 AI 说：
+Feature 是 `dapei` 的执行单元。每个 Feature 拥有隔离的工作空间：
+
+```text
+features/<feature>/
+├── feature.yaml          # Feature manifest
+├── agents.md             # Agent 行为指引
+├── repos/                # 关联仓库（symlink / worktree）
+├── docs/                 # 编号设计文档（01-现状 → 06-验收）
+├── context/              # 上下文文件
+├── memory/               # 决策、风险、时间线
+├── tasks/                # 任务拆解
+├── tests/                # 测试用例
+└── reports/              # 日报、守护报告、架构审查
+```
+
+### Feature 生命周期
+
+每个 Feature 按阶段推进，每个阶段有明确的输入和输出：
+
+```text
+analyze-current-state → gap-analysis → solution-design → task-breakdown → implementation → validation → acceptance
+```
+
+---
+
+## 对话场景
+
+### 初始化 Workspace
 
 ```text
 @dapei 帮我初始化 dapei 的 workspace，并检查当前目录缺哪些基础结构。
 ```
 
-补充信息建议：
-
-- 项目名称
-- 默认分支（如 `main`）
-- 语言/框架（用于后续上下文理解）
-
-### 场景 2：接入已有代码库
-
-可直接对 AI 说：
+### 接入代码库
 
 ```text
 @dapei 把 mall-payment 和 mall-order 接入当前 dapei workspace。
 如果本地没有就提示我补 Git 地址。
 ```
 
-补充信息建议：
-
-- 仓库名称
-- Git URL
-- 是否需要立即同步到最新远端
-
-### 场景 3：创建一个跨仓 Feature
-
-可直接对 AI 说：
+### 创建跨仓 Feature
 
 ```text
 @dapei 创建一个 feature：payment-refactor，目标是稳定支付回调链路，涉及 mall-payment,mall-order。
 创建后把我需要补充的上下文问题一次性列给我。
 ```
 
-补充信息建议：
-
-- feature 名称（建议 kebab-case）
-- 业务目标（尽量具体）
-- 涉及仓库
-- 成功标准（验收口径）
-
-### 场景 4：让 AI 按阶段推进，而不是一次性“写完”
-
-可直接对 AI 说：
+### 按阶段推进
 
 ```text
 @dapei 从 analyze-current-state 开始推进 payment-refactor，
 每完成一个阶段告诉我产出了哪些文档、还缺什么输入。
 ```
 
-你也可以继续说：
-
-```text
-@dapei 继续到 gap-analysis。
-```
-
-```text
-@dapei 继续到 solution-design。
-```
-
-推荐做法：
-
-- 每个阶段结束后，让 AI 先给你“结论+风险+待确认项”
-- 你确认后再进入下一阶段
-
-### 场景 5：做每日同步与风险复盘
-
-可直接对 AI 说：
+### 每日审查与报告
 
 ```text
 @dapei 帮我 review 一下 payment-refactor 今天的变更，并更新日报。
 重点告诉我：新增风险、架构漂移、阻塞项。
 ```
 
-推荐让 AI 固定输出：
-
-- 今天做了什么
-- 风险变化
-- 未决问题
-- 明天计划
-
-### 场景 6：快速看全局推进状态
-
-可直接对 AI 说：
+### 全局状态
 
 ```text
 @dapei 汇总当前所有 feature 的状态，按风险和紧急程度排序。
 ```
 
-适用人群：
+### 高质量需求模板
 
-- TL/架构师做全局排期
-- PM 做跨团队同步
-
-## 高质量对话模板
-
-为了让 AI 执行更稳，推荐你在提需求时包含这 5 类信息：
-
-1. 目标
-- 你希望最终改变什么
-
-2. 范围
-- 涉及哪些仓库/模块
-- 明确哪些不在本次范围
-
-3. 约束
-- 架构边界、兼容性、上线窗口、安全要求
-
-4. 验收
-- 你如何判断“完成”
-
-5. 协作偏好
-- 你希望 AI 一次做完，还是分阶段回报
-
-一个完整示例：
+在提需求时包含目标、范围、约束、验收、协作偏好这 5 类信息，可以显著提升 Agent 执行质量：
 
 ```text
 @dapei 我们要做 payment-refactor。
@@ -192,51 +200,111 @@
 请你先做现状分析，再给我 gap 分析，阶段间先确认再继续。
 ```
 
-## 什么时候该让 AI “停一下先确认”
+---
 
-建议在这些节点让 AI 暂停并确认：
+## 确认卡点
 
-- 进入 `solution-design` 前
-- 进入 `implementation` 前
-- 发现高风险变更（跨域依赖、数据模型变更、兼容性风险）时
-- 进入 `acceptance` 前
+建议在以下节点让 Agent 暂停确认后再继续：
 
-可直接说：
+| 节点 | 原因 |
+|------|------|
+| 进入 `solution-design` 前 | 方案决策影响实现方向 |
+| 进入 `implementation` 前 | 代码变更不可轻易回退 |
+| 发现高风险变更时 | 跨域依赖、数据模型、兼容性风险 |
+| 进入 `acceptance` 前 | 验收标准决定交付质量 |
+
+Agent 每次阶段回报统一包含：**结论 / 风险 / 待确认 / 下一步**。
+
+---
+
+## 已实现能力
+
+| 能力 | 状态 | 说明 |
+|------|------|------|
+| Workspace 初始化 | ✅ 已实现 | 空目录 / conforming / non-conforming 三种策略 |
+| 代码库管理 | ✅ 已实现 | 克隆、同步、列表、元数据注册 |
+| Feature 创建 | ✅ 已实现 | 隔离工作区、分支映射、文档模板 |
+| 生命周期推进 | ✅ 已实现 | DAG 阶段校验、完成标记 |
+| Feature 审查 | ✅ 已实现 | 提交汇总、增量 review、日报 |
+| 守护规则 | ✅ 已实现 | 基础报告模式（分层、DDD、API、命名） |
+| 全局状态 | ✅ 已实现 | Feature 和 Codebase 状态概览 |
+| `docs/agents.md` 生成 | ✅ 已实现 | Workspace 级 Agent 行为指引 |
+
+## 规划中能力
+
+| 能力 | 优先级 | 说明 |
+|------|--------|------|
+| Context Builder | 🔴 高 | 按阶段从 docs 组装 feature 上下文包 |
+| Codebase → Docs Bootstrap | 🔴 高 | 分析代码库自动生成 `docs/as-is/` |
+| 代码分析引擎 | 🔴 高 | 扫描仓库生成带证据的现状和 Gap 文档 |
+| YAML 规则引擎 | 🔴 高 | 替代硬编码守护检查 |
+| 验证与测试执行 | 🔴 高 | 仓库级 lint / test / build |
+| Feature → Docs 回写 | 🟡 中 | 验收后将设计和决策沉淀回 `docs/` |
+| Git Worktree 隔离 | 🟡 中 | 多 Feature 并行时仓库隔离 |
+| 报告聚合与自动化 | 🟡 中 | 深度报告和定时日报 |
+| 集成适配器 | 🟢 低 | GitHub / GitLab / CI / 通知 / MCP |
+
+---
+
+## 技术架构
 
 ```text
-@dapei 先暂停，给我一个决策清单：每个选项的收益、风险、回滚成本。
+┌───────────────────────────────────────────────┐
+│        用户层 (User Layer)                     │
+│  @dapei <意图> — AI 对话是唯一入口              │
+├───────────────────────────────────────────────┤
+│        Skill 层 (Agent Skills Standard)        │
+│  SKILL.md 意图识别 + Progressive Disclosure     │
+├───────────────────────────────────────────────┤
+│        编排层 (Orchestration)                   │
+│  Agent 分析、设计、编码、总结                    │
+├───────────────────────────────────────────────┤
+│        执行层 (Deterministic Scripts)           │
+│  scripts/dapei — 目录创建、分支管理、报告生成    │
+├───────────────────────────────────────────────┤
+│        上下文层 (Context System)                │
+│  workspace.yaml 分层加载 → 运行时上下文          │
+├───────────────────────────────────────────────┤
+│        Workspace 层 (Workspace System)         │
+│  codebase / docs / features 隔离与映射          │
+└───────────────────────────────────────────────┘
 ```
 
-## 使用体验优化建议（下一步）
+**设计原则**：
 
-从用户体验角度，建议优先做这 5 件事：
+- **Local-First** — 本地文件系统和 Git 是唯一数据源，不依赖任何 SaaS
+- **对话优先** — 用户通过自然语言与 Agent 对话，而非手动执行脚本
+- **脚本是内部执行层** — 可重复的状态变更由确定性命令完成，Agent 内部调用
+- **跨工具通用** — 遵循 Agent Skills 标准，一次编写，在任何兼容工具中使用
 
-1. 固化唤醒词与意图识别
-- 统一入口 `@dapei`，并支持“创建/推进/审查/报告/状态”常见表达。
+---
 
-2. 增加对话确认卡点
-- 在 `solution-design`、`implementation`、`acceptance` 前，AI 自动进入“先确认后执行”模式。
+## 兼容性
 
-3. 提供角色化提示词模板
-- PM 模板、TL 模板、开发模板，减少每次从零描述成本。
+`dapei.skill` 遵循 [Agent Skills](https://agentskills.io) 开放标准，已验证或预期兼容的运行时：
 
-4. 增加“最小输入提示”
-- 当用户信息不足时，AI 只追问 3 个关键字段：目标、范围、验收。
+| 工具 | 状态 |
+|------|------|
+| Claude Code | ✅ 已验证 |
+| Cursor | ✅ 已验证 |
+| Codex CLI | 🟡 预期兼容 |
+| Gemini CLI | 🟡 预期兼容 |
+| GitHub Copilot | 🟡 预期兼容 |
+| Windsurf | 🟡 预期兼容 |
 
-5. 输出统一摘要格式
-- 每次阶段回报统一输出：`结论 / 风险 / 待确认 / 下一步`。
-
-## 当前版本边界（避免误解）
-
-当前版本已经能跑通基本流程，但还不是最终形态。请把它当作可执行骨架：
-
-- guardrail 目前是基础报告模式，不是完整规则引擎。
-- 报告能力目前以骨架和结构化记录为主，不是完全自动洞察。
-- `context build` 等高级上下文打包能力还在后续规划。
+---
 
 ## 参考
 
-- 设计说明：`DESIGN.md`
-- 生命周期定义：`.dapei/workflows/feature-lifecycle.yaml`
-- 命令契约：`.dapei/commands.yaml`
-- 实现审查：`docs/plans/2026-05-14-current-implementation-review.md`
+| 文档 | 说明 |
+|------|------|
+| [DESIGN.md](DESIGN.md) | 技术设计说明 |
+| [Target Design](docs/plans/2026-05-14-dapei-skill-target-design.md) | 目标设计与路线图 |
+| `.dapei/workflows/feature-lifecycle.yaml` | Feature 生命周期定义 |
+| `.dapei/commands.yaml` | 命令契约（供 Agent 内部使用） |
+| `.agents/skills/dapei-skill/SKILL.md` | Skill 入口（Agent Skills 标准格式） |
+| [Agent Skills 规范](https://agentskills.io/specification) | Agent Skills 开放标准 |
+
+## 许可证
+
+MIT
