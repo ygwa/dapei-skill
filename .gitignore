@@ -4,6 +4,7 @@
 workspace/codebase/
 workspace/features/*/.reports/
 workspace/features/*/.cache/
+workspace/features/*/docs/
 
 # macOS
 .DS_Store
