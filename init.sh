@@ -10,8 +10,8 @@ mkdir -p .agents/skills/dapei-skill/scripts
 mkdir -p .claude/skills/dapei-skill/scripts
 mkdir -p .cursor/rules
 mkdir -p docs/{architecture,business,domain,glossary,decisions,standards,workflows}
-mkdir -p dos/{ai-rules,templates}
-mkdir -p workspace/{codebase,features}
+mkdir -p runtime/{ai-rules,templates}
+mkdir -p codebase features
 mkdir -p .dapei/{workflows,rules}
 
 # 2) Git
@@ -37,8 +37,8 @@ description: AI Native Engineering Context OS - 管理 Workspace 和 Feature 生
 
 ## 行为准则
 1. 始终优先阅读 `docs/` 中的架构文档。
-2. 所有代码修改必须在 `workspace/features/<name>` 下进行。
-3. 遵循 `dos/ai-rules/` 中的安全与规范限制。
+2. 所有代码修改必须在 `features/<name>/repos` 映射的仓库中进行。
+3. 遵循 `runtime/ai-rules/` 中的安全与规范限制。
 SKILL
 
 cp .claude/skills/dapei-skill/SKILL.md .agents/skills/dapei-skill/SKILL.md
@@ -53,7 +53,7 @@ alwaysApply: true
 # dapei.skill 全局规范
 
 - 架构原则：遵循 DDD 分层。
-- 工作流：AI 禁止直接修改 `workspace/codebase`，必须通过 `@dapei create feature` 开启新任务。
+- 工作流：AI 禁止绕过 Feature 工作区直接修改 `codebase`，必须通过 `@dapei create feature` 开启新任务。
 - 上下文：在开始任务前，先读取 `docs/` 与 `.dapei/`。
 RULE
 

@@ -15,7 +15,7 @@ jobs:
 
       - name: Check shell script syntax
         run: |
-          for f in scripts/*.sh; do
+          find scripts -type f | sort | while read -r f; do
             echo "Checking $f..."
             bash -n "$f" || { echo "SYNTAX ERROR in $f"; exit 1; }
           done
@@ -29,9 +29,9 @@ jobs:
 
       - name: Setup test repo
         run: |
-          mkdir -p workspace/codebase
-          git init workspace/codebase/test-repo
-          cd workspace/codebase/test-repo
+          mkdir -p codebase
+          git init codebase/test-repo
+          cd codebase/test-repo
           git config user.email "test@test.com"
           git config user.name "Test User"
           echo "# Test" > README.md
@@ -47,8 +47,9 @@ jobs:
 
       - name: Verify feature workspace
         run: |
-          test -f workspace/features/smoke-test/feature.yaml || { echo "feature.yaml not found"; exit 1; }
-          test -d workspace/features/smoke-test/docs || { echo "docs not found"; exit 1; }
+          test -f features/smoke-test/feature.yaml || { echo "feature.yaml not found"; exit 1; }
+          test -f features/smoke-test/context/runtime-context.md || { echo "runtime context not found"; exit 1; }
+          test -d features/smoke-test/docs || { echo "docs not found"; exit 1; }
           echo "Feature workspace structure verified"
 
   guardrail:
@@ -59,7 +60,7 @@ jobs:
 
       - name: Run guardrail on existing features
         run: |
-          if [ -d "workspace/features/payment-refactor" ]; then
+          if [ -d "features/payment-refactor" ]; then
             ./scripts/dapei-guardrail payment-refactor || echo "Guardrail completed with findings"
           else
             echo "No features to check"

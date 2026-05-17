@@ -7,7 +7,7 @@ commands:
     workflow:
       - validate-root-structure
       - init-dapei-metadata
-      - init-docs-and-dos
+      - init-docs-and-runtime
       - emit-workspace-report
     outputs:
       - .dapei/workspace.yaml
@@ -31,6 +31,36 @@ commands:
     outputs:
       - features/<feature>/feature.yaml
       - features/<feature>/agents.md
+      - features/<feature>/context/runtime-context.md
+
+  - name: build-context
+    cli: "@dapei context build <feature> --stage <stage>"
+    purpose: build an auditable layered runtime context bundle for one feature stage
+    inputs:
+      - feature_name
+      - stage
+    workflow:
+      - load-workspace-context-policy
+      - collect-docs-knowledge
+      - collect-repo-evidence
+      - collect-feature-context
+      - emit-context-bundle
+    outputs:
+      - features/<feature>/context/runtime-context.md
+
+  - name: analyze-codebase
+    cli: "@dapei codebase analyze <name|--all>"
+    purpose: reverse-engineer imported repositories into durable workspace docs
+    inputs:
+      - codebase_name
+    workflow:
+      - scan-repo-metadata
+      - detect-stack-and-tests
+      - collect-structural-evidence
+      - update-as-is-docs
+    outputs:
+      - docs/as-is/repo-inventory.md
+      - docs/architecture/technical-current-state.md
 
   - name: run-workflow
     cli: "@dapei run workflow <feature> --stage <stage>"
@@ -59,3 +89,17 @@ commands:
     outputs:
       - features/<feature>/reports/daily-report.md
       - features/<feature>/reports/architecture-review.md
+
+  - name: validate-feature
+    cli: "@dapei validate feature <name>"
+    purpose: run repeatable local validation and emit test and validation reports
+    inputs:
+      - feature_name
+    workflow:
+      - detect-repo-test-commands
+      - execute-local-checks
+      - run-guardrails
+      - emit-validation-report
+    outputs:
+      - features/<feature>/reports/test-report.md
+      - features/<feature>/reports/validation-report.md
