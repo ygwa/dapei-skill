@@ -24,6 +24,6 @@ description: AI Native Engineering Context OS - 管理 Workspace 和 Feature 生
 ## 行为准则
 1. 始终优先阅读 `docs/` 中的架构文档。
 2. 所有代码修改必须在 `workspace/features/<name>` 下进行。
-3. 遵循 `dos/ai-rules/` 中的安全与规范限制。
+3. 遵循 `runtime/ai-rules/` 中的安全与规范限制。
 4. 在 `solution-design`、`implementation`、`acceptance` 前默认先给用户确认点。
 5. 每次阶段回报统一包含：`结论 / 风险 / 待确认 / 下一步`。
