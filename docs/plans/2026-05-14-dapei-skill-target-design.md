@@ -30,7 +30,7 @@ The current repository has useful pieces. Before this revision, its workspace ro
 
 - It used `workspace/codebase` and `workspace/features`, adding an unnecessary nested runtime root.
 - It already has `docs` for durable workspace knowledge, which matches the intended model.
-- `dos/templates` and `.dapei/rules` for templates and governance.
+- `runtime/templates` and `.dapei/rules` for templates and governance.
 - `.agents/skills/dapei-skill/SKILL.md` as the agent-facing skill entrypoint.
 - `scripts/dapei` as a deterministic local execution layer.
 
@@ -66,7 +66,7 @@ Optional root-level support directories:
 ```text
 <workspace-root>/
 ├── .agents/
-├── dos/
+├── runtime/
 ├── reports/
 └── skills/
 ```
@@ -308,7 +308,7 @@ Recommended workspace shape:
 │   ├── glossary/
 │   ├── decisions/
 │   └── workflows/
-├── dos/
+├── runtime/
 │   ├── ai-rules/
 │   └── templates/
 ├── codebase/
@@ -724,7 +724,7 @@ Mitigation:
 
 Start with a small but high-leverage slice:
 
-1. Add `docs/agents.md` and a template under `dos/templates`.
+1. Add `docs/agents.md` and a template under `runtime/templates`.
 2. Add `context build` command.
 3. Generate `context-index.yaml` and `runtime-context.md` during feature creation.
 4. Add a current-state scanner that writes evidence to `01-current-state.md`.

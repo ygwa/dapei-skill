@@ -18,7 +18,7 @@ Reviewed files:
 - `.dapei/rules/*.yaml`
 - `scripts/dapei`
 - `scripts/dapei-guardrail`
-- `dos/templates/*`
+- `runtime/templates/*`
 - `workspace/features/payment-refactor/*`
 
 Commands run:
@@ -57,7 +57,7 @@ Status: improved.
 Evidence:
 
 - `.dapei/feature.schema.yaml` now uses `enum: ["0.2"]`.
-- `dos/templates/feature.yaml.template` now emits `version: "0.2"`.
+- `runtime/templates/feature.yaml.template` now emits `version: "0.2"`.
 - `scripts/dapei` writes `version: "0.2"` in `write_feature_manifest`.
 - `workspace/features/payment-refactor/feature.yaml` has been migrated to `version: "0.2"`.
 
@@ -77,13 +77,13 @@ Status: improved.
 
 Evidence:
 
-- `dos/templates/01-current-state.md.template` through `dos/templates/06-acceptance.md.template` exist.
+- `runtime/templates/01-current-state.md.template` through `runtime/templates/06-acceptance.md.template` exist.
 - `scripts/dapei` creates `docs/01-current-state.md` through `docs/06-acceptance.md` in new feature workspaces.
 - `.dapei/workflows/feature-lifecycle.yaml` now names those docs as stage outputs.
 
 Remaining gap:
 
-- `scripts/dapei` duplicates simplified template content inline instead of copying/rendering from `dos/templates`.
+- `scripts/dapei` duplicates simplified template content inline instead of copying/rendering from `runtime/templates`.
 - Several generated docs use quoted heredocs, so `Date: $current_date` is written literally for docs `02` through `06` instead of substituting the date.
 - Existing sample feature `payment-refactor` does not contain the numbered docs, so migration is incomplete.
 
@@ -185,13 +185,13 @@ Impact: templates and generated files will drift.
 
 Evidence:
 
-- `dos/templates/*.template` exist.
+- `runtime/templates/*.template` exist.
 - `init_feature_files` writes separate inline heredocs.
 
 Fix:
 
 - Implement `render_template <template> <output>` with substitutions for `{{date}}`, `{{objective}}`, and `{{repos}}`.
-- Use `dos/templates` as the only source for new feature docs.
+- Use `runtime/templates` as the only source for new feature docs.
 
 ### P1: Date Substitution Is Broken In Generated Docs 02-06
 
@@ -322,7 +322,7 @@ Fix:
 ## Recommended Next Work Order
 
 1. Fix stage completion first.
-2. Switch feature doc generation to `dos/templates` rendering.
+2. Switch feature doc generation to `runtime/templates` rendering.
 3. Backfill/migrate existing feature workspaces.
 4. Fix schema validity for `last-review-at`.
 5. Add minimal CLI smoke tests.
@@ -333,7 +333,7 @@ Fix:
 ```text
 Review docs/plans/2026-05-14-current-implementation-review.md and implement the highest-priority fixes only.
 Start with stage lifecycle correctness: make `run workflow` validate declared outputs and write `reports/stage-<stage>.completed` when a stage succeeds.
-Then replace inline feature doc heredocs with rendering from `dos/templates`, preserving existing behavior and avoiding overwrites.
+Then replace inline feature doc heredocs with rendering from `runtime/templates`, preserving existing behavior and avoiding overwrites.
 Add a smoke test that creates a temporary local git repo under workspace/codebase, creates a feature, runs analyze-current-state, and verifies generated docs plus stage completion marker.
 Do not modify unrelated files.
 ```

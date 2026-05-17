@@ -42,13 +42,13 @@ Current repository evidence:
 - `.dapei/rules/*.yaml`: Defines report-mode guardrail rule specs.
 - `scripts/dapei`: Implements CLI skeleton and basic Git/file operations.
 - `scripts/dapei-guardrail`: Implements a small hardcoded guardrail report.
-- `dos/templates/*`: Provides minimal feature and agent templates.
+- `runtime/templates/*`: Provides minimal feature and agent templates.
 - `workspace/features/payment-refactor/*`: Provides a sample feature workspace.
 
 Planning image target areas:
 
 - End-to-end workflow: initialize workspace, create feature, analyze current state, design solution, implement, validate locally, report and archive.
-- Directory model: `workspace/codebase`, `docs`, `dos`, `features`, `.dapei`, `skills`, `reports`.
+- Directory model: `workspace/codebase`, `docs`, `runtime`, `features`, `.dapei`, `skills`, `reports`.
 - Feature workspace: `repos`, numbered `docs`, `context`, `memory`, `tests`, `reports`, `tasks`, `agents.md`.
 - Capability layers: foundation, workspace, feature, engineering, governance.
 - Context injection and AI execution loop.
@@ -59,7 +59,7 @@ Planning image target areas:
 | Area | Target From Planning Image | Current Implementation | Gap | Priority |
 | --- | --- | --- | --- | --- |
 | Natural-language entry | `@dapei init workspace`, `@dapei create payment feature`, `@dapei analyze current-state`, `@dapei implement feature`, `@dapei daily report` | Bash CLI accepts exact command tokens and optional `@dapei` prefix | No intent parser, alias mapping, Chinese command mapping, or command disambiguation | P1 |
-| Workspace initialization | Connect/manage Git repos, sync codebase, initialize docs/dos, configure global context | `init workspace` creates directories and requires `.dapei/workspace.yaml` | Does not generate missing baseline files, validate full structure, or emit workspace report | P1 |
+| Workspace initialization | Connect/manage Git repos, sync codebase, initialize docs and runtime assets, configure global context | `init workspace` creates directories and requires `.dapei/workspace.yaml` | Does not generate missing baseline files, validate full structure, or emit workspace report | P1 |
 | Codebase registry | Real source library under `workspace/codebase` | `codebase add/sync/list` exists and writes `.dapei/codebases.yaml` | Registry writes raw YAML with limited validation; no repo health, default branch freshness, auth profile, or multi-repo sync | P2 |
 | Feature creation | Select related repos, create branch from master, create feature workspace, inject initial context | `create feature` creates dirs, symlinks repos, branches, `feature.yaml`, placeholders | Feature manifest currently writes version `0.2` while sample uses `0.1`; no global feature index; no post-create context interview; no doc templates for numbered design docs | P1 |
 | Current-state analysis | Code search, architecture scan, dependency and impact analysis, current-state docs | Lifecycle YAML names stages; CLI only appends checkpoint | No analyzer that scans repos or writes `01-current-state.md`; no dependency graph; no impact report | P1 |
@@ -260,10 +260,10 @@ Use these as issue-sized tasks.
 
 | ID | Task | Files Likely Touched | Depends On | Acceptance |
 | --- | --- | --- | --- | --- |
-| DAP-001 | Normalize feature manifest version and migration policy | `.dapei/feature*.schema.yaml`, `dos/templates/feature.yaml.template`, `scripts/dapei`, sample feature | none | New and sample features validate against one chosen schema |
-| DAP-002 | Add numbered feature doc templates | `dos/templates`, `scripts/dapei` | DAP-001 | New feature contains `docs/01` to `docs/06` |
+| DAP-001 | Normalize feature manifest version and migration policy | `.dapei/feature*.schema.yaml`, `runtime/templates/feature.yaml.template`, `scripts/dapei`, sample feature | none | New and sample features validate against one chosen schema |
+| DAP-002 | Add numbered feature doc templates | `runtime/templates`, `scripts/dapei` | DAP-001 | New feature contains `docs/01` to `docs/06` |
 | DAP-003 | Implement stage output validation | `.dapei/workflows/feature-lifecycle.yaml`, `scripts/dapei` | DAP-002 | Running a stage checks required prior outputs |
-| DAP-004 | Add context build command | `scripts/dapei`, `.dapei/workspace.yaml`, `dos/templates/agents.feature.md.template` | DAP-003 | `context/runtime-context.md` is generated with provenance |
+| DAP-004 | Add context build command | `scripts/dapei`, `.dapei/workspace.yaml`, `runtime/templates/agents.feature.md.template` | DAP-003 | `context/runtime-context.md` is generated with provenance |
 | DAP-005 | Implement repo current-state scanner | `scripts/dapei` or `scripts/dapei-analyze`, feature docs | DAP-004 | `01-current-state.md` includes repo evidence and unknowns |
 | DAP-006 | Implement gap-analysis generator | `scripts/dapei` or `scripts/dapei-analyze`, feature docs | DAP-005 | `02-gap-analysis.md` summarizes gaps and risks |
 | DAP-007 | Replace hardcoded guardrail checks with YAML rule runner | `scripts/dapei-guardrail`, `.dapei/rules`, tests | DAP-001 | All declared rules are evaluated |
@@ -271,7 +271,7 @@ Use these as issue-sized tasks.
 | DAP-009 | Upgrade daily report aggregation | `scripts/dapei`, report templates | DAP-008 | Daily report includes commits, tests, risks, decisions, guardrails |
 | DAP-010 | Add integration registry | `.dapei/integrations.yaml`, `scripts/dapei`, docs | DAP-009 | Integrations are discoverable and optional |
 | DAP-011 | Add CLI regression tests | `tests/`, `scripts/` | DAP-001 | Core commands covered by automated tests |
-| DAP-012 | Expand skill instructions for agents | `.agents/skills/dapei-skill/SKILL.md`, `.claude/skills/dapei-skill/SKILL.md`, `dos/templates/agents.feature.md.template` | DAP-004 | Agents are instructed to use staged docs/context/memory consistently |
+| DAP-012 | Expand skill instructions for agents | `.agents/skills/dapei-skill/SKILL.md`, `.claude/skills/dapei-skill/SKILL.md`, `runtime/templates/agents.feature.md.template` | DAP-004 | Agents are instructed to use staged docs/context/memory consistently |
 
 ## Agent Implementation Rules
 

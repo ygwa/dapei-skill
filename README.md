@@ -217,32 +217,71 @@ Agent 每次阶段回报统一包含：**结论 / 风险 / 待确认 / 下一步
 
 ---
 
+## 当前项目状态
+
+截至 2026-05-15，`dapei.skill` 已经从概念验证推进到可运行的 v0.1/v0.2 骨架。当前仓库里有三类内容：
+
+- **Skill 入口**：`.agents/skills/dapei-skill/SKILL.md` 定义 `@dapei` 唤醒协议、核心意图和 Agent 行为约束。
+- **确定性执行层**：`scripts/dapei` 负责 workspace 初始化、代码库注册、feature 创建、生命周期阶段校验、报告生成和状态查看。
+- **设计与样例资产**：`DESIGN.md`、`docs/plans/*`、`.dapei/*`、`runtime/templates/*` 记录目标设计、生命周期 DAG、规则声明、文档模板和历史评审。
+
+当前主线设计已经收敛为：用户当前目录就是 workspace root，运行期目录应是根级 `codebase/`、`docs/`、`features/`，不再默认创建嵌套的 `workspace/` 作为真实运行根。
+
 ## 已实现能力
 
 | 能力 | 状态 | 说明 |
 |------|------|------|
-| Workspace 初始化 | ✅ 已实现 | 空目录 / conforming / non-conforming 三种策略 |
-| 代码库管理 | ✅ 已实现 | 克隆、同步、列表、元数据注册 |
-| Feature 创建 | ✅ 已实现 | 隔离工作区、分支映射、文档模板 |
-| 生命周期推进 | ✅ 已实现 | DAG 阶段校验、完成标记 |
-| Feature 审查 | ✅ 已实现 | 提交汇总、增量 review、日报 |
-| 守护规则 | ✅ 已实现 | 基础报告模式（分层、DDD、API、命名） |
-| 全局状态 | ✅ 已实现 | Feature 和 Codebase 状态概览 |
-| `docs/agents.md` 生成 | ✅ 已实现 | Workspace 级 Agent 行为指引 |
+| Workspace 初始化 | 已实现 | 支持空目录、已符合结构目录、非符合目录拒绝初始化三种策略 |
+| 代码库管理 | 已实现 | 支持 clone/register、sync、list，并写入 `.dapei/codebases.yaml` |
+| Feature 创建 | 已实现 | 创建 `features/<feature>`、repo 映射、feature 分支、manifest、context、memory、tasks、reports 和编号设计文档 |
+| 生命周期推进 | 部分实现 | 能校验阶段是否存在、检查前置阶段 marker、检查声明输出并写入完成 marker；尚不生成真实分析内容 |
+| Feature 审查 | 部分实现 | 能生成提交摘要和 diff stat；尚未聚合测试、风险、架构漂移和任务进展 |
+| 守护规则 | 初步实现 | `.dapei/rules/*.yaml` 已声明规则，但 `scripts/dapei-guardrail` 仍是少量硬编码检查 |
+| 全局状态 | 已实现 | 能查看 feature 和 codebase 的基础状态 |
+| `docs/agents.md` 生成 | 已实现 | 初始化 workspace 时生成基础 Agent 行为指引 |
 
-## 规划中能力
+## 整体 Review
 
-| 能力 | 优先级 | 说明 |
-|------|--------|------|
-| Context Builder | 🔴 高 | 按阶段从 docs 组装 feature 上下文包 |
-| Codebase → Docs Bootstrap | 🔴 高 | 分析代码库自动生成 `docs/as-is/` |
-| 代码分析引擎 | 🔴 高 | 扫描仓库生成带证据的现状和 Gap 文档 |
-| YAML 规则引擎 | 🔴 高 | 替代硬编码守护检查 |
-| 验证与测试执行 | 🔴 高 | 仓库级 lint / test / build |
-| Feature → Docs 回写 | 🟡 中 | 验收后将设计和决策沉淀回 `docs/` |
-| Git Worktree 隔离 | 🟡 中 | 多 Feature 并行时仓库隔离 |
-| 报告聚合与自动化 | 🟡 中 | 深度报告和定时日报 |
-| 集成适配器 | 🟢 低 | GitHub / GitLab / CI / 通知 / MCP |
+当前实现和目标设计的主要差距不在目录结构，而在“结构是否真的会产出工程判断”。
+
+| 设计预期 | 当前情况 | 差距 |
+|------|------|------|
+| Agent 用自然语言稳定调用完整工作流 | README 和 Skill 描述了自然语言入口，脚本仍依赖明确命令形态 | 缺少意图路由、中文别名、歧义澄清和命令映射层 |
+| `docs/` 是可持续工程知识库 | 已有 glossary、decisions、workflows、plans，但业务/架构/标准骨架还不完整 | 缺少从 codebase 自动 bootstrap `docs/as-is`、`docs/architecture`、`docs/standards` 的流程 |
+| Feature 创建时自动注入上下文 | 现在只生成 context 占位文件 | 缺少按阶段组装上下文包的 `context build` 能力、来源追踪和 token 预算 |
+| 生命周期阶段能产出分析和设计 | 阶段校验和 marker 已有，编号文档模板已创建 | 缺少 repo 扫描、现状分析、gap 分析、方案综合、验收验证等真实执行逻辑 |
+| Guardrail 可配置可演进 | 规则 YAML 已存在 | 缺少 YAML 规则解释器、severity、report/gate 模式和测试 |
+| 本地验证支撑 acceptance | 生命周期里有 `local-validation` 阶段 | 缺少 repo 级 test/lint/build 命令注册、执行报告和失败阻断策略 |
+| Feature 完成后反哺 workspace docs | 设计文档中已有 closed loop | 缺少 `archive feature` 或 closeout 命令，把决策、影响、约束写回 `docs/` |
+| 多 feature 并行隔离 | 当前使用 codebase 工作树 + feature 分支 + feature repo symlink | 同一 repo 多 feature 并行会互相影响，后续应优先考虑 Git worktree |
+
+还有一个需要刻意治理的历史遗留点：当前仓库里存在 `workspace/features/*` 样例，这可以作为开发 fixture 保留，但不应再被文档或新用户理解为目标运行结构。目标用户 workspace 仍应坚持根级 `features/`。
+
+## 后续路线
+
+| 优先级 | 能力 | 目标 |
+|------|------|------|
+| P0 | Context Builder | 增加 `dapei context build <feature> --stage <stage>`，把 `docs/`、repo 摘要、feature context 和任务输入组装成可审计上下文包 |
+| P0 | Codebase → Docs Bootstrap | 扫描 `codebase/`，生成 repo inventory、技术现状、业务线索、架构证据和未知项 |
+| P0 | Stage Runner | 让 analyze/gap/design/validation 阶段不只是检查文件，而是生成带证据的文档和报告 |
+| P0 | Guardrail Engine | 解释 `.dapei/rules/*.yaml`，支持 report/gate、severity、证据和 remediation |
+| P1 | Local Validation | 在 codebase registry 或 feature manifest 中注册 test/lint/build 命令，产出 validation/test report |
+| P1 | Feature Closeout | 增加 feature archive/closeout，把 accepted design、decision、risk、impact 回写到 workspace docs |
+| P1 | Git Worktree Isolation | 用 worktree 替代直接在 `codebase/<repo>` 切 feature 分支，支持多 feature 并行 |
+| P2 | Reporting Automation | 聚合 commits、changed files、tasks、risks、decisions、tests、guardrails，形成真正可读的日报和审查报告 |
+| P2 | Integrations | 在 local-first 前提下增加 GitHub/GitLab/CI/MCP/通知等可选 adapter |
+
+## Skill 治理
+
+随着 `dapei` 从单一 skill 变成一组工程工作流，需要把 skill 本身当成产品来治理：
+
+1. **保持一个公共入口**：继续把 `@dapei` 作为用户心智入口，内部再按 intent 分派到 workspace、codebase、feature、context、guardrail、report、archive 等子流程。
+2. **区分 prose 与 deterministic behavior**：`SKILL.md` 负责说明意图、边界和协作协议；可重复的状态变更必须落在 `scripts/`、schema、workflow YAML 或规则引擎里。
+3. **为 skill 契约加版本**：`feature.yaml`、`.dapei/workspace.yaml`、workflow、rules、templates 都应有版本和迁移策略，避免样例、脚本、README 三处漂移。
+4. **建立最小兼容测试集**：至少覆盖 init、create feature、run workflow、report、guardrail、status，以及旧 feature fixture 的迁移/兼容。
+5. **治理上下文来源**：context pack 必须记录来源文件、层级、优先级、merge policy 和遗漏项，避免 Agent 在没有证据的情况下补故事。
+6. **治理规则演进**：每条 guardrail 需要 rule id、目的、severity、检查类型、证据要求、修复建议和 report/gate 行为。
+7. **治理样例资产**：`workspace/features/*` 这类 fixture 应明确标注为测试/示例，不参与目标 workspace contract 的宣传。
 
 ---
 
