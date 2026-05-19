@@ -111,6 +111,36 @@ report_feature() {
     echo "- Test Source: reports/test-report.md"
     echo "- Guardrail Source: reports/guardrail-report.md"
     echo
+    echo "## 结论"
+    echo
+    if [[ -f "$feature_dir/reports/validation-report.md" ]] && grep -q "Status: PASS" "$feature_dir/reports/validation-report.md"; then
+      echo "- 当前本地验证未发现失败项。"
+    elif [[ -f "$feature_dir/reports/validation-report.md" ]]; then
+      echo "- 当前本地验证存在失败项或缺失项，需要处理后再进入验收。"
+    else
+      echo "- 当前尚未生成 validation report。"
+    fi
+    echo
+    echo "## 风险"
+    echo
+    if [[ -s "$feature_dir/memory/risk.md" ]]; then
+      tail -20 "$feature_dir/memory/risk.md"
+    else
+      echo "- 暂无已记录风险。"
+    fi
+    echo
+    echo "## 待确认"
+    echo
+    if [[ -s "$feature_dir/memory/open-questions.md" ]]; then
+      tail -20 "$feature_dir/memory/open-questions.md"
+    else
+      echo "- 暂无待确认问题。"
+    fi
+    echo
+    echo "## 下一步"
+    echo
+    echo "- 根据 feature lifecycle 推进下一阶段，并在进入 solution-design、implementation、acceptance 前确认。"
+    echo
     echo "## Current Status"
     echo
     if [[ -f "$feature_dir/reports/feature-progress.md" ]]; then
