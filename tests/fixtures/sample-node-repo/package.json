@@ -1,0 +1,8 @@
+{
+  "name": "dapei-sample-node-repo",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "test": "node src/smoke.test.js"
+  }
+}
