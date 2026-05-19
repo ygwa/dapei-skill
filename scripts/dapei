@@ -36,6 +36,7 @@ Usage:
   dapei validate feature <name>
   dapei review feature <name>
   dapei report feature <name>
+  dapei close feature <name>
   dapei status feature
 USAGE
 }
@@ -110,6 +111,10 @@ main() {
     "report feature")
       [[ ${#args[@]} -ge 3 ]] || die "usage: dapei report feature <name>"
       report_feature "${args[2]}"
+      ;;
+    "close feature")
+      [[ ${#args[@]} -ge 3 ]] || die "usage: dapei close feature <name>"
+      close_feature "${args[2]}"
       ;;
     "status feature")
       feature_status

@@ -302,3 +302,83 @@ create_feature() {
 
   log "feature workspace created: $feature_dir"
 }
+
+close_feature() {
+  local name="$1"
+  local feature_dir
+  feature_dir="$(require_feature_dir "$name")"
+  local feature_yaml="$feature_dir/feature.yaml"
+  [[ -f "$feature_yaml" ]] || die "feature.yaml not found for $name"
+
+  log "closing and archiving feature $name..."
+
+  # 1. Verify existence of acceptance report or validation report as safety checks
+  if [[ ! -f "$feature_dir/reports/acceptance-report.md" ]] && [[ ! -f "$feature_dir/reports/validation-report.md" ]]; then
+    warn "neither reports/acceptance-report.md nor reports/validation-report.md found. feature should be validated before close."
+  fi
+
+  # 2. Backfill decisions to docs/decisions
+  mkdir -p "$ROOT_DIR/docs/decisions"
+  local decision_log="$feature_dir/memory/decision-log.md"
+  if [[ -f "$decision_log" ]]; then
+    local dest_decision="$ROOT_DIR/docs/decisions/$name-decisions.md"
+    cat > "$dest_decision" <<EOF
+# Decisions for Feature: $name
+
+- Archive Date: $(date '+%Y-%m-%d')
+- Source: features/$name/memory/decision-log.md
+
+$(cat "$decision_log")
+EOF
+    log "archived decision log to docs/decisions/$name-decisions.md"
+  fi
+
+  # 3. Create feature impact document
+  mkdir -p "$ROOT_DIR/docs/feature-impact"
+  local impact_doc="$ROOT_DIR/docs/feature-impact/$name.md"
+  local objective
+  objective="$(awk -F'"' '/^[[:space:]]*objective:[[:space:]]*"/ { print $2 }' "$feature_yaml" | head -1 || echo "TBD")"
+  
+  cat > "$impact_doc" <<EOF
+# Feature Impact: $name
+
+- Archive Date: $(date '+%Y-%m-%d')
+- Objective: $objective
+
+## Architecture & Code Changes
+
+The changes introduced by this feature are scoped to the following repositories:
+$(feature_repo_names "$feature_yaml" | sed 's/^/- /')
+
+## Key Decisions Made
+See [docs/decisions/$name-decisions.md](../decisions/$name-decisions.md) for full rationale.
+
+## Documentation & Standards Alignment
+The design documents and task breakdowns are retained in features/$name/docs/ for historical reference.
+EOF
+  log "created feature impact file: docs/feature-impact/$name.md"
+
+  # 4. Mark status in feature manifest
+  local tmp_file
+  tmp_file="$(mktemp)"
+  awk '
+    /^[[:space:]]*owner:/ {
+      print "  owner: \"archived\""
+      next
+    }
+    { print }
+  ' "$feature_yaml" > "$tmp_file"
+  mv "$tmp_file" "$feature_yaml"
+
+  # Write completion stage marker
+  mkdir -p "$feature_dir/reports"
+  local marker_file="$feature_dir/reports/stage-acceptance.completed"
+  {
+    echo "stage: acceptance"
+    echo "completed-at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    echo "note: archived and closed"
+  } > "$marker_file"
+
+  log "feature $name closed and archived successfully."
+}
+
