@@ -1,10 +1,10 @@
 /.agent-shell/
 
-# dapei workspace
-workspace/codebase/
-workspace/features/*/.reports/
-workspace/features/*/.cache/
-workspace/features/*/docs/
+# dapei workspace (root-level layout)
+/codebase/
+/features/*/repos/
+/features/*/context/runtime-context.md
+/features/*/context/context-index.yaml
 
 # macOS
 .DS_Store

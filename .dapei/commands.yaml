@@ -103,3 +103,18 @@ commands:
     outputs:
       - features/<feature>/reports/test-report.md
       - features/<feature>/reports/validation-report.md
+
+  - name: close-feature
+    cli: "@dapei close feature <name>"
+    purpose: verify feature status, backfill decision logs, and document feature impact in docs/
+    inputs:
+      - feature_name
+    workflow:
+      - check-reports
+      - archive-decisions
+      - create-feature-impact-doc
+      - update-feature-manifest-status
+    outputs:
+      - docs/decisions/<feature>-decisions.md
+      - docs/feature-impact/<feature>.md
+
