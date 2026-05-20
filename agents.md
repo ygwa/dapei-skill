@@ -10,7 +10,7 @@ The most important rule: **users should experience dapei through AI conversation
 
 1. **User-facing skill layer**
    - Entry: `@dapei ...`
-   - Source of behavior: `.agents/skills/dapei-skill/SKILL.md`
+   - Source of behavior: `.claude/skills/dapei-skill/SKILL.md`
    - User experience: natural language intent, stage confirmation, structured reports.
 
 2. **Internal deterministic execution layer**
@@ -18,19 +18,19 @@ The most important rule: **users should experience dapei through AI conversation
    - Modules: `scripts/commands/*`, `scripts/lib/*`
    - Purpose: repeatable filesystem, Git, context, workflow, validation, and report operations.
 
-Do not present `scripts/dapei ...` as the primary user workflow. It is acceptable to document scripts for maintainers, smoke tests, and debugging, but ordinary usage should start with `@dapei`.
+Do not present `scripts/dapei ...` as the primary user workflow. Document scripts for maintainers, smoke tests, and debugging only — ordinary usage should start with `@dapei`.
 
 ## User Interaction Rules
 
 When describing usage, prefer examples like:
 
-```text
-@dapei 初始化当前项目 workspace
+```
+@dapei initialize the current project workspace
 ```
 
-```text
-@dapei 创建 feature payment-refactor，目标是稳定支付回调链路，涉及 mall-payment,mall-order。
-先做现状分析和 gap 分析，进入技术方案前暂停确认。
+```
+@dapei create feature payment-refactor, goal is to stabilize payment callback链路, involves mall-payment, mall-order.
+start with current state and gap analysis, pause for confirmation before technical design
 ```
 
 Avoid making the user memorize commands like:
@@ -49,7 +49,7 @@ If a script command is mentioned, frame it as:
 
 The target runtime workspace uses root-level directories:
 
-```text
+```
 codebase/
 docs/
 features/
@@ -61,13 +61,13 @@ Do not introduce a nested `workspace/` runtime root. Historical `workspace/` sam
 
 Feature work belongs under:
 
-```text
+```
 features/<feature>/
 ```
 
 Code changes for a feature must go through mapped repositories under:
 
-```text
+```
 features/<feature>/repos/<repo>
 ```
 
@@ -78,12 +78,12 @@ Feature docs, context, memory, tasks, tests, reports, and artifacts should stay 
 For a user request, the Agent should:
 
 1. Interpret the user's intent.
-2. Read `.agents/skills/dapei-skill/SKILL.md`.
+2. Read `.claude/skills/dapei-skill/SKILL.md`.
 3. Read relevant `docs/`, `.dapei/`, and feature context.
 4. Use internal scripts only when deterministic state changes are needed.
 5. Keep user-facing responses in terms of engineering outcomes, not shell commands.
 6. Pause for confirmation before `solution-design`, `implementation`, and `acceptance` unless the user explicitly asks to continue.
-7. Report each stage using `结论 / 风险 / 待确认 / 下一步`.
+7. Report each stage using `Conclusion / Risk / Needs Confirmation / Next Steps`.
 
 ## Documentation Rules
 
@@ -107,7 +107,7 @@ When documenting internal commands, place them under headings like:
 
 Keep future plans aligned with the product loop:
 
-```text
+```
 codebase/ reverse analysis
 → docs/ durable knowledge
 → features/ requirement execution

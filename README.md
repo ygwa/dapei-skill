@@ -1,213 +1,211 @@
 # dapei.skill
 
-一个在真实项目里，长期和 AI 一起工作时逐步沉淀出来的工程协作方式。
+An AI Native Engineering Context OS that emerged from real project work — a set of practices developed through long-term collaboration between engineers and AI.
 
-没有银弹。很多内容甚至很朴素。但它们确实帮我们减少了一些真实的麻烦：
+No silver bullet. Many ideas are simple. But they've genuinely helped reduce real problems:
 
-- AI 上下文越写越漂
-- 需求理解老有偏差
-- 架构做着做着失控
-- Spec 越写越长但没人看
-- 多 Agent 协作后上下文彻底崩掉
+- AI context that drifts over time
+- Requirement misalignment
+- Architecture that gradually goes off the rails
+- Specs that grow endlessly but no one reads
+- Context collapse under multi-agent collaboration
 
-所以我们把这些经验整理成了 skills，希望能帮大家少踩一些坑。
-
----
-
-## 怎么用
-
-你不需要记任何命令。直接在 AI 对话里说：
-
-```text
-@dapei 初始化当前项目 workspace
-```
-
-```text
-@dapei 接入 mall-payment 和 mall-order，分析当前技术现状
-```
-
-```text
-@dapei 创建 feature payment-refactor
-目标：稳定支付回调链路，降低订单状态不一致风险
-范围：mall-payment,mall-order
-约束：不破坏现有接口兼容性，本周内可灰度
-验收：回调幂等、订单状态收敛时间小于 30 秒、补齐回归测试
-先做现状分析，进入技术方案前暂停确认
-```
-
-```text
-@dapei review payment-refactor 今天的变更，重点看架构漂移和测试缺口
-```
-
-AI 会帮你读上下文、写文档、维护 feature 状态，最后用"结论 / 风险 / 待确认 / 下一步"回报给你。
+This is a collection of those experiences, packaged as a skill for AI agents to help others avoid the same pitfalls.
 
 ---
 
-## 工作流是什么样的
+## Getting Started
 
-下面是我们实际使用时的完整过程。不是理论，而是我们真实踩出来的。
-
-### 第一步：准备好你的上下文
-
-在开始任何需求之前，先让 AI 理解你的代码库：
-
-```text
-@dapei 接入 mall-payment 和 mall-order，分析当前技术现状
-```
-
-AI 会从代码库里提取技术栈、模块边界、API、数据库、消息队列、依赖关系等信息，写入 `docs/as-is/` 和 `docs/architecture/`。这些内容会作为长期记忆，让之后每个新需求都能站在一个清晰的起点上，而不是每次都从零翻代码。
-
-（目前这一步是基础版，未来会做更深的业务架构反向分析。）
-
-### 第二步：为需求创建独立的工作区
-
-```text
-@dapei 创建 feature payment-refactor
-目标：稳定支付回调链路，降低订单状态不一致风险
-范围：mall-payment,mall-order
-```
-
-这会在 `features/payment-refactor/` 下创建一个独立空间，并把 `mall-payment` 和 `mall-order` 通过符号链接映射进来。AI 在这个空间里工作，不会影响 codebase 里的其他内容。
-
-每个 feature 工作区里有：
-
-- `repos/` — 映射进来的代码库
-- `docs/01-06` — 现状分析 / gap 分析 / 业务方案 / 技术设计 / 任务拆解 / 验收
-- `context/` — AI 按阶段生成的上下文包
-- `memory/` — 决策、风险、待确认问题
-- `reports/` — 进度、review、验证报告
-
-### 第三步：端到端地设计和调研
-
-AI 会在 feature 工作区里逐步推进：
+No commands to memorize. Just talk to your AI:
 
 ```
-现状分析 → Gap 分析 → 业务方案 → 技术设计 → 任务拆解 → 验收标准
+@dapei initialize the current project workspace
 ```
 
-每到一个关键节点（技术方案、实施、验收），AI 会停下来让你确认，而不是直接往下走。
+```
+@dapei add mall-payment and mall-order, then analyze the current technical state
+```
 
-这个过程中，AI 会不断从 `docs/` 和 `codebase/` 里拿上下文，填充到 feature 的各个文档里。你会看到：
+```
+@dapei create feature payment-refactor
+goal: stabilize payment callback链路, reduce order state inconsistency risk
+scope: mall-payment, mall-order
+constraints: preserve existing API compatibility, canary deploy this week
+acceptance: idempotent callbacks, order state converges within 30s, regression tests added
+start with current state analysis, pause for confirmation before technical design
+```
 
-- 当前代码里哪些地方可能会出问题
-- 为什么现有架构会导致这个需求里的问题
-- 改动涉及哪些模块、哪些接口、哪些边界
+```
+@dapei review payment-refactor changes today, focus on architecture drift and test gaps
+```
 
-### 第四步：在多个代码库里实施
-
-方案确认后，AI 在 `features/payment-refactor/repos/` 下对应的代码库里工作。每个 repo 都有自己的 feature branch（比如 `feature/payment-refactor`），变更隔离在那里。
-
-因为 feature 工作区天然就是完整的上下文，AI 在看 diff、review 代码、做决策时，始终知道：
-
-- 这个改动在整个需求里处于什么位置
-- 涉及的其他 repo 目前改了什么
-- 当前的实施进度和风险点
-
-### 第五步：验证
-
-开发完成后，AI 会基于需求理解生成测试用例，然后执行本地验证：
-
-- API 测试：通过 curl 调用本地起的服务
-- 浏览器测试：通过 agent-browser 操作页面
-- 回归测试：在相关模块上跑测试套件
-
-如果基础设施不够强（比如有些后台服务 AI 很难直接调），我们通常会：
-
-- 打桩 / mock 外部系统
-- 对事件驱动的消费方做事件回放
-- 临时构建测试 token
-
-这一步会生成 `reports/test-report.md` 和 `reports/validation-report.md`。
-
-### 第六步：验收后闭环
-
-需求验证通过后，AI 会把这次开发的内容同步回 `docs/`：
-
-- 业务规则有没有变化
-- 架构有没有漂移
-- 哪些决策需要记录
-- 哪些风险需要更新
-
-这样，下一个需求来的时候，AI 又能基于最新的上下文开始。
+The AI handles reading context, writing docs, maintaining feature state, and reports back with `Conclusion / Risk / Needs Confirmation / Next Steps`.
 
 ---
 
-## 核心概念
+## How It Works
+
+The full process we actually use — not theory, but lessons learned through real execution.
+
+### Step 1: Establish Your Context
+
+Before any requirement, let the AI understand your codebase:
+
+```
+@dapei add mall-payment and mall-order, then analyze the current technical state
+```
+
+The AI extracts technical stack, module boundaries, APIs, databases, message queues, and dependencies — writing them to `docs/as-is/` and `docs/architecture/`. These become long-term memory so every new requirement starts from a clear foundation instead of re-reading code from scratch.
+
+### Step 2: Create an Isolated Workspace for the Requirement
+
+```
+@dapei create feature payment-refactor
+goal: stabilize payment callback链路, reduce order state inconsistency risk
+scope: mall-payment, mall-order
+```
+
+This creates an isolated space under `features/payment-refactor/`, with `mall-payment` and `mall-order` mapped via symlinks. The AI works within this space without affecting other parts of the codebase.
+
+Each feature workspace contains:
+
+- `repos/` — mapped codebases
+- `docs/01-06` — current state / gap analysis / business design / technical design / task breakdown / acceptance
+- `context/` — stage-specific context bundles generated by AI
+- `memory/` — decisions, risks, open questions
+- `reports/` — progress, review, and validation reports
+
+### Step 3: End-to-End Design and Research
+
+The AI advances through the feature workspace in stages:
+
+```
+analyze-current-state → gap-analysis → solution-design → task-breakdown → implementation → validation → acceptance
+```
+
+At each critical node (technical design, implementation, acceptance), the AI pauses for your confirmation rather than bulldozing through.
+
+During this process, the AI continuously pulls context from `docs/` and `codebase/`, filling the feature's documents with:
+
+- Which areas of the current codebase are likely to cause problems
+- Why the existing architecture leads to issues in this requirement
+- Which modules, interfaces, and boundaries the changes touch
+
+### Step 4: Implement Across Multiple Repositories
+
+Once the design is confirmed, the AI works in the corresponding codebases under `features/payment-refactor/repos/`. Each repo has its own feature branch (e.g., `feature/payment-refactor`), with changes isolated there.
+
+Because the feature workspace provides complete context, the AI always knows when reviewing diffs or making decisions:
+
+- Where this change sits in the overall requirement
+- What other repos in this feature have changed
+- Current implementation progress and risk points
+
+### Step 5: Validate
+
+After implementation, the AI generates test cases based on the requirement understanding, then runs local validation:
+
+- API tests: curl calls to locally running services
+- Browser tests: agent-browser automation
+- Regression tests: run test suites on relevant modules
+
+When infrastructure is weak (e.g., some backend services are hard for AI to invoke directly), we typically:
+
+- Use stubs/mocks for external systems
+- Event replay for event-driven consumers
+- Build temporary test tokens
+
+This produces `reports/test-report.md` and `reports/validation-report.md`.
+
+### Step 6: Close the Loop
+
+Once the requirement passes validation, the AI syncs the development content back to `docs/`:
+
+- Did business rules change?
+- Has the architecture drifted?
+- Which decisions need to be recorded?
+- Which risks need updates?
+
+So the next requirement starts with the latest context.
+
+---
+
+## Core Concepts
 
 ### Workspace
 
-产品或业务域的工程工作区。初始化后结构是：
+A product or business domain's engineering workspace. After initialization:
 
 ```
 <workspace-root>/
-├── .dapei/        # 配置、workflow、规则
-├── codebase/      # 托管的产品代码库
-├── docs/          # 长期产品 / 业务 / 架构知识
-├── features/      # 每个需求的隔离执行空间
-└── runtime/       # 模板和 AI 规则
+├── .dapei/        # config, workflows, rules
+├── codebase/      # hosted product codebases
+├── docs/          # long-term product/business/architecture knowledge
+├── features/      # isolated execution spaces for requirements
+└── runtime/       # templates and AI rules
 ```
 
 ### Feature
 
-每个需求进入一个独立的 feature 工作区，里面有：
+Each requirement lives in its own feature workspace:
 
 ```
 features/<feature>/
-├── feature.yaml       # 需求清单
-├── repos/             # 映射的代码库（符号链接）
-├── docs/              # 现状分析、gap、方案、任务、验收
-├── context/           # AI 用的阶段性上下文包
-├── memory/            # 决策、风险、待确认问题
-├── tasks/             # backlog 和计划
-├── tests/             # 测试计划
-└── reports/           # 进度、review、验证报告
+├── feature.yaml       # requirement manifest
+├── repos/             # mapped codebases (symlinks)
+├── docs/              # current state, gap, design, tasks, acceptance
+├── context/           # stage-specific AI context bundles
+├── memory/            # decisions, risks, open questions
+├── tasks/             # backlog and plan
+├── tests/             # test plan
+└── reports/           # progress, review, validation reports
 ```
 
-### 上下文分层
+### Context Layering
 
-AI 每次进入新 stage 时，会根据当前阶段从 docs/、codebase/、feature/ 中聚合相关上下文，生成 `context/runtime-context.md`。优先级是：
+When entering a new stage, the AI aggregates relevant context from `docs/`, `codebase/`, and `feature/`, generating `context/runtime-context.md`. Priority order:
 
 ```
-1. global: 标准 / AI 规则
-2. workspace: 现状 / 架构 / 工作流
-3. domain: 业务 / 领域 / 术语
-4. repo: 代码库证据
-5. feature: feature 自己的文档和上下文
-6. runtime: 任务和执行状态
+1. global: standards / AI rules
+2. workspace: current state / architecture / workflows
+3. domain: business / domain / terminology
+4. repo: codebase evidence
+5. feature: feature's own docs and context
+6. runtime: task and execution state
 ```
 
 ---
 
-## 设计原则
+## Design Principles
 
-- **AI-first UX**：用户通过对话使用，不需要学内部脚本
-- **Local-first**：文件系统 + Git 是唯一的事实来源
-- **确定性优先**：可重复的状态变更由脚本执行，不靠 Agent 口头约定
-- **证据优先**：代码库分析必须区分证据、推断和未知
-- **Feature 隔离**：每个需求独立记录、验证、沉淀
-- **闭环**：验收后把业务规则和架构决策回写到 docs/
+- **AI-first UX**: users interact through conversation, not by learning internal scripts
+- **Local-first**: filesystem + Git is the single source of truth
+- **Determinism first**: repeatable state changes handled by scripts, not verbal Agent agreements
+- **Evidence first**: codebase analysis must distinguish evidence, inference, and unknown
+- **Feature isolation**: each requirement is independently documented, validated, and archived
+- **Closed loop**: accepted business rules and architecture decisions are written back to `docs/` after acceptance
 
 ---
 
-## 安装
+## Installation
 
-### 方式一：Vercel Skills（推荐）
+### Option 1: Vercel Skills (Recommended)
 
-支持 Claude Code、Cursor、Copilot 等 18+ AI 代理：
+Works with Claude Code, Cursor, Copilot, and 18+ other AI agents:
 
 ```bash
-# 安装最新版本
+# Install latest
 npx skills add ygwa/dapei-skill
 
-# 安装指定版本
+# Install specific version
 npx skills add ygwa/dapei-skill@v1.2.0
 ```
 
-安装后直接用 `@dapei` 唤醒即可。
+After installation, just use `@dapei` to invoke.
 
-### 方式二：手动安装
+### Option 2: Manual Install
 
-把 skill 复制到 AI 工具支持的位置：
+Copy the skill to your AI tool's supported location:
 
 #### Claude Code
 
@@ -218,13 +216,13 @@ cp -R /tmp/dapei-skill/.claude/skills/dapei-skill ~/.claude/skills/
 
 #### Cursor
 
-把 `.cursor/rules/dapei-core.mdc` 加入项目，AI 就会按 dapei 协作方式工作。
+Add `.cursor/rules/dapei-core.mdc` to your project — the AI will work using dapei's collaboration approach.
 
 ---
 
-## 验证
+## Verification
 
-克隆后跑 smoke test 确认所有模块完整：
+After cloning, run the smoke test to confirm all modules are intact:
 
 ```bash
 bash scripts/smoke-test.sh
@@ -232,15 +230,15 @@ bash scripts/smoke-test.sh
 
 ---
 
-## 参考
+## References
 
-| 文档 | 说明 |
+| Document | Description |
 | --- | --- |
-| [agents.md](agents.md) | 本仓库的 Agent 协作约束 |
-| [DESIGN.md](DESIGN.md) | 技术设计说明 |
-| [CHANGELOG.md](CHANGELOG.md) | 版本变更记录 |
-| [docs/plans/2026-05-17-dapei-roadmap.md](docs/plans/2026-05-17-dapei-roadmap.md) | 路线图 |
-| [.claude/skills/dapei-skill/SKILL.md](.claude/skills/dapei-skill/SKILL.md) | Agent Skill 入口 |
+| [agents.md](agents.md) | Agent collaboration constraints for this repo |
+| [DESIGN.md](DESIGN.md) | Technical design documentation |
+| [CHANGELOG.md](CHANGELOG.md) | Version history |
+| [docs/plans/2026-05-17-dapei-roadmap.md](docs/plans/2026-05-17-dapei-roadmap.md) | Roadmap |
+| [.claude/skills/dapei-skill/SKILL.md](.claude/skills/dapei-skill/SKILL.md) | Agent Skill entry point |
 
 ---
 
