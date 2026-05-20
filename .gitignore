@@ -14,3 +14,6 @@
 .vscode/
 *.swp
 *.swo
+
+# Local workspace repo clone (self-hosted development)
+workspace/repos/
