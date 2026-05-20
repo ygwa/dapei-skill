@@ -191,16 +191,32 @@ AI 每次进入新 stage 时，会根据当前阶段从 docs/、codebase/、feat
 
 ## 安装
 
-把 skill 放到 AI 工具支持的位置，然后用 `@dapei` 对话即可。
+### 方式一：Vercel Skills（推荐）
 
-### Claude Code
+支持 Claude Code、Cursor、Copilot 等 18+ AI 代理：
+
+```bash
+# 安装最新版本
+npx skills add ygwa/dapei-skill
+
+# 安装指定版本
+npx skills add ygwa/dapei-skill@v1.2.0
+```
+
+安装后直接用 `@dapei` 唤醒即可。
+
+### 方式二：手动安装
+
+把 skill 复制到 AI 工具支持的位置：
+
+#### Claude Code
 
 ```bash
 git clone https://github.com/ygwa/dapei-skill.git /tmp/dapei-skill
-cp -R /tmp/dapei-skill/.agents/skills/dapei-skill ~/.claude/skills/
+cp -R /tmp/dapei-skill/.claude/skills/dapei-skill ~/.claude/skills/
 ```
 
-### Cursor
+#### Cursor
 
 把 `.cursor/rules/dapei-core.mdc` 加入项目，AI 就会按 dapei 协作方式工作。
 
@@ -222,9 +238,9 @@ bash scripts/smoke-test.sh
 | --- | --- |
 | [agents.md](agents.md) | 本仓库的 Agent 协作约束 |
 | [DESIGN.md](DESIGN.md) | 技术设计说明 |
+| [CHANGELOG.md](CHANGELOG.md) | 版本变更记录 |
 | [docs/plans/2026-05-17-dapei-roadmap.md](docs/plans/2026-05-17-dapei-roadmap.md) | 路线图 |
-| [.dapei/workflows/feature-lifecycle.yaml](.dapei/workflows/feature-lifecycle.yaml) | Feature 生命周期 DAG |
-| [.agents/skills/dapei-skill/SKILL.md](.agents/skills/dapei-skill/SKILL.md) | Agent Skill 入口 |
+| [.claude/skills/dapei-skill/SKILL.md](.claude/skills/dapei-skill/SKILL.md) | Agent Skill 入口 |
 
 ---
 

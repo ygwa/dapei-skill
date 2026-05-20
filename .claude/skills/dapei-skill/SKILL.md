@@ -1,6 +1,12 @@
 ---
 name: dapei
 description: AI Native Engineering Context OS - 管理 Workspace 和 Feature 生命周期
+version: 1.2.0
+min_claude_version: "0.4.0"
+changelog:
+  1.2.0: "全面升级 Agent 编排逻辑"
+  1.1.0: "增强 codebase 分析、context build、guardrail 和 feature 命令"
+  1.0.0: "初始稳定版本"
 ---
 
 # dapei.skill 核心指令集
