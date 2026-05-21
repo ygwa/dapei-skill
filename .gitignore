@@ -1,4 +1,9 @@
-/.agent-shell/
+# AI tools skills (standard location)
+# Note: .agents/skills/dapei-skill is the skill source, tracked by git
+.agents/skills/*
+!.agents/skills/dapei-skill/
+.claude/
+.cursor/
 
 # dapei workspace (root-level layout)
 /codebase/
@@ -17,3 +22,6 @@
 
 # Local workspace repo clone (self-hosted development)
 workspace/repos/
+
+# Development plans (working documents)
+plans/

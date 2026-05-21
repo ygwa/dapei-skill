@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
-# Sync dapei-skill from local workspace to AI tools' local skills directory
+# Sync dapei-skill to AI tools' local skills directory
+#
+# This script maintains the skill in .agents/skills/ (standard location)
+# and creates symlinks for Claude Code, Cursor, and other AI tools.
 #
 # Usage:
-#   scripts/sync-local-skills.sh [options] [workspace/repos/dapei-skill]
+#   scripts/sync-local-skills.sh [options]
 #
 # Options:
 #   --claude-code    Sync to Claude Code only (default: all available)
 #   --cursor         Sync to Cursor only
 #   --all            Sync to all available tools
 #   --dry-run        Show what would be synced without copying
-#   --force          Skip version check, always copy
+#   --force          Skip version check, always sync
 #   -h, --help       Show this help
-#
-# Examples:
-#   bash scripts/sync-local-skills.sh
-#   bash scripts/sync-local-skills.sh --dry-run
-#   bash scripts/sync-local-skills.sh --claude-code /path/to/repos/dapei-skill
 
 set -euo pipefail
 
@@ -26,7 +24,6 @@ SKILL_NAME="dapei-skill"
 TARGET="all"
 DRY_RUN=false
 FORCE=false
-SKILL_SOURCE=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -55,25 +52,15 @@ while [[ $# -gt 0 ]]; do
       grep "^#" "$0" | tail -n +2 | head -n 20
       exit 0
       ;;
-    -*)
+    *)
       echo "Unknown option: $1"
       exit 1
-      ;;
-    *)
-      if [[ -z "$SKILL_SOURCE" ]]; then
-        SKILL_SOURCE="$1"
-      fi
-      shift
       ;;
   esac
 done
 
-# Default source if not provided
-if [[ -z "$SKILL_SOURCE" ]]; then
-  SKILL_SOURCE="$SCRIPT_ROOT/workspace/repos/dapei-skill"
-fi
-
-SKILL_SOURCE_PATH="$SKILL_SOURCE/.claude/skills/$SKILL_NAME"
+SKILL_SOURCE="$SCRIPT_ROOT/.agents/skills/$SKILL_NAME"
+SKILL_SOURCE_PATH="$SKILL_SOURCE"
 
 # Detect skill version from SKILL.md
 get_skill_version() {
@@ -100,20 +87,20 @@ version_to_num() {
   echo "$1" | sed 's/^v//' | awk -F. '{ printf "%03d%03d%03d\n", $1, $2, $3 }'
 }
 
-# Sync to Claude Code
+# Sync to Claude Code (creates symlink to .agents/skills/dapei-skill)
 sync_claude_code() {
-  local source_path="$1"
-  local target_dir="$HOME/.claude/skills/$SKILL_NAME"
-  local installed_ver="$2"
-  local source_ver="$3"
+  local installed_ver="$1"
 
-  if [[ ! -d "$HOME/.claude/skills" ]]; then
-    echo "  [skip] Claude Code not found at ~/.claude/skills"
+  if [[ ! -d "$HOME/.claude" ]]; then
+    echo "  [skip] Claude Code not found at ~/.claude"
     return
   fi
 
+  local target_dir="$HOME/.claude/skills/$SKILL_NAME"
+
   if [[ "$installed_ver" != "not-installed" ]] && [[ "$FORCE" == "false" ]]; then
     local installed_num=$(version_to_num "$installed_ver")
+    local source_ver=$(get_skill_version)
     local source_num=$(version_to_num "$source_ver")
     if [[ "$installed_num" -ge "$source_num" ]]; then
       echo "  [skip] Claude Code already at v$installed_ver (source: v$source_ver)"
@@ -121,28 +108,20 @@ sync_claude_code() {
     fi
   fi
 
+  local source_ver=$(get_skill_version)
   if [[ "$DRY_RUN" == "true" ]]; then
-    echo "  [dry-run] Would sync Claude Code: v$source_ver -> v$installed_ver"
+    echo "  [dry-run] Would sync Claude Code: v$installed_ver -> v$source_ver (symlink)"
   else
-    echo "  [sync] Claude Code: v$installed_ver -> v$source_ver"
+    echo "  [sync] Claude Code: linking to v$source_ver"
     rm -rf "$target_dir"
-    cp -R "$source_path" "$target_dir"
+    ln -sfn "$SKILL_SOURCE_PATH" "$target_dir"
   fi
 }
 
-# Sync to Cursor
+# Sync to Cursor (creates symlink to .agents/skills/dapei-skill)
 sync_cursor() {
-  local source_path="$1"
-  local source_dir="$source_path/../../.."
-
   if [[ ! -d "$HOME/.cursor" ]]; then
     echo "  [skip] Cursor not found at ~/.cursor"
-    return
-  fi
-
-  local cursor_source="$source_dir/.cursor/rules/dapei-core.mdc"
-  if [[ ! -f "$cursor_source" ]]; then
-    echo "  [skip] Cursor rules file not found in source"
     return
   fi
 
@@ -150,10 +129,36 @@ sync_cursor() {
   mkdir -p "$target_dir"
 
   if [[ "$DRY_RUN" == "true" ]]; then
-    echo "  [dry-run] Would sync Cursor rules"
+    echo "  [dry-run] Would sync Cursor rules (symlink)"
   else
-    echo "  [sync] Cursor rules"
-    cp "$cursor_source" "$target_dir/dapei-core.mdc"
+    echo "  [sync] Cursor rules (symlink to skill)"
+    # Create a marker file that references the skill
+    cat > "$target_dir/dapei-skill.mdc" <<EOF
+# dapei-skill for Cursor
+
+Use the dapei-skill from: ~/.claude/skills/dapei-skill/SKILL.md
+
+To update: run \`bash scripts/sync-local-skills.sh --cursor\` from dapei-skill repo.
+EOF
+  fi
+}
+
+# Sync to Agent Shell (creates symlink to .agents/skills/dapei-skill)
+sync_agent_shell() {
+  if [[ ! -d "$HOME/.agent-shell" ]]; then
+    echo "  [skip] Agent Shell not found at ~/.agent-shell"
+    return
+  fi
+
+  local target_dir="$HOME/.agent-shell/skills"
+  mkdir -p "$target_dir"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "  [dry-run] Would sync Agent Shell skills (symlink)"
+  else
+    echo "  [sync] Agent Shell skills (symlink to skill)"
+    rm -rf "$target_dir/$SKILL_NAME"
+    ln -sfn "$SKILL_SOURCE_PATH" "$target_dir/$SKILL_NAME"
   fi
 }
 
@@ -164,9 +169,7 @@ main() {
   # Validate source
   if [[ ! -d "$SKILL_SOURCE_PATH" ]]; then
     echo "Error: Skill source not found at $SKILL_SOURCE_PATH"
-    echo ""
-    echo "Hint: Clone dapei-skill into workspace/repos/, or pass path as argument:"
-    echo "  bash scripts/sync-local-skills.sh /path/to/workspace/repos/dapei-skill"
+    echo "This should be the standard location for dapei-skill."
     exit 1
   fi
 
@@ -182,17 +185,18 @@ main() {
     local installed_ver=$(get_installed_version)
     echo "Claude Code: installed v$installed_ver"
     if [[ "$DRY_RUN" == "true" ]] || [[ "$FORCE" == "true" ]]; then
-      sync_claude_code "$SKILL_SOURCE_PATH" "$installed_ver" "$source_ver"
+      sync_claude_code "$installed_ver"
     fi
   fi
 
   if [[ "$TARGET" == "all" ]] || [[ "$TARGET" == "cursor" ]]; then
-    if [[ "$TARGET" == "cursor" ]]; then
-      sync_cursor "$SKILL_SOURCE_PATH"
-    else
-      echo "Cursor:      (checking...)"
-      sync_cursor "$SKILL_SOURCE_PATH"
-    fi
+    echo "Cursor:      (checking...)"
+    sync_cursor
+  fi
+
+  if [[ "$TARGET" == "all" ]] || [[ "$TARGET" == "agent-shell" ]]; then
+    echo "Agent Shell: (checking...)"
+    sync_agent_shell
   fi
 
   echo ""
@@ -201,7 +205,7 @@ main() {
   else
     echo "=== sync complete ==="
     echo ""
-    echo "Restart Claude Code or start a new session to use the updated skill."
+    echo "Restart the AI tool or start a new session to use the updated skill."
   fi
 }
 
