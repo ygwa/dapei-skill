@@ -180,6 +180,56 @@ repo_has_remote() {
   git -C "$repo_path" remote get-url origin >/dev/null 2>&1
 }
 
+worktree_add() {
+  local repo_path="$1"
+  local branch_name="$2"
+  local worktree_path="$3"
+
+  if [[ -d "$worktree_path/.git" ]]; then
+    die "worktree already exists at '$worktree_path'"
+  fi
+
+  if ! git -C "$repo_path" show-ref --verify --quiet "refs/heads/$branch_name"; then
+    die "branch '$branch_name' does not exist in '$repo_path'"
+  fi
+
+  git -C "$repo_path" worktree add "$worktree_path" "$branch_name"
+}
+
+worktree_remove() {
+  local repo_path="$1"
+  local worktree_path="$2"
+  local force="${3:-false}"
+
+  if [[ ! -d "$worktree_path/.git" ]]; then
+    warn "worktree does not exist at '$worktree_path', nothing to remove"
+    return 0
+  fi
+
+  local args=("$worktree_path")
+  if [[ "$force" == "true" ]]; then
+    args+=(--force)
+  fi
+
+  git -C "$repo_path" worktree remove "${args[@]}"
+}
+
+worktree_has_unmerged() {
+  local repo_path="$1"
+  local worktree_path="$2"
+
+  if [[ ! -d "$worktree_path/.git" ]]; then
+    return 1
+  fi
+
+  ! git -C "$worktree_path" diff-index --quiet HEAD --
+}
+
+repo_is_clean() {
+  local repo_path="$1"
+  git -C "$repo_path" diff-index --quiet HEAD --
+}
+
 shell_quote() {
   printf "%q" "$1"
 }

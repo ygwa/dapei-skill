@@ -27,7 +27,7 @@ workspace:
 
 repos:
   codebase_root: codebase
-  feature_repo_mode: symlink
+  feature_repo_mode: worktree
   managed_repos: []
 
 context_loading:

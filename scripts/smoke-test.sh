@@ -76,9 +76,11 @@ FIXTURE_SOURCE="$SCRIPT_ROOT/tests/fixtures/sample-node-repo"
 FIXTURE_REPO="$TEST_DIR-fixture-repo"
 trap 'rm -rf "$TEST_DIR" "$FIXTURE_REPO"' EXIT
 cp -R "$FIXTURE_SOURCE" "$FIXTURE_REPO"
-git -C "$FIXTURE_REPO" init -b main >/dev/null 2>&1
-git -C "$FIXTURE_REPO" add . >/dev/null 2>&1
-git -C "$FIXTURE_REPO" -c user.name="dapei smoke" -c user.email="dapei-smoke@example.com" commit -m "fixture baseline" >/dev/null 2>&1
+if [[ ! -f "$FIXTURE_REPO/.git/COMMIT_EDITMSG" ]]; then
+  git -C "$FIXTURE_REPO" init -b main >/dev/null 2>&1
+  git -C "$FIXTURE_REPO" add . >/dev/null 2>&1
+  git -C "$FIXTURE_REPO" -c user.name="dapei smoke" -c user.email="dapei-smoke@example.com" commit -m "fixture baseline" >/dev/null 2>&1
+fi
 if [[ -d "$FIXTURE_REPO/.git" ]]; then
   echo "PASS"
 else
@@ -105,7 +107,7 @@ echo -n "test 7 - feature context: "
 DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" create feature smoke-feature --repos sample-app --objective "Validate the v0.2 platform baseline" >/dev/null 2>&1
 DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" context build smoke-feature --stage analyze-current-state >/dev/null 2>&1
 if [[ -f "$TEST_DIR/features/smoke-feature/feature.yaml" ]] &&
-   [[ -L "$TEST_DIR/features/smoke-feature/repos/sample-app" ]] &&
+   [[ -e "$TEST_DIR/features/smoke-feature/repos/sample-app/.git" ]] &&
    grep -q "Stage: analyze-current-state" "$TEST_DIR/features/smoke-feature/context/runtime-context.md"; then
   echo "PASS"
 else

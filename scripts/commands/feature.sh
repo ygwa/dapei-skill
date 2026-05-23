@@ -31,7 +31,13 @@ prepare_feature_branch() {
   local repo="$1"
   local feature="$2"
   local repo_path="$CODEBASE_DIR/$repo"
+  local worktree_path="$FEATURES_DIR/$feature/repos/$repo"
+
   [[ -d "$repo_path/.git" ]] || die "repo '$repo' not found in codebase"
+
+  if ! repo_is_clean "$repo_path"; then
+    die "repo '$repo' has uncommitted changes, commit or stash first"
+  fi
 
   local base_branch branch_name base_ref
   branch_name="feature/$feature"
@@ -57,9 +63,14 @@ prepare_feature_branch() {
 
   if git -C "$repo_path" show-ref --verify --quiet "refs/heads/$branch_name"; then
     log "branch '$branch_name' already exists in '$repo'"
-    git -C "$repo_path" checkout "$branch_name" >/dev/null 2>&1 || die "checkout failed: $repo/$branch_name"
   else
-    git -C "$repo_path" checkout -b "$branch_name" >/dev/null 2>&1 || die "branch create failed: $repo/$branch_name"
+    git -C "$repo_path" branch "$branch_name" || die "branch create failed: $repo/$branch_name"
+  fi
+
+  if [[ -d "$worktree_path/.git" ]]; then
+    log "worktree already exists at '$worktree_path'"
+  else
+    worktree_add "$repo_path" "$branch_name" "$worktree_path"
   fi
 
   echo "$base_ref"
@@ -236,7 +247,7 @@ write_feature_manifest() {
     echo "  name: \"$feature\""
     echo "  objective: \"${objective:-TBD}\""
     echo '  owner: "unassigned"'
-    echo '  isolation: "symlink"'
+    echo '  isolation: "worktree"'
     echo "  repos:"
     for repo in "${repos[@]}"; do
       repo="$(echo "$repo" | xargs)"
@@ -286,7 +297,6 @@ create_feature() {
       clone_repo_interactive "$repo"
     fi
     prepare_feature_branch "$repo" "$name" >/dev/null
-    ln -sfn "$CODEBASE_DIR/$repo" "$feature_dir/repos/$repo"
     if [[ -z "$repos_summary" ]]; then
       repos_summary="$repo"
     else
@@ -357,6 +367,31 @@ See [docs/decisions/$name-decisions.md](../decisions/$name-decisions.md) for ful
 The design documents and task breakdowns are retained in features/$name/docs/ for historical reference.
 EOF
   log "created feature impact file: docs/feature-impact/$name.md"
+
+  # 3. Remove worktrees for each repo
+  while IFS= read -r close_repo; do
+    [[ -n "$close_repo" ]] || continue
+    local close_repo_path="$CODEBASE_DIR/$close_repo"
+    local close_worktree_path="$feature_dir/repos/$close_repo"
+
+    if [[ ! -e "$close_worktree_path/.git" ]]; then
+      log "no worktree found for repo '$close_repo', skipping"
+      continue
+    fi
+
+    if worktree_has_unmerged "$close_repo_path" "$close_worktree_path"; then
+      warn "worktree for '$close_repo' has unmerged changes"
+      if prompt_yes_no "force remove worktree for '$close_repo'?"; then
+        worktree_remove "$close_repo_path" "$close_worktree_path" "true"
+        log "force removed worktree for '$close_repo'"
+      else
+        log "retained worktree for '$close_repo', remove manually after merging"
+      fi
+    else
+      worktree_remove "$close_repo_path" "$close_worktree_path" "false"
+      log "removed worktree for '$close_repo'"
+    fi
+  done < <(feature_repo_names "$feature_yaml")
 
   # 4. Mark status in feature manifest
   local tmp_file
