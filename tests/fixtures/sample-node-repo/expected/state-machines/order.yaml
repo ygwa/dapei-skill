@@ -1,0 +1,25 @@
+entity: Order
+repo: sample-app
+states:
+  - CREATED
+  - PENDING_PAYMENT
+  - PAID
+  - CANCELLED
+transitions:
+  - trigger: POST /orders
+    from: null
+    to: CREATED
+    behavior_id: order-create
+  - trigger: order.created
+    from: CREATED
+    to: CREATED
+    behavior_id: order-create
+  - trigger: payment.success
+    from: PENDING_PAYMENT
+    to: PAID
+confidence:
+  level: medium
+  evidence_type: inferred_from_behavior
+  kind: inference
+derived_from:
+  - order-create

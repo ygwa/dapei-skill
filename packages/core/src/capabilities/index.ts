@@ -4,6 +4,13 @@ import { featureClose, featureCreate, featureReview, featureStatus } from "./dom
 import { contextBuild } from "./domains/context.ts";
 import { workflowRunStage } from "./domains/workflow.ts";
 import { featureReport, guardrailRun, validationRun } from "./domains/reporting.ts";
+import {
+  cognitiveArtifactList,
+  cognitiveArtifactUpsert,
+  cognitiveArtifactValidate,
+  cognitiveDiscover,
+  cognitiveStateSuggest
+} from "./domains/cognitive.ts";
 import type { CapabilitySpec } from "../types.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
@@ -22,7 +29,12 @@ export const capabilitySpecs: AnyCap[] = [
   featureReport,
   featureStatus,
   featureReview,
-  featureClose
+  featureClose,
+  cognitiveDiscover,
+  cognitiveArtifactValidate,
+  cognitiveArtifactUpsert,
+  cognitiveArtifactList,
+  cognitiveStateSuggest
 ];
 
 export const capabilities: Record<string, AnyCap> = Object.fromEntries(

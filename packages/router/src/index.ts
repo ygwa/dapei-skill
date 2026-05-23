@@ -37,6 +37,20 @@ const routes: Route[] = [
     confidence: 0.9
   },
   {
+    pattern: /^(?=.*\bbehavior\b)(?=.*\b(?:analyze|discover|list)\b).*/i,
+    capability: "cognitive.discover",
+    inputBuilder: (t, ctx) => ({ target: ctx.target || extractRepoFromBehavior(t) || "--all" }),
+    reason: "cognitive behavior discover intent (Agent reads code)",
+    confidence: 0.92
+  },
+  {
+    pattern: /^(?=.*\bbehaviors?\b)(?=.*\blist\b).*/i,
+    capability: "cognitive.artifact.list",
+    inputBuilder: (t, ctx) => ({ repo: ctx.repo || extractRepoFromBehavior(t) }),
+    reason: "cognitive artifact list intent",
+    confidence: 0.9
+  },
+  {
     pattern: /^(?=.*\brepos?\b)(?=.*\banalyze\b).*/i,
     capability: "repos.analyze",
     inputBuilder: (t, ctx) => ({ target: ctx.target || extractTarget(t) || "--all" }),
@@ -65,14 +79,14 @@ const routes: Route[] = [
     confidence: 0.95
   },
   {
-    pattern: /^(?=.*\b创建\b)(?=.*\bfeature\b).*/i,
+    pattern: /创建.*feature|feature.*创建/i,
     capability: "feature.create",
     inputBuilder: (t, ctx) => ({ name: ctx.name || extractFeatureName(t), repos: ctx.repos || extractRepos(t), objective: ctx.objective || extractObjective(t) || "TBD" }),
     reason: "feature create intent (chinese)",
     confidence: 0.95
   },
   {
-    pattern: /^(?=.*\b新开\b)(?=.*\b需求\b).*/i,
+    pattern: /新开.*需求|需求.*新开/i,
     capability: "feature.create",
     inputBuilder: (t, ctx) => ({ name: ctx.name || extractFeatureName(t), repos: ctx.repos || extractRepos(t), objective: ctx.objective || extractObjective(t) || "TBD" }),
     reason: "feature create intent (chinese)",
@@ -212,6 +226,18 @@ function extractStage(t: string): string {
   }
   const stageMatch = t.match(/stage[:\s]+([a-z-]+)/i);
   if (stageMatch) return stageMatch[1];
+  return "";
+}
+
+function extractRepoFromBehavior(t: string): string {
+  const patterns = [
+    /(?:for|repo|target)\s+([a-zA-Z0-9_-]+)/i,
+    /behaviors?\s+for\s+([a-zA-Z0-9_-]+)/i
+  ];
+  for (const p of patterns) {
+    const m = t.match(p);
+    if (m && m[1] && m[1] !== "behavior" && m[1] !== "behaviors") return m[1];
+  }
   return "";
 }
 

@@ -1,0 +1,46 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: dapei evidence block v1
+description: Shared evidence contract for all cognitive artifacts
+type: object
+required:
+  - confidence
+properties:
+  confidence:
+    type: object
+    required:
+      - level
+      - kind
+    properties:
+      level:
+        type: string
+        enum: [high, medium, low]
+      evidence_type:
+        type: string
+        description: "direct_code | inferred_from_behavior | manual | other"
+      kind:
+        type: string
+        enum: [fact, inference, unknown]
+  sources:
+    type: array
+    description: "Required when kind=fact"
+    items:
+      type: object
+      required:
+        - file
+      properties:
+        file:
+          type: string
+        line:
+          type: number
+        repo:
+          type: string
+  derived_from:
+    type: array
+    description: "Required when kind=inference"
+    items:
+      type: string
+  reason:
+    type: string
+    description: "Required when kind=unknown"
+  investigation_hint:
+    type: string

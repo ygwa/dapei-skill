@@ -34,11 +34,15 @@ REQUIRED=(
   "$TEST_DIR/.dapei/commands.yaml"
   "$TEST_DIR/.dapei/feature.schema.yaml"
   "$TEST_DIR/.dapei/workflows/feature-lifecycle.yaml"
+  "$TEST_DIR/.dapei/cognitive/index.yaml"
+  "$TEST_DIR/.dapei/schemas/behavior.schema.yaml"
   "$TEST_DIR/docs/agents.md"
+  "$TEST_DIR/docs/as-is/behavior"
+  "$TEST_DIR/docs/as-is/state-machines"
   "$TEST_DIR/runtime/templates/01-current-state.md.template"
 )
 for f in "${REQUIRED[@]}"; do
-  [[ -f "$f" ]] || { echo "FAIL"; exit 1; }
+  [[ -e "$f" ]] || { echo "FAIL missing $f"; exit 1; }
 done
 echo "PASS"
 
@@ -82,6 +86,17 @@ DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" report feature smoke-feature >/dev/nul
 [[ -f "$TEST_DIR/features/smoke-feature/reports/stage-analyze-current-state.completed" ]] || { echo "FAIL"; exit 1; }
 [[ -f "$TEST_DIR/features/smoke-feature/reports/validation-report.md" ]] || { echo "FAIL"; exit 1; }
 [[ -f "$TEST_DIR/features/smoke-feature/reports/daily-report.md" ]] || { echo "FAIL"; exit 1; }
+echo "PASS"
+
+echo -n "test 9 - cognitive discover scaffold: "
+DAPEI_WORKSPACE_ROOT="$TEST_DIR" node "$SCRIPT_ROOT/engine/dapei-engine.ts" run --capability cognitive.discover --input '{"target":"sample-app"}' >/dev/null 2>&1
+[[ -f "$TEST_DIR/docs/as-is/behavior/_candidates.yaml" ]] || { echo "FAIL missing: _candidates.yaml"; exit 1; }
+grep -q "awaiting_agent_analysis" "$TEST_DIR/docs/as-is/behavior/_candidates.yaml" || { echo "FAIL missing: awaiting_agent_analysis status"; exit 1; }
+cp "$FIXTURE_SOURCE/expected/behavior/order-create.yaml" "$TEST_DIR/order-create.yaml"
+UPSERT_INPUT=$(node -e "const fs=require('fs'); console.log(JSON.stringify({type:'behavior', content: fs.readFileSync('$TEST_DIR/order-create.yaml','utf8')}))")
+DAPEI_WORKSPACE_ROOT="$TEST_DIR" node "$SCRIPT_ROOT/engine/dapei-engine.ts" run --capability cognitive.artifact.upsert --input "$UPSERT_INPUT" >/dev/null 2>&1
+[[ -f "$TEST_DIR/docs/as-is/behavior/order-create.yaml" ]] || { echo "FAIL missing: behavior artifact"; exit 1; }
+grep -q "order-create" "$TEST_DIR/.dapei/cognitive/index.yaml" || { echo "FAIL missing: index entry"; exit 1; }
 echo "PASS"
 
 echo "=== all smoke tests passed ==="

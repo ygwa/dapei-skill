@@ -154,6 +154,12 @@ export const reposAnalyze: AnyCap = {
 \`\`\`\n${todoHits}\n\`\`\`\n\n` : "- No TODO/FIXME/HACK indicators detected.\n\n");
       tech += `| ${name} | ${detectRepoLanguage(rp)} |\n`;
     }
+    inventory += `\n## Cognitive Next Steps\n\n`;
+    inventory += `- Run \`@dapei analyze behavior for <repo>\` — Agent orients repo (tree + manifests), reads code, builds candidates\n`;
+    inventory += `- Agent writes candidate list to \`docs/as-is/behavior/_candidates.yaml\`\n`;
+    inventory += `- Deep-dive each candidate into \`docs/as-is/behavior/<id>.yaml\`\n`;
+    inventory += `- Validate with \`cognitive.artifact.upsert\` (requires evidence for kind=fact)\n`;
+    inventory += `- See \`skills/cognitive/SKILL.md\` for the discover → deep-dive protocol\n`;
     write(report, inventory);
     write(technical, tech + "\n## Architecture Unknowns\n\n- [ ] Service-to-service communication patterns\n");
     return { ok: true, data: { report: relative(p.rootDir, report), technical: relative(p.rootDir, technical) }, sideEffects: ["docs generated"], reportFragments: ["repos analysis done"] };

@@ -1,0 +1,9 @@
+version: 0.1
+rules:
+  - id: COG-001
+    title: Cognitive behavior facts before solution design
+    severity: medium
+    message: At least one validated behavior artifact with kind=fact should exist before solution-design
+    check:
+      type: cognitive-artifact-required
+      min_facts: 1

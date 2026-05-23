@@ -1,0 +1,92 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: dapei behavior artifact v1
+description: Structured behavior fact for one system entry point
+type: object
+required:
+  - id
+  - entry
+  - confidence
+properties:
+  id:
+    type: string
+    pattern: "^[a-z0-9-]+$"
+  repo:
+    type: string
+  entry:
+    type: object
+    required:
+      - type
+    properties:
+      type:
+        type: string
+        enum: [api, mq, cron, rpc, cache, search, other]
+      method:
+        type: string
+      path:
+        type: string
+      topic:
+        type: string
+      schedule:
+        type: string
+      handler:
+        type: string
+  writes:
+    type: array
+    items:
+      type: object
+      properties:
+        table:
+          type: string
+        operation:
+          type: string
+          enum: [insert, update, delete, upsert, read]
+  events:
+    type: array
+    items:
+      type: string
+  calls:
+    type: array
+    items:
+      type: string
+  risks:
+    type: array
+    items:
+      type: string
+  confidence:
+    $ref: "#/$defs/confidenceBlock"
+  sources:
+    type: array
+    items:
+      type: object
+      required:
+        - file
+      properties:
+        file:
+          type: string
+        line:
+          type: number
+        repo:
+          type: string
+  derived_from:
+    type: array
+    items:
+      type: string
+  reason:
+    type: string
+  investigation_hint:
+    type: string
+$defs:
+  confidenceBlock:
+    type: object
+    required:
+      - level
+      - kind
+    properties:
+      level:
+        type: string
+        enum: [high, medium, low]
+      evidence_type:
+        type: string
+      kind:
+        type: string
+        enum: [fact, inference, unknown]

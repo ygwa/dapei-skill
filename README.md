@@ -47,11 +47,14 @@ The AI handles reading context, writing docs, maintaining feature state, and rep
 
 The full process we actually use — not theory, but lessons learned through real execution.
 
-### Engine Architecture (v2)
+### Engine Architecture (v2.2 — Cognitive Runtime)
 
 - Skill Router layer: user still invokes `@dapei ...`
+- **Cognitive Runtime layer**: Agent-driven behavior analysis with structured YAML artifacts and evidence validation (`cognitive.discover`, `cognitive.artifact.upsert`, …)
 - Atomic Capability layer: `dapei-engine` executes typed capabilities such as `workspace.init`, `repos.analyze`, `workflow.runStage`
 - Runtime substrate layer: worktree/filesystem/git remains the deterministic source of truth
+
+North Star: **让 AI 持续参与系统认知** — understand how systems behave, how state changes, and how risks propagate — not just generate code.
 
 The internal shell entrypoint `scripts/dapei` is now only a thin adapter that forwards to the Node.js/TypeScript engine for backward compatibility. Execution logic lives in `engine/` and `packages/*` only.
 
@@ -63,7 +66,13 @@ Before any requirement, let the AI understand your repos:
 @dapei add mall-payment and mall-order, then analyze the current technical state
 ```
 
-The AI extracts technical stack, module boundaries, APIs, databases, message queues, and dependencies — writing them to `docs/as-is/` and `docs/architecture/`. These become long-term memory so every new requirement starts from a clear foundation instead of re-reading code from scratch.
+The AI extracts technical stack, module boundaries, APIs, databases, message queues, and dependencies — writing them to `docs/as-is/` and `docs/architecture/`. For behavior-level understanding, use:
+
+```
+@dapei analyze behavior for sample-app, start with API discovery then deep-dive top endpoints
+```
+
+This produces evidence-backed behavior artifacts under `docs/as-is/behavior/` — durable cognitive memory so every new requirement starts from a clear foundation instead of re-reading code from scratch.
 
 ### Step 2: Create an Isolated Workspace for the Requirement
 

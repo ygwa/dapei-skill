@@ -96,3 +96,30 @@ Rule families:
 - Capability registration is handled through a central TS registry (`CapabilityRegistry`).
 - Input contracts are validated by schema before execution (required, type, enum, additional properties).
 - New capabilities should be added as specs and registered, not wired by ad-hoc command parsing logic.
+
+## Cognitive Runtime Architecture (v2.2)
+
+North Star: **让 AI 持续参与系统认知** — not just write code, but maintain structured understanding of how the system behaves.
+
+Layer stack:
+
+1. **AI Interaction Layer** — `@dapei` + `skills/cognitive/SKILL.md` (discover → deep-dive protocol)
+2. **Cognitive Runtime** — `cognitive.*` capabilities: validate, upsert, list, index
+3. **Semantic Analysis (Agent-driven)** — Agent reads `repos/` and writes YAML artifacts
+4. **Evidence Extraction (substrate)** — directory tree + manifest file paths only; Agent orients and chooses entry strategy
+5. **Local Runtime Substrate** — filesystem/git/worktree
+
+Cognitive artifact paths:
+
+- `docs/as-is/behavior/<id>.yaml` — behavior facts (API → writes → events → calls)
+- `docs/as-is/state-machines/<entity>.yaml` — state transition models
+- `.dapei/cognitive/index.yaml` — manifest of validated artifacts
+
+Evidence contract (`packages/core/src/evidence.ts`):
+
+- `kind=fact` requires `sources[]`
+- `kind=inference` requires `derived_from[]`
+- `kind=unknown` requires `reason`
+
+Phase roadmap: Behavior → State → Semantic Clustering → Capability Mapping → Cognitive Graph → Dynamic Context Budget.
+See `docs/plans/cognitive-runtime-roadmap.md`.

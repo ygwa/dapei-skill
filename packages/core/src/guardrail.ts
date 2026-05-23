@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readdirSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { runSafe } from "../../runtime-adapters/src/system.ts";
+import { loadCognitiveIndex } from "./cognitive-index.ts";
 
 export type GuardrailStatus = "PASS" | "WARN" | "FAIL";
 
@@ -146,6 +147,20 @@ export function runGuardrail(rootDir: string, feature: string): { status: Guardr
         else if (cond) {
           const c = readFileSync(full, "utf8");
           if (!c.includes(cond)) failed = true;
+        }
+      } else if (type === "cognitive-artifact-required") {
+        const minFacts = Number(check.min_facts || 1);
+        const indexFile = join(rootDir, ".dapei", "cognitive", "index.yaml");
+        if (!existsSync(indexFile)) {
+          failed = true;
+        } else {
+          try {
+            const index = loadCognitiveIndex(rootDir);
+            const factCount = index.behaviors.filter((b) => b.kind === "fact").length;
+            if (factCount < minFacts) failed = true;
+          } catch {
+            failed = true;
+          }
         }
       }
 

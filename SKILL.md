@@ -1,7 +1,7 @@
 ---
 name: dapei
 description: AI Native Engineering Context OS - Router Skill
-version: 2.0.0
+version: 2.2.0
 ---
 
 # dapei Router Skill
@@ -25,6 +25,7 @@ version: 2.0.0
 - feature 类意图 -> `skills/feature/SKILL.md` -> `feature.create|feature.status|feature.review|feature.report|feature.close`
 - workflow 类意图 -> `skills/workflow/SKILL.md` -> `context.build|workflow.runStage`
 - validation 类意图 -> `skills/validation/SKILL.md` -> `validation.run`
+- cognitive 类意图 -> `skills/cognitive/SKILL.md` -> `cognitive.discover|cognitive.artifact.*|cognitive.state.suggest`
 
 ## 阶段确认点
 

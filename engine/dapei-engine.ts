@@ -24,6 +24,11 @@ function parseLegacy(args: string[]): { capability: string; input: Record<string
   if (a === "repos" && b === "sync") return { capability: "repos.sync", input: { target: c } };
   if (a === "repos" && b === "list") return { capability: "repos.list", input: {} };
   if (a === "repos" && b === "analyze") return { capability: "repos.analyze", input: { target: c } };
+  if (a === "cognitive" && b === "discover") return { capability: "cognitive.discover", input: { target: c || "--all" } };
+  if (a === "cognitive" && b === "list") return { capability: "cognitive.artifact.list", input: {} };
+  if (a === "cognitive" && b === "validate") return { capability: "cognitive.artifact.validate", input: { type: c, file: rest[0] } };
+  if (a === "cognitive" && b === "upsert") return { capability: "cognitive.artifact.upsert", input: { type: c, file: rest[0] } };
+  if (a === "cognitive" && b === "state" && c === "suggest") return { capability: "cognitive.state.suggest", input: { entity: rest[0] || "Order" } };
   if (a === "create" && b === "feature") {
     const repos = parseArg("--repos", rest) || "";
     const objective = parseArg("--objective", rest) || "";

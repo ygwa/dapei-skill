@@ -1,0 +1,70 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: dapei state machine artifact v1
+description: Entity state transition model derived from behavior analysis
+type: object
+required:
+  - entity
+  - states
+  - transitions
+  - confidence
+properties:
+  entity:
+    type: string
+  repo:
+    type: string
+  states:
+    type: array
+    minItems: 1
+    items:
+      type: string
+  transitions:
+    type: array
+    items:
+      type: object
+      required:
+        - trigger
+        - to
+      properties:
+        trigger:
+          type: string
+        from:
+          type: string
+        to:
+          type: string
+        behavior_id:
+          type: string
+  confidence:
+    type: object
+    required:
+      - level
+      - kind
+    properties:
+      level:
+        type: string
+        enum: [high, medium, low]
+      evidence_type:
+        type: string
+      kind:
+        type: string
+        enum: [fact, inference, unknown]
+  sources:
+    type: array
+    items:
+      type: object
+      required:
+        - file
+      properties:
+        file:
+          type: string
+        line:
+          type: number
+        repo:
+          type: string
+  derived_from:
+    type: array
+    items:
+      type: string
+  reason:
+    type: string
+  investigation_hint:
+    type: string

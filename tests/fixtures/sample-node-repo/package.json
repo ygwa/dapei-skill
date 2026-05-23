@@ -1,1 +1,9 @@
-{"name":"sample-node-repo"}
+{
+  "name": "sample-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/orders.test.mjs"
+  }
+}

@@ -28,8 +28,10 @@ export const workspaceInit: AnyCap = {
     }
 
     const dirs = [
-      join(p.dapeiDir, "workflows"), join(p.dapeiDir, "rules"), p.reposDir, p.featuresDir,
-      join(p.docsDir, "as-is"), join(p.docsDir, "architecture"), join(p.docsDir, "standards"),
+      join(p.dapeiDir, "workflows"), join(p.dapeiDir, "rules"), join(p.dapeiDir, "cognitive"), join(p.dapeiDir, "schemas"),
+      p.reposDir, p.featuresDir,
+      join(p.docsDir, "as-is"), join(p.docsDir, "as-is", "behavior"), join(p.docsDir, "as-is", "state-machines"),
+      join(p.docsDir, "as-is", "domains"), join(p.docsDir, "architecture"), join(p.docsDir, "standards"),
       join(p.docsDir, "business"), join(p.docsDir, "domain"), join(p.docsDir, "glossary"),
       join(p.docsDir, "workflows"), join(p.docsDir, "decisions"), join(p.docsDir, "feature-impact"),
       join(p.docsDir, "integrations"), join(p.docsDir, "observability"), join(p.docsDir, "playbooks"), join(p.docsDir, "specs"),
@@ -47,6 +49,10 @@ export const workspaceInit: AnyCap = {
     const sourceTemplates = join(engineHome, "runtime", "templates");
     const files = ["commands.yaml", "feature.schema.yaml", "repos.schema.yaml", "workflows/feature-lifecycle.yaml", "rules/api.yaml", "rules/ddd.yaml", "rules/layering.yaml", "rules/naming.yaml"];
     files.forEach((f) => copyIfMissing(join(sourceDapei, f), join(p.dapeiDir, f)));
+    const schemaFiles = ["evidence.schema.yaml", "behavior.schema.yaml", "state-machine.schema.yaml", "cognitive-index.schema.yaml"];
+    schemaFiles.forEach((f) => copyIfMissing(join(sourceDapei, "schemas", f), join(p.dapeiDir, "schemas", f)));
+    copyIfMissing(join(sourceDapei, "cognitive", "index.yaml"), join(p.dapeiDir, "cognitive", "index.yaml"));
+    copyIfMissing(join(sourceDapei, "rules", "cognitive.yaml"), join(p.dapeiDir, "rules", "cognitive.yaml"));
     for (const name of ["01-current-state.md.template", "02-gap-analysis.md.template", "03-business-design.md.template", "04-technical-design.md.template", "05-task-breakdown.md.template", "06-acceptance.md.template"]) {
       copyIfMissing(join(sourceTemplates, name), join(p.runtimeDir, "templates", name));
     }

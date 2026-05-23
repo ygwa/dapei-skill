@@ -1,0 +1,73 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: dapei cognitive index v1
+description: Manifest of validated cognitive artifacts in the workspace
+type: object
+required:
+  - version
+  - updated_at
+properties:
+  version:
+    type: string
+    enum: ["1.0"]
+  updated_at:
+    type: string
+  behaviors:
+    type: array
+    items:
+      type: object
+      required:
+        - id
+        - path
+        - kind
+        - level
+      properties:
+        id:
+          type: string
+        path:
+          type: string
+        repo:
+          type: string
+        kind:
+          type: string
+          enum: [fact, inference, unknown]
+        level:
+          type: string
+          enum: [high, medium, low]
+  state_machines:
+    type: array
+    items:
+      type: object
+      required:
+        - entity
+        - path
+        - kind
+        - level
+      properties:
+        entity:
+          type: string
+        path:
+          type: string
+        repo:
+          type: string
+        kind:
+          type: string
+          enum: [fact, inference, unknown]
+        level:
+          type: string
+          enum: [high, medium, low]
+  unknowns:
+    type: array
+    items:
+      type: object
+      required:
+        - id
+        - reason
+      properties:
+        id:
+          type: string
+        artifact_type:
+          type: string
+        reason:
+          type: string
+        investigation_hint:
+          type: string

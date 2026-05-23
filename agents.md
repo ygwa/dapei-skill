@@ -118,12 +118,15 @@ repos/ reverse analysis
 Prioritize in this order:
 
 1. P0: make the modular platform complete, committed, and smoke-tested.
-2. P1: repos-to-docs bootstrap.
-3. P1: stage-aware context engineering.
-4. P1: real feature planning and design generation.
-5. P1: validation, test strategy, and guardrail engine.
-6. P2: worktree isolation, richer reporting, and feature closeout.
-7. P3: natural-language routing and external adapters.
+2. P1: **Cognitive Runtime Phase 1** — behavior facts, evidence system, cognitive index (current).
+3. P1: **Cognitive Runtime Phase 2** — state transition layer, inconsistency detection.
+4. P1: repos-to-docs bootstrap with Agent-driven deep analysis.
+5. P1: stage-aware context engineering with cognitive summaries.
+6. P1: real feature planning and design generation.
+7. P1: validation, test strategy, and guardrail engine.
+8. P2: semantic clustering → domain discovery (no forced DDD).
+9. P2: worktree isolation, richer reporting, and feature closeout.
+10. P3: cognitive graph, dynamic context budget, external adapters.
 
 ## Tone
 

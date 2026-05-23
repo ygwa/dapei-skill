@@ -1,0 +1,25 @@
+id: order-create
+repo: sample-app
+entry:
+  type: api
+  method: POST
+  path: /orders
+writes:
+  - table: orders
+    operation: insert
+events:
+  - order.created
+calls:
+  - PaymentClient
+  - InventoryService
+risks:
+  - partial_failure
+confidence:
+  level: high
+  evidence_type: direct_code
+  kind: fact
+sources:
+  - file: src/routes/orders.ts
+    line: 6
+  - file: src/services/orderService.ts
+    line: 4
