@@ -11,7 +11,14 @@
 /features/*/context/runtime-context.md
 /features/*/context/context-index.yaml
 
-# macOS
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
 .DS_Store
 
 # IDE
