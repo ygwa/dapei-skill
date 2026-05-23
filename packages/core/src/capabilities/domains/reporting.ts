@@ -29,6 +29,7 @@ export const validationRun: AnyCap = {
     const valReport = join(featureDir, "reports", "validation-report.md");
     const testReport = join(featureDir, "reports", "test-report.md");
     let status = "PASS";
+    const errors: string[] = [];
     const repos = featureRepoNames(read(join(featureDir, "feature.yaml")));
     let out = `# Test Report\n\n- Feature: ${feature}\n\n`;
     for (const repo of repos) {
@@ -54,9 +55,19 @@ export const validationRun: AnyCap = {
       }
     }
     write(testReport, out);
-    try { if (runGuardrail(p.rootDir, feature).status === "FAIL") status = "FAIL"; } catch { status = "FAIL"; }
-    write(valReport, `# Validation Report\n\n- Feature: ${feature}\n- Status: ${status}\n- Test Report: reports/test-report.md\n- Guardrail Report: reports/guardrail-report.md\n`);
-    return { ok: true, data: { status }, sideEffects: ["validation reports"], reportFragments: ["validation done"] };
+    let guardrailStatus: string = "PASS";
+    try {
+      const g = runGuardrail(p.rootDir, feature);
+      guardrailStatus = g.status;
+      if (g.status === "FAIL") status = "FAIL";
+    } catch (err: any) {
+      errors.push(`guardrail error: ${err?.message || String(err)}`);
+      status = "FAIL";
+      guardrailStatus = "ERROR";
+    }
+    const guardrailReport = join(featureDir, "reports", "guardrail-report.md");
+    write(valReport, `# Validation Report\n\n- Feature: ${feature}\n- Status: ${status}\n- Test Status: ${status !== "PASS" ? "FAIL" : "PASS"}\n- Guardrail Status: ${guardrailStatus}\n- Errors: ${errors.length ? errors.join("; ") : "none"}\n- Test Report: reports/test-report.md\n- Guardrail Report: reports/guardrail-report.md\n`);
+    return { ok: true, data: { status, errors }, sideEffects: ["validation reports"], reportFragments: ["validation done"] };
   }
 };
 

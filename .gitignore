@@ -25,3 +25,9 @@ workspace/repos/
 
 # Development plans (working documents)
 plans/
+
+# Worktrees (isolated development workspaces)
+.worktrees/
+.worktrees
+worktrees/
+worktrees

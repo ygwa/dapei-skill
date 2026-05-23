@@ -41,12 +41,38 @@ export const reposSync: AnyCap = {
     const p = workspacePaths(ctx.rootDir);
     const registry = join(p.dapeiDir, "repos.yaml");
     const names = target === "--all" && existsSync(registry) ? parseReposYamlNames(read(registry)) : [target];
+    const results: string[] = [];
     for (const name of names) {
       const repoPath = join(p.reposDir, name);
       if (!existsSync(join(repoPath, ".git"))) continue;
-      runSafe("git", ["-C", repoPath, "fetch", "origin"], p.rootDir);
+      // Fetch latest remote refs
+      const fetchOut = runSafe("git", ["-C", repoPath, "fetch", "origin"], p.rootDir);
+      if (fetchOut) results.push(`${name}: fetch done`);
+      // Determine current branch and pull/merge
+      const currentBranch = runSafe("git", ["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"], p.rootDir) || "HEAD";
+      const base = defaultBranch(repoPath);
+      if (currentBranch === base || currentBranch === "HEAD") {
+        // Detached HEAD or on default branch - do a pull
+        const pullErr = runSafe("git", ["-C", repoPath, "pull", "--ff-only", "origin", base], p.rootDir);
+        if (!pullErr) {
+          results.push(`${name}: pulled ${base} (fast-forward)`);
+        } else {
+          // Non-fast-forward or conflict - fetch + rebase if possible
+          const rebaseErr = runSafe("git", ["-C", repoPath, "rebase", `origin/${base}`], p.rootDir);
+          if (!rebaseErr) {
+            results.push(`${name}: rebased onto origin/${base}`);
+          } else {
+            results.push(`${name}: sync conflict - run 'git status' in repos/${name}`);
+          }
+        }
+      } else {
+        // On a feature branch - just update the ref, don't merge into branch
+        const fetchHead = runSafe("git", ["-C", repoPath, "rev-parse", "FETCH_HEAD"], p.rootDir);
+        if (fetchHead) results.push(`${name}: branch '${currentBranch}' updated (fetch only - rebase your branch to integrate)`);
+        else results.push(`${name}: no remote update available`);
+      }
     }
-    return { ok: true, data: { target }, sideEffects: ["git fetch"], reportFragments: ["repos sync"] };
+    return { ok: true, data: { target, results }, sideEffects: ["git fetch", "git pull", "git rebase"], reportFragments: ["repos sync"] };
   }
 };
 
