@@ -24,7 +24,7 @@ commands:
       - validate-feature-name
       - create-feature-dirs
       - ensure-repos-available-or-interactive-clone
-      - map-repo-symlinks
+      - map-repo-worktrees
       - init-feature-manifest
       - init-context-memory-task-report
       - create-feature-agent-context
@@ -48,11 +48,11 @@ commands:
     outputs:
       - features/<feature>/context/runtime-context.md
 
-  - name: analyze-codebase
-    cli: "@dapei codebase analyze <name|--all>"
+  - name: analyze-repos
+    cli: "@dapei repos analyze <name|--all>"
     purpose: reverse-engineer imported repositories into durable workspace docs
     inputs:
-      - codebase_name
+      - repo_name
     workflow:
       - scan-repo-metadata
       - detect-stack-and-tests

@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 
-codebase_registry_file() {
-  printf '%s\n' "$DAPEI_DIR/codebases.yaml"
+repos_registry_file() {
+  printf '%s\n' "$DAPEI_DIR/repos.yaml"
 }
 
-codebase_add() {
+repos_add() {
   local name="$1"
   local url="$2"
-  [[ -n "$name" && -n "$url" ]] || die "usage: dapei codebase add <name> <git-url>"
+  [[ -n "$name" && -n "$url" ]] || die "usage: dapei repos add <name> <git-url>"
   require_cmd git
 
-  local target="$CODEBASE_DIR/$name"
+  local target="$REPOS_DIR/$name"
   local registry
-  registry="$(codebase_registry_file)"
+  registry="$(repos_registry_file)"
 
-  [[ ! -d "$target/.git" ]] || die "codebase '$name' already exists"
-  mkdir -p "$CODEBASE_DIR" "$DAPEI_DIR"
+  [[ ! -d "$target/.git" ]] || die "repos '$name' already exists"
+  mkdir -p "$REPOS_DIR" "$DAPEI_DIR"
   git clone "$url" "$target" || die "clone failed for '$name'"
 
   local added_at default_branch
@@ -25,16 +25,16 @@ codebase_add() {
   if [[ ! -f "$registry" ]]; then
     cat > "$registry" <<EOF_REGISTRY
 version: "0.2"
-codebases:
+repos:
 EOF_REGISTRY
   fi
 
   if grep -q "name: $name" "$registry" 2>/dev/null; then
-    log "codebase '$name' already in registry"
+    log "repos '$name' already in registry"
   else
     cat >> "$registry" <<EOF_ENTRY
   - name: $name
-    path: codebase/$name
+    path: repos/$name
     url: $url
     added-at: $added_at
     default-branch: $default_branch
@@ -42,48 +42,48 @@ EOF_REGISTRY
 EOF_ENTRY
   fi
 
-  log "codebase '$name' added from $url"
+  log "repos '$name' added from $url"
 }
 
-codebase_sync_one() {
+repos_sync_one() {
   local name="$1"
-  local target="$CODEBASE_DIR/$name"
-  [[ -d "$target/.git" ]] || die "codebase '$name' not found"
+  local target="$REPOS_DIR/$name"
+  [[ -d "$target/.git" ]] || die "repos '$name' not found"
   require_cmd git
 
   if repo_has_remote "$target"; then
     log "fetching $name..."
     git -C "$target" fetch origin || die "fetch failed for '$name'"
   else
-    warn "codebase '$name' has no origin remote; skipped fetch"
+    warn "repos '$name' has no origin remote; skipped fetch"
   fi
 
   local branch hash
   branch="$(git -C "$target" rev-parse --abbrev-ref HEAD)"
   hash="$(git -C "$target" rev-parse --short HEAD)"
-  log "codebase '$name' synced, $branch at $hash"
+  log "repos '$name' synced, $branch at $hash"
 }
 
-codebase_sync() {
+repos_sync() {
   local target="$1"
   if [[ "$target" == "--all" ]]; then
     local found=0
     while IFS= read -r repo; do
       [[ -n "$repo" ]] || continue
       found=1
-      codebase_sync_one "$repo"
+      repos_sync_one "$repo"
     done < <(registered_repo_names)
-    [[ $found -eq 1 ]] || warn "no registered codebases"
+    [[ $found -eq 1 ]] || warn "no registered reposs"
     return 0
   fi
-  codebase_sync_one "$target"
+  repos_sync_one "$target"
 }
 
-codebase_list() {
+repos_list() {
   local registry
-  registry="$(codebase_registry_file)"
+  registry="$(repos_registry_file)"
   if [[ ! -f "$registry" ]]; then
-    echo "No codebases registered."
+    echo "No reposs registered."
     return 0
   fi
 
@@ -93,7 +93,7 @@ codebase_list() {
 
   while IFS= read -r name; do
     [[ -n "$name" ]] || continue
-    local repo_path="$CODEBASE_DIR/$name"
+    local repo_path="$REPOS_DIR/$name"
     if [[ -d "$repo_path/.git" ]]; then
       local hash branch
       hash="$(git -C "$repo_path" rev-parse --short HEAD 2>/dev/null || echo "???")"
@@ -385,11 +385,11 @@ scan_dependency_summary() {
 
 # --- Main analyze function ---
 
-codebase_analyze_one() {
+repos_analyze_one() {
   local name="$1"
   local output_file="$2"
-  local repo_path="$CODEBASE_DIR/$name"
-  [[ -d "$repo_path/.git" ]] || die "codebase '$name' not found"
+  local repo_path="$REPOS_DIR/$name"
+  [[ -d "$repo_path/.git" ]] || die "repos '$name' not found"
 
   local branch hash language pkg_manager framework file_count
   branch="$(git -C "$repo_path" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
@@ -410,7 +410,7 @@ codebase_analyze_one() {
     echo
     echo "| Property | Value |"
     echo "|---|---|"
-    echo "| Path | codebase/$name |"
+    echo "| Path | repos/$name |"
     echo "| Branch | $branch |"
     echo "| Revision | $hash |"
     echo "| Language/Stack | $language |"
@@ -444,7 +444,7 @@ codebase_analyze_one() {
   echo >> "$output_file"
 }
 
-codebase_analyze() {
+repos_analyze() {
   local target="$1"
   mkdir -p "$ROOT_DIR/docs/as-is" "$ROOT_DIR/docs/architecture" "$ROOT_DIR/docs/standards"
 
@@ -458,7 +458,7 @@ codebase_analyze() {
     echo "# Repository Inventory"
     echo
     echo "- Generated At: $generated_at"
-    echo "- Source: \`dapei codebase analyze $target\`"
+    echo "- Source: \`dapei repos analyze $target\`"
     echo "- Evidence Level: Items marked [evidence] come from file/config scanning. Items marked [inference] are pattern-based guesses. Items marked [unknown] need manual verification."
     echo
   } > "$report"
@@ -468,11 +468,11 @@ codebase_analyze() {
     while IFS= read -r repo; do
       [[ -n "$repo" ]] || continue
       found=1
-      codebase_analyze_one "$repo" "$report"
+      repos_analyze_one "$repo" "$report"
     done < <(registered_repo_names)
-    [[ $found -eq 1 ]] || echo "No registered codebases." >> "$report"
+    [[ $found -eq 1 ]] || echo "No registered reposs." >> "$report"
   else
-    codebase_analyze_one "$target" "$report"
+    repos_analyze_one "$target" "$report"
   fi
 
   # -- Technical Current State --
@@ -496,12 +496,12 @@ codebase_analyze() {
   if [[ "$target" == "--all" ]]; then
     while IFS= read -r repo; do
       [[ -n "$repo" ]] || continue
-      local rp="$CODEBASE_DIR/$repo"
+      local rp="$REPOS_DIR/$repo"
       [[ -d "$rp/.git" ]] || continue
       echo "| $repo | $(detect_repo_language "$rp") | $(detect_framework "$rp") | $(detect_package_manager "$rp") |" >> "$technical"
     done < <(registered_repo_names)
   else
-    local rp="$CODEBASE_DIR/$target"
+    local rp="$REPOS_DIR/$target"
     if [[ -d "$rp/.git" ]]; then
       echo "| $target | $(detect_repo_language "$rp") | $(detect_framework "$rp") | $(detect_package_manager "$rp") |" >> "$technical"
     fi
@@ -521,7 +521,7 @@ codebase_analyze() {
     echo "- [ ] Performance baselines and SLAs"
   } >> "$technical"
 
-  log "codebase analysis written: $report"
+  log "repos analysis written: $report"
   log "technical current state written: $technical"
 }
 

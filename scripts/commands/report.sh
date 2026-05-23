@@ -25,14 +25,14 @@ feature_review() {
   local repo
   while IFS= read -r repo; do
     [[ -n "$repo" ]] || continue
-    local repo_path="$CODEBASE_DIR/$repo"
+    local repo_path="$REPOS_DIR/$repo"
     {
       echo "## Repo: $repo"
       echo
     } >> "$report"
 
     if [[ ! -d "$repo_path/.git" ]]; then
-      echo "- Status: missing from codebase" >> "$report"
+      echo "- Status: missing from repos" >> "$report"
       echo >> "$report"
       continue
     fi
@@ -194,7 +194,7 @@ feature_status() {
       local repo
       while IFS= read -r repo; do
         [[ -n "$repo" ]] || continue
-        local repo_path="$CODEBASE_DIR/$repo"
+        local repo_path="$REPOS_DIR/$repo"
         if [[ -d "$repo_path/.git" ]]; then
           local branch head
           branch="$(git -C "$repo_path" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"

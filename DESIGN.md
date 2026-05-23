@@ -32,7 +32,7 @@ System objective:
 
 Root-level runtime directories:
 
-- `codebase/`: managed Git repositories.
+- `repos/`: managed Git repositories.
 - `docs/`: durable as-is business, architecture, technology, standards, decisions, and feature impact knowledge.
 - `features/`: feature execution workspaces.
 
@@ -44,8 +44,8 @@ Initialization policy:
 
 The intended knowledge loop is:
 
-1. Import repositories into `codebase/`.
-2. Analyze codebases to bootstrap and refresh `docs/`.
+1. Import repositories into `repos/`.
+2. Analyze repos to bootstrap and refresh `docs/`.
 3. Discuss and design new requirements using `docs` as durable context.
 4. Create `features/<feature>` with relevant repo branches or worktrees plus dynamic context.
 5. Implement and validate locally inside the feature workspace.

@@ -50,7 +50,7 @@ If a script command is mentioned, frame it as:
 The target runtime workspace uses root-level directories:
 
 ```
-codebase/
+repos/
 docs/
 features/
 ```
@@ -91,7 +91,7 @@ README should explain:
 
 - What dapei is.
 - How users invoke it through AI skills.
-- The workspace, docs, codebase, and feature model.
+- The workspace, docs, repos, and feature model.
 - Architecture and internal execution layers.
 - Current status and roadmap.
 
@@ -108,7 +108,7 @@ When documenting internal commands, place them under headings like:
 Keep future plans aligned with the product loop:
 
 ```
-codebase/ reverse analysis
+repos/ reverse analysis
 → docs/ durable knowledge
 → features/ requirement execution
 → validation and review
@@ -118,7 +118,7 @@ codebase/ reverse analysis
 Prioritize in this order:
 
 1. P0: make the modular platform complete, committed, and smoke-tested.
-2. P1: codebase-to-docs bootstrap.
+2. P1: repos-to-docs bootstrap.
 3. P1: stage-aware context engineering.
 4. P1: real feature planning and design generation.
 5. P1: validation, test strategy, and guardrail engine.

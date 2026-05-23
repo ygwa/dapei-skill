@@ -1,14 +1,14 @@
 $schema: "https://json-schema.org/draft/2020-12/schema"
-title: dapei codebases registry
+title: dapei repos registry
 type: object
 required:
   - version
-  - codebases
+  - repos
 properties:
   version:
     type: string
     enum: ["0.1"]
-  codebases:
+  repos:
     type: array
     items:
       type: object

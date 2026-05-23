@@ -2,7 +2,7 @@
 
 ROOT_DIR="${DAPEI_WORKSPACE_ROOT:-$(pwd)}"
 WORKSPACE_DIR="$ROOT_DIR"
-CODEBASE_DIR="$WORKSPACE_DIR/codebase"
+REPOS_DIR="$WORKSPACE_DIR/repos"
 FEATURES_DIR="$WORKSPACE_DIR/features"
 DAPEI_DIR="$ROOT_DIR/.dapei"
 SOURCE_DAPEI_DIR="$SCRIPT_ROOT/.dapei"
@@ -30,7 +30,7 @@ is_conforming_workspace_dir() {
   fi
 
   local count=0
-  [[ -d "$dir/codebase" ]] && count=$((count + 1))
+  [[ -d "$dir/repos" ]] && count=$((count + 1))
   [[ -d "$dir/docs" ]] && count=$((count + 1))
   [[ -d "$dir/features" ]] && count=$((count + 1))
   [[ $count -ge 2 ]]
@@ -128,15 +128,15 @@ require_feature_dir() {
 
 repo_exists() {
   local repo="$1"
-  [[ -d "$CODEBASE_DIR/$repo/.git" ]]
+  [[ -d "$REPOS_DIR/$repo/.git" ]]
 }
 
 registered_repo_names() {
-  local codebases_file="$DAPEI_DIR/codebases.yaml"
-  if [[ ! -f "$codebases_file" ]]; then
+  local repos_file="$DAPEI_DIR/repos.yaml"
+  if [[ ! -f "$repos_file" ]]; then
     return 0
   fi
-  awk '/^[[:space:]]*- name:/ { print $3 }' "$codebases_file" | tr -d '"'
+  awk '/^[[:space:]]*- name:/ { print $3 }' "$repos_file" | tr -d '"'
 }
 
 feature_repo_names() {

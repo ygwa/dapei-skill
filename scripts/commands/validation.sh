@@ -18,7 +18,7 @@ run_validation_command() {
     echo "### Command: \`$cmd\`"
     echo
     echo "- Repo: $repo"
-    echo "- Cwd: codebase/$repo"
+    echo "- Cwd: repos/$repo"
     echo "- Started At: $started"
   } >> "$output_file"
 
@@ -65,7 +65,7 @@ validate_feature() {
   local repo
   while IFS= read -r repo; do
     [[ -n "$repo" ]] || continue
-    local repo_path="$CODEBASE_DIR/$repo"
+    local repo_path="$REPOS_DIR/$repo"
     {
       echo
       echo "## Repo: $repo"

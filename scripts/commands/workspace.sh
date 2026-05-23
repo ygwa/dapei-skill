@@ -6,7 +6,7 @@ init_workspace() {
   fi
 
   mkdir -p "$DAPEI_DIR/workflows" "$DAPEI_DIR/rules"
-  mkdir -p "$CODEBASE_DIR" "$FEATURES_DIR"
+  mkdir -p "$REPOS_DIR" "$FEATURES_DIR"
   mkdir -p "$ROOT_DIR/docs/as-is" "$ROOT_DIR/docs/architecture" "$ROOT_DIR/docs/standards"
   mkdir -p "$ROOT_DIR/docs/business" "$ROOT_DIR/docs/domain" "$ROOT_DIR/docs/glossary"
   mkdir -p "$ROOT_DIR/docs/workflows" "$ROOT_DIR/docs/decisions" "$ROOT_DIR/docs/feature-impact"
@@ -23,10 +23,10 @@ workspace:
   root: .
   default_branch: main
   locale: zh-CN
-  codebases_file: .dapei/codebases.yaml
+  repos_file: .dapei/repos.yaml
 
 repos:
-  codebase_root: codebase
+  root_dir: repos
   feature_repo_mode: worktree
   managed_repos: []
 
@@ -76,7 +76,7 @@ agent_runtime:
   profiles:
     - name: analyst
       responsibilities:
-        - reverse-engineer codebase current state
+        - reverse-engineer repos current state
         - distinguish evidence from inference
     - name: architect
       responsibilities:
@@ -102,7 +102,7 @@ EOF_WORKSPACE
 
   copy_if_missing "$SOURCE_DAPEI_DIR/commands.yaml" "$DAPEI_DIR/commands.yaml"
   copy_if_missing "$SOURCE_DAPEI_DIR/feature.schema.yaml" "$DAPEI_DIR/feature.schema.yaml"
-  copy_if_missing "$SOURCE_DAPEI_DIR/codebases.schema.yaml" "$DAPEI_DIR/codebases.schema.yaml"
+  copy_if_missing "$SOURCE_DAPEI_DIR/repos.schema.yaml" "$DAPEI_DIR/repos.schema.yaml"
   copy_if_missing "$SOURCE_DAPEI_DIR/workflows/feature-lifecycle.yaml" "$DAPEI_DIR/workflows/feature-lifecycle.yaml"
   copy_if_missing "$SOURCE_DAPEI_DIR/rules/api.yaml" "$DAPEI_DIR/rules/api.yaml"
   copy_if_missing "$SOURCE_DAPEI_DIR/rules/ddd.yaml" "$DAPEI_DIR/rules/ddd.yaml"
@@ -123,7 +123,7 @@ EOF_WORKSPACE
 
 Use this workspace as the durable source of engineering context.
 
-- `codebase/` contains managed Git repositories.
+- `repos/` contains managed Git repositories.
 - `docs/` contains current business, architecture, technology, standards, and decisions.
 - `features/` contains feature-specific execution workspaces.
 - Start feature work from `features/<feature>/agents.md` and `features/<feature>/context/runtime-context.md`.

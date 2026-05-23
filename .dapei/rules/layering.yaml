@@ -3,12 +3,12 @@ rule_set: layering
 mode: report
 rules:
   - id: LAYER-001
-    title: no direct edits in codebase by agent
+    title: no direct edits in repos by agent
     severity: high
     check:
       type: path-deny
       patterns:
-        - "codebase/**"
+        - "repos/**"
     message: agent must work in features/* only
 
   - id: LAYER-002

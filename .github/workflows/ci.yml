@@ -29,9 +29,9 @@ jobs:
 
       - name: Setup test repo
         run: |
-          mkdir -p codebase
-          git init codebase/test-repo
-          cd codebase/test-repo
+          mkdir -p repos
+          git init repos/test-repo
+          cd repos/test-repo
           git config user.email "test@test.com"
           git config user.name "Test User"
           echo "# Test" > README.md

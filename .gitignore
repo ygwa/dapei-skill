@@ -6,7 +6,7 @@
 .cursor/
 
 # dapei workspace (root-level layout)
-/codebase/
+/repos/
 /features/*/repos/
 /features/*/context/runtime-context.md
 /features/*/context/context-index.yaml

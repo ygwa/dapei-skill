@@ -149,7 +149,7 @@ context_collect_dir() {
       echo "- Layer: $layer"
       echo "- Priority: $priority"
       echo "- Status: not found"
-      echo "- Action: this source does not exist yet; consider running \`dapei codebase analyze\` or manually populating it"
+      echo "- Action: this source does not exist yet; consider running \`dapei repos analyze\` or manually populating it"
     } >> "$output"
     return 0
   fi
@@ -176,14 +176,14 @@ context_collect_repo_summary() {
 
   while IFS= read -r repo; do
     [[ -n "$repo" ]] || continue
-    local repo_path="$CODEBASE_DIR/$repo"
+    local repo_path="$REPOS_DIR/$repo"
     {
       echo "## Repo: $repo"
       echo
     } >> "$output"
 
     if [[ ! -d "$repo_path/.git" ]]; then
-      echo "- Status: missing from codebase." >> "$output"
+      echo "- Status: missing from repos." >> "$output"
       continue
     fi
 
@@ -192,7 +192,7 @@ context_collect_repo_summary() {
     hash="$(git -C "$repo_path" rev-parse --short HEAD 2>/dev/null || echo unknown)"
     default_branch="$(default_branch_for_repo "$repo_path" 2>/dev/null || echo unknown)"
     {
-      echo "- Path: codebase/$repo"
+      echo "- Path: repos/$repo"
       echo "- Feature Link: features/$(basename "$(dirname "$feature_yaml")")/repos/$repo"
       echo "- Current Branch: $branch"
       echo "- Current Revision: $hash"
@@ -279,7 +279,7 @@ context_build() {
     echo "1. global: standards and AI rules"
     echo "2. workspace: as-is docs, architecture, workflow"
     echo "3. domain: business, domain, glossary"
-    echo "4. repo: codebase evidence"
+    echo "4. repo: repos evidence"
     echo "5. feature: feature docs and context"
     echo "6. runtime: tasks and transient execution state"
   } > "$output"

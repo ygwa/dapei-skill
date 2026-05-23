@@ -70,7 +70,7 @@ else
   exit 1
 fi
 
-# Test 5: prepare a local fixture repo for codebase add/analyze
+# Test 5: prepare a local fixture repo for repos add/analyze
 echo -n "test 5 - fixture repo: "
 FIXTURE_SOURCE="$SCRIPT_ROOT/tests/fixtures/sample-node-repo"
 FIXTURE_REPO="$TEST_DIR-fixture-repo"
@@ -88,11 +88,11 @@ else
   exit 1
 fi
 
-# Test 6: codebase add/list/analyze
-echo -n "test 6 - codebase lifecycle: "
-DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" codebase add sample-app "$FIXTURE_REPO" >/dev/null 2>&1
-DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" codebase list >/dev/null 2>&1
-DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" codebase analyze --all >/dev/null 2>&1
+# Test 6: repos add/list/analyze
+echo -n "test 6 - repos lifecycle: "
+DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" repos add sample-app "$FIXTURE_REPO" >/dev/null 2>&1
+DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" repos list >/dev/null 2>&1
+DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" repos analyze --all >/dev/null 2>&1
 if [[ -f "$TEST_DIR/docs/as-is/repo-inventory.md" ]] &&
    [[ -f "$TEST_DIR/docs/architecture/technical-current-state.md" ]] &&
    grep -q "sample-app" "$TEST_DIR/docs/as-is/repo-inventory.md"; then

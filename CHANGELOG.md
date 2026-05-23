@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.0] - 2026-05-17
 
 ### Added
-- Enhanced codebase analysis capabilities
+- Enhanced repos analysis capabilities
 - New `context build` command
 - New guardrail engine
 - Feature command enhancements

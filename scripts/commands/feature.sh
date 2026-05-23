@@ -9,10 +9,10 @@ prompt_yes_no() {
 
 clone_repo_interactive() {
   local repo="$1"
-  local target="$CODEBASE_DIR/$repo"
+  local target="$REPOS_DIR/$repo"
 
   if repo_exists "$repo"; then
-    log "repo '$repo' already exists in codebase"
+    log "repo '$repo' already exists in repos"
     return 0
   fi
 
@@ -23,17 +23,17 @@ clone_repo_interactive() {
   local remote_url
   read -r -p "remote git url for '$repo': " remote_url
   [[ -n "$remote_url" ]] || die "remote url is required"
-  codebase_add "$repo" "$remote_url"
+  repos_add "$repo" "$remote_url"
   [[ -d "$target/.git" ]] || die "clone failed for '$repo'"
 }
 
 prepare_feature_branch() {
   local repo="$1"
   local feature="$2"
-  local repo_path="$CODEBASE_DIR/$repo"
+  local repo_path="$REPOS_DIR/$repo"
   local worktree_path="$FEATURES_DIR/$feature/repos/$repo"
 
-  [[ -d "$repo_path/.git" ]] || die "repo '$repo' not found in codebase"
+  [[ -d "$repo_path/.git" ]] || die "repo '$repo' not found in repos"
 
   if ! repo_is_clean "$repo_path"; then
     die "repo '$repo' has uncommitted changes, commit or stash first"
@@ -252,7 +252,7 @@ write_feature_manifest() {
     for repo in "${repos[@]}"; do
       repo="$(echo "$repo" | xargs)"
       [[ -n "$repo" ]] || continue
-      local repo_path="$CODEBASE_DIR/$repo"
+      local repo_path="$REPOS_DIR/$repo"
       local base_ref="unknown"
       local base_time
       base_time="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -371,7 +371,7 @@ EOF
   # 3. Remove worktrees for each repo
   while IFS= read -r close_repo; do
     [[ -n "$close_repo" ]] || continue
-    local close_repo_path="$CODEBASE_DIR/$close_repo"
+    local close_repo_path="$REPOS_DIR/$close_repo"
     local close_worktree_path="$feature_dir/repos/$close_repo"
 
     if [[ ! -e "$close_worktree_path/.git" ]]; then

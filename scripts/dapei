@@ -7,8 +7,8 @@ SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$SCRIPT_ROOT/scripts/lib/core.sh"
 # shellcheck source=scripts/commands/workspace.sh
 source "$SCRIPT_ROOT/scripts/commands/workspace.sh"
-# shellcheck source=scripts/commands/codebase.sh
-source "$SCRIPT_ROOT/scripts/commands/codebase.sh"
+# shellcheck source=scripts/commands/repos.sh
+source "$SCRIPT_ROOT/scripts/commands/repos.sh"
 # shellcheck source=scripts/commands/feature.sh
 source "$SCRIPT_ROOT/scripts/commands/feature.sh"
 # shellcheck source=scripts/commands/context.sh
@@ -25,10 +25,10 @@ usage() {
 Usage:
   dapei init workspace
 
-  dapei codebase add <name> <git-url>
-  dapei codebase sync <name|--all>
-  dapei codebase list
-  dapei codebase analyze <name|--all>
+  dapei repos add <name> <git-url>
+  dapei repos sync <name|--all>
+  dapei repos list
+  dapei repos analyze <name|--all>
 
   dapei create feature <name> --repos repo1,repo2 [--objective "..."]
   dapei context build <feature> [--stage <stage>]
@@ -61,20 +61,20 @@ main() {
     "init workspace")
       init_workspace
       ;;
-    "codebase add")
-      [[ ${#args[@]} -ge 4 ]] || die "usage: dapei codebase add <name> <git-url>"
-      codebase_add "${args[2]}" "${args[3]}"
+    "repos add")
+      [[ ${#args[@]} -ge 4 ]] || die "usage: dapei repos add <name> <git-url>"
+      repos_add "${args[2]}" "${args[3]}"
       ;;
-    "codebase sync")
-      [[ ${#args[@]} -ge 3 ]] || die "usage: dapei codebase sync <name|--all>"
-      codebase_sync "${args[2]}"
+    "repos sync")
+      [[ ${#args[@]} -ge 3 ]] || die "usage: dapei repos sync <name|--all>"
+      repos_sync "${args[2]}"
       ;;
-    "codebase list")
-      codebase_list
+    "repos list")
+      repos_list
       ;;
-    "codebase analyze")
-      [[ ${#args[@]} -ge 3 ]] || die "usage: dapei codebase analyze <name|--all>"
-      codebase_analyze "${args[2]}"
+    "repos analyze")
+      [[ ${#args[@]} -ge 3 ]] || die "usage: dapei repos analyze <name|--all>"
+      repos_analyze "${args[2]}"
       ;;
     "create feature")
       [[ ${#args[@]} -ge 3 ]] || die "missing feature name"
