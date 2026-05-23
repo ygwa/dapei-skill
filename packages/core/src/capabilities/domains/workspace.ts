@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import { CapabilityError } from "../../types.ts";
 import type { CapabilityResult, CapabilitySpec } from "../../types.ts";
-import { copyIfMissing, ensureDir, isConformingWorkspace, isEffectivelyEmpty, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
+import { copyIfMissing, ensureDir, isConformingWorkspace, isEffectivelyEmpty, runSafe, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
 
@@ -18,6 +18,15 @@ export const workspaceInit: AnyCap = {
       throw new CapabilityError("WORKSPACE_INVALID", `current directory is not empty and does not look like a dapei workspace: ${p.rootDir}`);
     }
 
+    if (!existsSync(join(p.rootDir, ".git"))) {
+      runSafe("git", ["init", "-b", "main"], p.rootDir);
+    }
+
+    const gitignoreFile = join(p.rootDir, ".gitignore");
+    if (!existsSync(gitignoreFile)) {
+      write(gitignoreFile, `# dapei workspace gitignore\nnode_modules/\n.DS_Store\n.dapei/audit/\nfeatures/*/repos/\n`);
+    }
+
     const dirs = [
       join(p.dapeiDir, "workflows"), join(p.dapeiDir, "rules"), p.reposDir, p.featuresDir,
       join(p.docsDir, "as-is"), join(p.docsDir, "architecture"), join(p.docsDir, "standards"),
@@ -30,7 +39,7 @@ export const workspaceInit: AnyCap = {
 
     const workspaceFile = join(p.dapeiDir, "workspace.yaml");
     if (!existsSync(workspaceFile)) {
-      write(workspaceFile, `version: 0.2\nworkspace:\n  name: ${basename(p.rootDir)}\n  root: .\n  default_branch: main\n  locale: zh-CN\n  repos_file: .dapei/repos.yaml\n\nrepos:\n  root_dir: repos\n  feature_repo_mode: worktree\n  managed_repos: []\n\nquality_gates:\n  guardrail_mode: report\n  required_reports:\n    - feature-progress\n    - daily-report\n    - architecture-review\n    - validation-report\n`);
+      write(workspaceFile, `version: 0.2\nworkspace:\n  name: ${basename(p.rootDir)}\n  root: .\n  default_branch: main\n  locale: zh-CN\n  repos_file: .dapei/repos.yaml\n\nrepos:\n  root_dir: repos\n  feature_repo_mode: worktree\n  management_mode: submodule\n  managed_repos: []\n\nquality_gates:\n  guardrail_mode: report\n  required_reports:\n    - feature-progress\n    - daily-report\n    - architecture-review\n    - validation-report\n`);
     }
 
     const engineHome = process.env.DAPEI_ENGINE_HOME || p.rootDir;

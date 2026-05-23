@@ -19,15 +19,40 @@ export const reposAdd: AnyCap = {
     const target = join(p.reposDir, name);
     ensureDir(p.reposDir);
     ensureDir(p.dapeiDir);
+
+    let managementMode: "submodule" | "clone" = "clone";
+    const workspaceYaml = join(p.dapeiDir, "workspace.yaml");
+    if (existsSync(workspaceYaml)) {
+      const content = read(workspaceYaml);
+      const m = content.match(/management_mode:\s*["']?([a-z]+)["']?/);
+      if (m && (m[1] === "submodule" || m[1] === "clone")) {
+        managementMode = m[1] as "submodule" | "clone";
+      }
+    }
+
     if (existsSync(join(target, ".git"))) throw new CapabilityError("REPO_EXISTS", `repos '${name}' already exists`);
-    run("git", ["clone", url, target], p.rootDir);
+
+    if (managementMode === "submodule") {
+      if (!existsSync(join(p.rootDir, ".git"))) {
+        runSafe("git", ["init", "-b", "main"], p.rootDir);
+      }
+      try {
+        run("git", ["-c", "protocol.file.allow=always", "submodule", "add", url, `repos/${name}`], p.rootDir);
+        run("git", ["-c", "protocol.file.allow=always", "submodule", "update", "--init", "--recursive", `repos/${name}`], p.rootDir);
+      } catch (e: any) {
+        run("git", ["clone", url, target], p.rootDir);
+      }
+    } else {
+      run("git", ["clone", url, target], p.rootDir);
+    }
+
     const registry = join(p.dapeiDir, "repos.yaml");
     if (!existsSync(registry)) write(registry, 'version: "0.2"\nrepos:\n');
     const content = read(registry);
     if (!content.includes(`name: ${name}`) && !content.includes(`name: "${name}"`)) {
       write(registry, content + `  - name: ${name}\n    path: repos/${name}\n    url: ${url}\n    added-at: ${new Date().toISOString()}\n    default-branch: ${defaultBranch(target)}\n    test-commands: []\n`);
     }
-    return { ok: true, data: { name, url }, sideEffects: ["git clone", "repos registry"], reportFragments: ["repos add done"] };
+    return { ok: true, data: { name, url }, sideEffects: [managementMode === "submodule" ? "git submodule add" : "git clone", "repos registry"], reportFragments: ["repos add done"] };
   }
 };
 
