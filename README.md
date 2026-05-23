@@ -47,6 +47,14 @@ The AI handles reading context, writing docs, maintaining feature state, and rep
 
 The full process we actually use — not theory, but lessons learned through real execution.
 
+### Engine Architecture (v2)
+
+- Skill Router layer: user still invokes `@dapei ...`
+- Atomic Capability layer: `dapei-engine` executes typed capabilities such as `workspace.init`, `repos.analyze`, `workflow.runStage`
+- Runtime substrate layer: worktree/filesystem/git remains the deterministic source of truth
+
+The internal shell entrypoint `scripts/dapei` is now only a thin adapter that forwards to the Node.js/TypeScript engine for backward compatibility. Execution logic lives in `engine/` and `packages/*` only.
+
 ### Step 1: Establish Your Context
 
 Before any requirement, let the AI understand your repos:

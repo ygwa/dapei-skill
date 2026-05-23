@@ -15,7 +15,7 @@ The most important rule: **users should experience dapei through AI conversation
 
 2. **Internal deterministic execution layer**
    - Entry for Agent/tooling: `scripts/dapei`
-   - Modules: `scripts/commands/*`, `scripts/lib/*`
+   - Modules: `engine/*`, `packages/core/*`, `packages/router/*`, `packages/runtime-adapters/*`
    - Purpose: repeatable filesystem, Git, context, workflow, validation, and report operations.
 
 Do not present `scripts/dapei ...` as the primary user workflow. Document scripts for maintainers, smoke tests, and debugging only — ordinary usage should start with `@dapei`.

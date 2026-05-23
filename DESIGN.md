@@ -13,11 +13,12 @@ System objective:
 ## Architecture Layers
 
 1. User Layer: command language entrypoint
-2. Skill Router: maps command to workflow + context profile
-3. Workflow Engine: stage orchestration (DAG)
-4. Context System: layered context loading + memory
-5. Workspace System: feature isolation and repo mapping
-6. Infrastructure: git/ide/mcp/ci runtime
+2. Skill Router: maps user intent to modular skills
+3. Atomic Capability Engine: typed capability registry and deterministic execution
+4. Workflow Engine: stage orchestration (DAG)
+5. Context System: layered context loading + memory
+6. Workspace System: feature isolation and repo mapping
+7. Infrastructure: git/ide/mcp/ci runtime
 
 ## Runtime Unit
 
@@ -89,3 +90,9 @@ Rule families:
 - `.dapei/workflows/feature-lifecycle.yaml`
 - `.dapei/rules/*.yaml`
 - docs templates for memory/reporting
+
+## Capability Evolution (v2.1)
+
+- Capability registration is handled through a central TS registry (`CapabilityRegistry`).
+- Input contracts are validated by schema before execution (required, type, enum, additional properties).
+- New capabilities should be added as specs and registered, not wired by ad-hoc command parsing logic.
