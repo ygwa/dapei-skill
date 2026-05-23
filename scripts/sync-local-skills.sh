@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Sync dapei-skill to AI tools' local skills directory
 #
-# This script maintains the skill in .agents/skills/ (standard location)
-# and creates symlinks for Claude Code, Cursor, and other AI tools.
+# This script uses repository-root SKILL.md as source of truth
+# and syncs it to local AI tool skill directories.
 #
 # Usage:
 #   scripts/sync-local-skills.sh [options]
@@ -59,12 +59,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-SKILL_SOURCE="$SCRIPT_ROOT/.agents/skills/$SKILL_NAME"
-SKILL_SOURCE_PATH="$SKILL_SOURCE"
+SKILL_SOURCE_PATH="$SCRIPT_ROOT/SKILL.md"
 
 # Detect skill version from SKILL.md
 get_skill_version() {
-  local skill_md="$SKILL_SOURCE_PATH/SKILL.md"
+  local skill_md="$SKILL_SOURCE_PATH"
   if [[ -f "$skill_md" ]]; then
     grep -m1 "^version:" "$skill_md" | sed 's/version: *//' || echo "unknown"
   else
@@ -87,7 +86,7 @@ version_to_num() {
   echo "$1" | sed 's/^v//' | awk -F. '{ printf "%03d%03d%03d\n", $1, $2, $3 }'
 }
 
-# Sync to Claude Code (creates symlink to .agents/skills/dapei-skill)
+# Sync to Claude Code
 sync_claude_code() {
   local installed_ver="$1"
 
@@ -110,15 +109,15 @@ sync_claude_code() {
 
   local source_ver=$(get_skill_version)
   if [[ "$DRY_RUN" == "true" ]]; then
-    echo "  [dry-run] Would sync Claude Code: v$installed_ver -> v$source_ver (symlink)"
+    echo "  [dry-run] Would sync Claude Code: v$installed_ver -> v$source_ver"
   else
-    echo "  [sync] Claude Code: linking to v$source_ver"
-    rm -rf "$target_dir"
-    ln -sfn "$SKILL_SOURCE_PATH" "$target_dir"
+    echo "  [sync] Claude Code: syncing to v$source_ver"
+    mkdir -p "$target_dir"
+    cp "$SKILL_SOURCE_PATH" "$target_dir/SKILL.md"
   fi
 }
 
-# Sync to Cursor (creates symlink to .agents/skills/dapei-skill)
+# Sync to Cursor
 sync_cursor() {
   if [[ ! -d "$HOME/.cursor" ]]; then
     echo "  [skip] Cursor not found at ~/.cursor"
@@ -129,21 +128,21 @@ sync_cursor() {
   mkdir -p "$target_dir"
 
   if [[ "$DRY_RUN" == "true" ]]; then
-    echo "  [dry-run] Would sync Cursor rules (symlink)"
+    echo "  [dry-run] Would sync Cursor rules"
   else
-    echo "  [sync] Cursor rules (symlink to skill)"
+    echo "  [sync] Cursor rules"
     # Create a marker file that references the skill
     cat > "$target_dir/dapei-skill.mdc" <<EOF
 # dapei-skill for Cursor
 
-Use the dapei-skill from: ~/.claude/skills/dapei-skill/SKILL.md
+Use the dapei-skill from the repository root: SKILL.md
 
 To update: run \`bash scripts/sync-local-skills.sh --cursor\` from dapei-skill repo.
 EOF
   fi
 }
 
-# Sync to Agent Shell (creates symlink to .agents/skills/dapei-skill)
+# Sync to Agent Shell
 sync_agent_shell() {
   if [[ ! -d "$HOME/.agent-shell" ]]; then
     echo "  [skip] Agent Shell not found at ~/.agent-shell"
@@ -154,11 +153,11 @@ sync_agent_shell() {
   mkdir -p "$target_dir"
 
   if [[ "$DRY_RUN" == "true" ]]; then
-    echo "  [dry-run] Would sync Agent Shell skills (symlink)"
+    echo "  [dry-run] Would sync Agent Shell skills"
   else
-    echo "  [sync] Agent Shell skills (symlink to skill)"
-    rm -rf "$target_dir/$SKILL_NAME"
-    ln -sfn "$SKILL_SOURCE_PATH" "$target_dir/$SKILL_NAME"
+    echo "  [sync] Agent Shell skills"
+    mkdir -p "$target_dir/$SKILL_NAME"
+    cp "$SKILL_SOURCE_PATH" "$target_dir/$SKILL_NAME/SKILL.md"
   fi
 }
 
@@ -167,9 +166,9 @@ main() {
   echo ""
 
   # Validate source
-  if [[ ! -d "$SKILL_SOURCE_PATH" ]]; then
+  if [[ ! -f "$SKILL_SOURCE_PATH" ]]; then
     echo "Error: Skill source not found at $SKILL_SOURCE_PATH"
-    echo "This should be the standard location for dapei-skill."
+    echo "The repository root SKILL.md is the source of truth."
     exit 1
   fi
 
@@ -184,9 +183,7 @@ main() {
   if [[ "$TARGET" == "all" ]] || [[ "$TARGET" == "claude-code" ]]; then
     local installed_ver=$(get_installed_version)
     echo "Claude Code: installed v$installed_ver"
-    if [[ "$DRY_RUN" == "true" ]] || [[ "$FORCE" == "true" ]]; then
-      sync_claude_code "$installed_ver"
-    fi
+    sync_claude_code "$installed_ver"
   fi
 
   if [[ "$TARGET" == "all" ]] || [[ "$TARGET" == "cursor" ]]; then

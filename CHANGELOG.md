@@ -16,11 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Updated SKILL.md frontmatter with version metadata
 - Agent workflow instructions aligned to English-first terminology
-- `.agents/skills/dapei-skill` replaced with symlink to `.claude/skills/dapei-skill`
+- Skill path conventions updated during installation flow
 
 ### Documentation
 - README now supports global audience with English examples
-- agents.md updated to reference correct `.claude/skills` path
+- agents.md updated to reference the root `SKILL.md`
 
 ---
 

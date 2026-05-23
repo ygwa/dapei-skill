@@ -211,7 +211,8 @@ Copy the skill to your AI tool's supported location:
 
 ```bash
 git clone https://github.com/ygwa/dapei-skill.git /tmp/dapei-skill
-cp -R /tmp/dapei-skill/.claude/skills/dapei-skill ~/.claude/skills/
+cd /tmp/dapei-skill
+bash scripts/sync-local-skills.sh --claude-code
 ```
 
 #### Cursor
@@ -238,7 +239,7 @@ bash scripts/smoke-test.sh
 | [DESIGN.md](DESIGN.md) | Technical design documentation |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 | [docs/plans/2026-05-17-dapei-roadmap.md](docs/plans/2026-05-17-dapei-roadmap.md) | Roadmap |
-| [.claude/skills/dapei-skill/SKILL.md](.claude/skills/dapei-skill/SKILL.md) | Agent Skill entry point |
+| [SKILL.md](SKILL.md) | Agent Skill entry point |
 
 ---
 

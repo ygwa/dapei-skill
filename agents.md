@@ -10,7 +10,7 @@ The most important rule: **users should experience dapei through AI conversation
 
 1. **User-facing skill layer**
    - Entry: `@dapei ...`
-   - Source of behavior: `.claude/skills/dapei-skill/SKILL.md`
+   - Source of behavior: `SKILL.md` (repository root)
    - User experience: natural language intent, stage confirmation, structured reports.
 
 2. **Internal deterministic execution layer**
@@ -78,7 +78,7 @@ Feature docs, context, memory, tasks, tests, reports, and artifacts should stay 
 For a user request, the Agent should:
 
 1. Interpret the user's intent.
-2. Read `.claude/skills/dapei-skill/SKILL.md`.
+2. Read `SKILL.md` at repository root.
 3. Read relevant `docs/`, `.dapei/`, and feature context.
 4. Use internal scripts only when deterministic state changes are needed.
 5. Keep user-facing responses in terms of engineering outcomes, not shell commands.
