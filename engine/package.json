@@ -1,0 +1,9 @@
+{
+  "name": "@dapei/engine",
+  "version": "2.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "dapei-engine": "./dapei-engine.ts"
+  }
+}

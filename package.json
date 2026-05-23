@@ -1,0 +1,22 @@
+{
+  "name": "dapei-skill",
+  "version": "2.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "engine"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "node --experimental-strip-types --test tests/unit/*.test.mjs",
+    "test:integration": "node --experimental-strip-types --test tests/integration/*.test.mjs",
+    "smoke": "bash scripts/smoke-test.sh",
+    "verify": "npm run typecheck && npm run test && npm run smoke"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^6.0.3"
+  }
+}
