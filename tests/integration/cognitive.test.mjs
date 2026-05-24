@@ -41,10 +41,10 @@ test('cognitive integration: discover, upsert, list, context', async () => {
     assert.ok(String(discoverResult.data.repos[0].directory_tree).length > 0);
     assert.ok(existsSync(join(tmp, 'docs/as-is/behavior/_candidates.yaml')));
 
-    const behaviorYaml = readFileSync(join(fixtureRoot, 'expected/behavior/order-create.yaml'), 'utf8');
+    const behaviorYaml = readFileSync(join(fixtureRoot, '__expected__/behavior/order-create.yaml'), 'utf8');
     await core.runCapability('cognitive.artifact.upsert', { type: 'behavior', content: behaviorYaml }, { rootDir: tmp, now: new Date() });
 
-    const stateYaml = readFileSync(join(fixtureRoot, 'expected/state-machines/order.yaml'), 'utf8');
+    const stateYaml = readFileSync(join(fixtureRoot, '__expected__/state-machines/order.yaml'), 'utf8');
     await core.runCapability('cognitive.artifact.upsert', { type: 'state-machine', content: stateYaml }, { rootDir: tmp, now: new Date() });
 
     const { result: listResult } = await core.runCapability('cognitive.artifact.list', { repo: 'sample-app' }, { rootDir: tmp, now: new Date() });

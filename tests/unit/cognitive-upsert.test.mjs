@@ -14,7 +14,7 @@ test('cognitive.artifact.upsert writes behavior and updates index', async () => 
   try {
     await core.runCapability('workspace.init', {}, { rootDir: tmp, now: new Date() });
 
-    const behaviorYaml = readFileSync(join(fixtureRoot, 'expected/behavior/order-create.yaml'), 'utf8');
+    const behaviorYaml = readFileSync(join(fixtureRoot, '__expected__/behavior/order-create.yaml'), 'utf8');
     const { result } = await core.runCapability(
       'cognitive.artifact.upsert',
       { type: 'behavior', content: behaviorYaml },

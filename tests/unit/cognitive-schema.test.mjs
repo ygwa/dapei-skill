@@ -40,14 +40,14 @@ test('validateEvidenceFields rejects unknown without reason', () => {
 });
 
 test('validateBehaviorArtifact passes expected fixture', () => {
-  const content = readFileSync(join(fixtureRoot, 'expected/behavior/order-create.yaml'), 'utf8');
+  const content = readFileSync(join(fixtureRoot, '__expected__/behavior/order-create.yaml'), 'utf8');
   const doc = parseYamlDocument(content);
   const errors = validateArtifact('behavior', doc);
   assert.deepEqual(errors, []);
 });
 
 test('validateStateMachineArtifact passes expected fixture', () => {
-  const content = readFileSync(join(fixtureRoot, 'expected/state-machines/order.yaml'), 'utf8');
+  const content = readFileSync(join(fixtureRoot, '__expected__/state-machines/order.yaml'), 'utf8');
   const doc = parseYamlDocument(content);
   const errors = validateArtifact('state-machine', doc);
   assert.deepEqual(errors, []);
@@ -63,7 +63,7 @@ test('validateBehaviorArtifact rejects fact without sources', () => {
 });
 
 test('parseYamlDocument parses behavior fixture', () => {
-  const content = readFileSync(join(fixtureRoot, 'expected/behavior/order-create.yaml'), 'utf8');
+  const content = readFileSync(join(fixtureRoot, '__expected__/behavior/order-create.yaml'), 'utf8');
   const doc = parseYamlDocument(content);
   assert.equal(doc.id, 'order-create');
   assert.equal(doc.repo, 'sample-app');
