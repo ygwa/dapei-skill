@@ -7,6 +7,33 @@ import { defaultBranch, featureRepoNames, requireFields } from "../shared.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
 
+function isRepoDirty(repoPath: string, rootDir: string): boolean {
+  return Boolean(runSafe("git", ["-C", repoPath, "status", "--porcelain"], rootDir));
+}
+
+function currentBranch(repoPath: string, rootDir: string): string {
+  return runSafe("git", ["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"], rootDir) || "HEAD";
+}
+
+function worktreeBoundToBranch(repoPath: string, rootDir: string, branch: string): string | "" {
+  const out = runSafe("git", ["-C", repoPath, "worktree", "list", "--porcelain"], rootDir);
+  if (!out) return "";
+  const lines = out.split("\n");
+  let currentPath = "";
+  for (const line of lines) {
+    const m1 = line.match(/^worktree\s+(.+)$/);
+    if (m1) {
+      currentPath = m1[1];
+      continue;
+    }
+    const m2 = line.match(/^branch\s+(.+)$/);
+    if (m2 && m2[1] === `refs/heads/${branch}`) {
+      return currentPath;
+    }
+  }
+  return "";
+}
+
 export const featureCreate: AnyCap = {
   id: "feature.create",
   version: "1.0.0",
@@ -26,14 +53,40 @@ export const featureCreate: AnyCap = {
     for (const repo of repos) {
       const repoPath = join(p.reposDir, repo);
       if (!existsSync(join(repoPath, ".git"))) throw new CapabilityError("REPO_MISSING", `repo '${repo}' not found in repos. run 'dapei repos add ${repo} <url>' first`);
-      const branch = `feature/${name}`;
-      runSafe("git", ["-C", repoPath, "fetch", "origin"], p.rootDir);
       const base = defaultBranch(repoPath);
-      runSafe("git", ["-C", repoPath, "checkout", base], p.rootDir);
-      runSafe("git", ["-C", repoPath, "pull", "--ff-only", "origin", base], p.rootDir);
-      const hasBranch = runSafe("git", ["-C", repoPath, "show-ref", "--verify", "--quiet", `refs/heads/${branch}`], p.rootDir);
-      if (hasBranch === "") run("git", ["-C", repoPath, "branch", branch], p.rootDir);
-      runSafe("git", ["-C", repoPath, "worktree", "add", join(featureDir, "repos", repo), branch], p.rootDir);
+      const branch = `feature/${name}`;
+
+      // Base pool discipline: repos/<repo> must be clean and on default branch.
+      if (isRepoDirty(repoPath, p.rootDir)) {
+        throw new CapabilityError("REPO_DIRTY", `repos/${repo} is dirty. base repos are read-only; discard changes before creating feature worktree.`);
+      }
+      const cur = currentBranch(repoPath, p.rootDir);
+      if (cur !== base) {
+        // Detached HEAD or other branch: switch back to default branch.
+        run("git", ["-C", repoPath, "checkout", base], p.rootDir);
+      }
+
+      // Ensure base is synced to latest origin/<default>.
+      run("git", ["-C", repoPath, "fetch", "origin"], p.rootDir);
+      run("git", ["-C", repoPath, "merge", "--ff-only", `origin/${base}`], p.rootDir);
+
+      // Branch decision: if remote branch exists, use it as the source of truth (continue development).
+      const remoteHash = runSafe("git", ["-C", repoPath, "rev-parse", "--verify", `origin/${branch}`], p.rootDir);
+      const localRef = runSafe("git", ["-C", repoPath, "show-ref", `refs/heads/${branch}`], p.rootDir);
+      if (!localRef) {
+        if (remoteHash) run("git", ["-C", repoPath, "branch", "--track", branch, `origin/${branch}`], p.rootDir);
+        else run("git", ["-C", repoPath, "branch", branch], p.rootDir);
+      }
+
+      // Prevent "one branch bound to multiple worktrees".
+      const bound = worktreeBoundToBranch(repoPath, p.rootDir, branch);
+      if (bound) {
+        throw new CapabilityError("WORKTREE_CONFLICT", `branch '${branch}' is already checked out by worktree: ${bound}`);
+      }
+
+      const dest = join(featureDir, "repos", repo);
+      if (existsSync(dest)) throw new CapabilityError("WORKTREE_EXISTS", `worktree path already exists: features/${name}/repos/${repo}`);
+      run("git", ["-C", repoPath, "worktree", "add", dest, branch], p.rootDir);
     }
 
     ["docs", "context", "memory", "tests/regression", "reports", "tasks", "artifacts"].forEach((d) => ensureDir(join(featureDir, d)));
@@ -127,6 +180,7 @@ export const featureClose: AnyCap = {
         const args = ["-C", repoPath, "worktree", "remove", wt];
         if (input.force === true) args.push("--force");
         runSafe("git", args, p.rootDir);
+        runSafe("git", ["-C", repoPath, "worktree", "prune"], p.rootDir);
       }
     }
     write(join(featureDir, "reports", "stage-acceptance.completed"), `stage: acceptance\ncompleted-at: ${new Date().toISOString()}\nnote: archived and closed\n`);

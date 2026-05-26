@@ -1,0 +1,65 @@
+' ============================================================
+' 02 Capability 注册表 — 19 个能力一览
+' ============================================================
+@startuml docs/plantuml/02-capability-registry
+!theme plain
+
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #10B981
+  FontSize 11
+  Width 120
+  Height 30
+}
+
+title CapabilityRegistry — 19 个能力
+
+package "capabilities/index.ts" as CAPS {
+  rectangle "workspace.init" #lightgreen
+  rectangle "repos.add" #lightgreen
+  rectangle "repos.sync" #lightgreen
+  rectangle "repos.list" #lightgreen
+  rectangle "repos.check" #lightgreen
+  rectangle "repos.analyze" #lightgreen
+  rectangle "feature.create" #lightgreen
+  rectangle "feature.close" #lightgreen
+  rectangle "feature.review" #lightgreen
+  rectangle "feature.status" #lightgreen
+  rectangle "context.build" #lightgreen
+  rectangle "workflow.runStage" #lightgreen
+  rectangle "validation.run" #lightgreen
+  rectangle "guardrailRun" #lightgreen
+  rectangle "feature.report" #lightgreen
+  rectangle "cognitive.discover" #lightgreen
+  rectangle "cognitive.artifact.validate" #lightgreen
+  rectangle "cognitive.artifact.upsert" #lightgreen
+  rectangle "cognitive.artifact.list" #lightgreen
+  rectangle "cognitive.state.suggest" #lightgreen
+}
+
+package "CapabilityRegistry" as REG {
+  rectangle "get(id)"
+  rectangle "register(spec)"
+  rectangle "registerMany(specs[])"
+  rectangle "all()"
+}
+
+package "schema.ts" as VAL {
+  rectangle "validateInputSchema()"
+  rectangle "check type/enum/minLength"
+}
+
+CAPS --> REG
+REG --> VAL
+
+note bottom of CAPS
+  registry.registerMany(capabilitySpecs)
+  CapabilityRegistry holds all 19 specs
+end note
+
+note right of REG
+  get(id) returns CapabilitySpec
+  all() returns Record
+end note
+
+@enduml

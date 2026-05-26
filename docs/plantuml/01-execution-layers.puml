@@ -1,0 +1,69 @@
+' ============================================================
+' 01 执行层级图 — dapei.skill v2.2.0 Architecture Layers
+' ============================================================
+@startuml docs/plantuml/01-execution-layers
+!theme plain
+
+skinparam rectangle {
+  BackgroundColor #F8F9FA
+  BorderColor #3B82F6
+  FontSize 12
+}
+
+title dapei.skill 执行层级图
+
+package "UserLayer" as User {
+  rectangle "@dapei natural language intent" #lightblue
+}
+
+package "SkillRouter" as Router {
+  rectangle "SKILL.md v2.2.0" #AliceBlue
+  rectangle "route to modular skills" #AliceBlue
+}
+
+package "CognitiveRuntime" as Cognitive #lightgreen {
+  rectangle "cognitive.discover"
+  rectangle "cognitive.artifact.validate"
+  rectangle "cognitive.artifact.upsert"
+  rectangle "cognitive.artifact.list"
+  rectangle "cognitive.state.suggest"
+}
+
+package "CapabilityEngine" as CapEngine #lightgreen {
+  rectangle "CapabilityRegistry"
+  rectangle "capabilities/index.ts (19 specs)"
+}
+
+package "DomainCapabilities" as Domain #lightgreen {
+  rectangle "workspace.init"
+  rectangle "repos.add/repos.analyze/repos.list/repos.sync/repos.check"
+  rectangle "feature.create/feature.close/feature.review/feature.status"
+  rectangle "context.build"
+  rectangle "workflow.runStage"
+  rectangle "validation.run/guardrailRun"
+  rectangle "feature.report"
+}
+
+package "EngineRuntime" as Runtime #lightblue {
+  rectangle "dapei-engine.ts"
+  rectangle "scripts/dapei bash adapter"
+  rectangle "runtime-adapters/system.ts"
+}
+
+package "WorkspaceOutput" as WS #AliceBlue {
+  rectangle ".dapei/ config layer"
+  rectangle "repos/ managed repos"
+  rectangle "docs/ persistent docs"
+  rectangle "features/ isolated workspace"
+  rectangle "runtime/ templates and rules"
+}
+
+User -> Router
+Router -> Cognitive
+Router -> CapEngine
+Cognitive -> Domain
+CapEngine -> Domain
+Domain -> Runtime
+Runtime -> WS
+
+@enduml

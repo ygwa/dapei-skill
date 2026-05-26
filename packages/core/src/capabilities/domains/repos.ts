@@ -7,6 +7,47 @@ import { defaultBranch, detectRepoLanguage, detectTestCommands, parseReposYamlNa
 
 export type AnyCap = CapabilitySpec<any, any>;
 
+type RepoCheckStatus = "PASS" | "WARN" | "FAIL";
+
+function runOk(cmd: string, args: string[], cwd: string): { ok: boolean; out: string; err?: string } {
+  try {
+    return { ok: true, out: run(cmd, args, cwd) };
+  } catch (e: any) {
+    return { ok: false, out: e?.stdout?.toString?.() || "", err: e?.stderr?.toString?.() || e?.message || String(e) };
+  }
+}
+
+function repoDirty(repoPath: string, rootDir: string): boolean {
+  return Boolean(runSafe("git", ["-C", repoPath, "status", "--porcelain"], rootDir));
+}
+
+function currentBranch(repoPath: string, rootDir: string): string {
+  return runSafe("git", ["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"], rootDir) || "HEAD";
+}
+
+function ensureOnDefaultBranch(repoPath: string, rootDir: string): { ok: boolean; message?: string } {
+  const base = defaultBranch(repoPath);
+  const cur = currentBranch(repoPath, rootDir);
+  if (cur === base) return { ok: true };
+  if (repoDirty(repoPath, rootDir)) return { ok: false, message: `repo is dirty; cannot checkout default branch '${base}'` };
+  // Detached HEAD or other branch: try to checkout the default branch.
+  const r = runOk("git", ["-C", repoPath, "checkout", base], rootDir);
+  if (!r.ok) return { ok: false, message: `failed to checkout default branch '${base}': ${r.err || "unknown error"}` };
+  return { ok: true };
+}
+
+function fastForwardDefaultBranch(repoPath: string, rootDir: string): { ok: boolean; before?: string; after?: string; message?: string } {
+  const base = defaultBranch(repoPath);
+  const before = runSafe("git", ["-C", repoPath, "rev-parse", "--short", "HEAD"], rootDir) || "";
+  const fetchR = runOk("git", ["-C", repoPath, "fetch", "origin"], rootDir);
+  if (!fetchR.ok) return { ok: false, message: `fetch failed: ${fetchR.err || "unknown error"}` };
+  // Make the local default branch exactly catch up to origin/<base> without merge commits.
+  const mergeR = runOk("git", ["-C", repoPath, "merge", "--ff-only", `origin/${base}`], rootDir);
+  if (!mergeR.ok) return { ok: false, message: `fast-forward failed: ${mergeR.err || "unknown error"}` };
+  const after = runSafe("git", ["-C", repoPath, "rev-parse", "--short", "HEAD"], rootDir) || "";
+  return { ok: true, before, after };
+}
+
 export const reposAdd: AnyCap = {
   id: "repos.add",
   version: "1.0.0",
@@ -46,6 +87,17 @@ export const reposAdd: AnyCap = {
       run("git", ["clone", url, target], p.rootDir);
     }
 
+    // Align base repo to its default branch and fast-forward to origin/<default>.
+    // This is critical for the "repos is read-only base pool for feature worktrees" model.
+    const checkout = ensureOnDefaultBranch(target, p.rootDir);
+    if (!checkout.ok) {
+      throw new CapabilityError("REPO_INVALID_BASE", `repos/${name} not on default branch: ${checkout.message || "unknown error"}`);
+    }
+    const ff = fastForwardDefaultBranch(target, p.rootDir);
+    if (!ff.ok) {
+      throw new CapabilityError("REPO_SYNC_FAILED", `repos/${name} failed to sync default branch: ${ff.message || "unknown error"}`);
+    }
+
     const registry = join(p.dapeiDir, "repos.yaml");
     if (!existsSync(registry)) write(registry, 'version: "0.2"\nrepos:\n');
     const content = read(registry);
@@ -70,34 +122,79 @@ export const reposSync: AnyCap = {
     for (const name of names) {
       const repoPath = join(p.reposDir, name);
       if (!existsSync(join(repoPath, ".git"))) continue;
-      // Fetch latest remote refs
-      const fetchOut = runSafe("git", ["-C", repoPath, "fetch", "origin"], p.rootDir);
-      if (fetchOut) results.push(`${name}: fetch done`);
-      // Determine current branch and pull/merge
-      const currentBranch = runSafe("git", ["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"], p.rootDir) || "HEAD";
-      const base = defaultBranch(repoPath);
-      if (currentBranch === base || currentBranch === "HEAD") {
-        // Detached HEAD or on default branch - do a pull
-        const pullErr = runSafe("git", ["-C", repoPath, "pull", "--ff-only", "origin", base], p.rootDir);
-        if (!pullErr) {
-          results.push(`${name}: pulled ${base} (fast-forward)`);
-        } else {
-          // Non-fast-forward or conflict - fetch + rebase if possible
-          const rebaseErr = runSafe("git", ["-C", repoPath, "rebase", `origin/${base}`], p.rootDir);
-          if (!rebaseErr) {
-            results.push(`${name}: rebased onto origin/${base}`);
-          } else {
-            results.push(`${name}: sync conflict - run 'git status' in repos/${name}`);
-          }
-        }
-      } else {
-        // On a feature branch - just update the ref, don't merge into branch
-        const fetchHead = runSafe("git", ["-C", repoPath, "rev-parse", "FETCH_HEAD"], p.rootDir);
-        if (fetchHead) results.push(`${name}: branch '${currentBranch}' updated (fetch only - rebase your branch to integrate)`);
-        else results.push(`${name}: no remote update available`);
+      if (repoDirty(repoPath, p.rootDir)) {
+        throw new CapabilityError("REPO_DIRTY", `repos/${name} is dirty; base repos must be read-only. Please discard changes: (cd repos/${name} && git status)`);
       }
+      const checkout = ensureOnDefaultBranch(repoPath, p.rootDir);
+      if (!checkout.ok) {
+        throw new CapabilityError("REPO_INVALID_BASE", `repos/${name} not on default branch: ${checkout.message || "unknown error"}`);
+      }
+      const base = defaultBranch(repoPath);
+      const ff = fastForwardDefaultBranch(repoPath, p.rootDir);
+      if (!ff.ok) {
+        throw new CapabilityError("REPO_SYNC_FAILED", `repos/${name} failed to fast-forward '${base}': ${ff.message || "unknown error"}`);
+      }
+      results.push(`${name}: ${base} ${ff.before || "???"} -> ${ff.after || "???"}`);
     }
-    return { ok: true, data: { target, results }, sideEffects: ["git fetch", "git pull", "git rebase"], reportFragments: ["repos sync"] };
+    return { ok: true, data: { target, results }, sideEffects: ["git fetch", "git merge --ff-only"], reportFragments: ["repos sync"] };
+  }
+};
+
+export const reposCheck: AnyCap = {
+  id: "repos.check",
+  version: "1.0.0",
+  inputSchema: { required: ["target"], properties: { target: { type: "string", minLength: 1 } }, additionalProperties: false },
+  async execute(ctx, input) {
+    requireFields(input, ["target"]);
+    const target = String(input.target);
+    const p = workspacePaths(ctx.rootDir);
+    const registry = join(p.dapeiDir, "repos.yaml");
+    const names = target === "--all" && existsSync(registry) ? parseReposYamlNames(read(registry)) : [target];
+    if (names.length === 0) {
+      return { ok: true, data: { status: "WARN", text: "No repos registered." }, sideEffects: [], reportFragments: [] };
+    }
+
+    let overall: RepoCheckStatus = "PASS";
+    const lines: string[] = [`Repo Check (${names.length})`];
+    const results: Array<{ repo: string; status: RepoCheckStatus; detail: string }> = [];
+
+    for (const name of names) {
+      const repoPath = join(p.reposDir, name);
+      if (!existsSync(join(repoPath, ".git"))) {
+        overall = "FAIL";
+        results.push({ repo: name, status: "FAIL", detail: "missing .git (not cloned/submodule not initialized)" });
+        continue;
+      }
+
+      // remote reachability (non-blocking warning)
+      const fetchR = runOk("git", ["-C", repoPath, "fetch", "--dry-run", "origin"], p.rootDir);
+      let status: RepoCheckStatus = "PASS";
+      const issues: string[] = [];
+      if (!fetchR.ok) {
+        status = "WARN";
+        issues.push(`remote fetch dry-run failed`);
+      }
+
+      const base = defaultBranch(repoPath);
+      const cur = currentBranch(repoPath, p.rootDir);
+      if (repoDirty(repoPath, p.rootDir)) {
+        status = "FAIL";
+        issues.push("dirty (禁止在基座仓库开发)");
+      }
+      if (cur !== base) {
+        status = "FAIL";
+        issues.push(`not on default branch (expected '${base}', got '${cur}')`);
+      }
+
+      if (status === "FAIL") overall = "FAIL";
+      else if (status === "WARN" && overall !== "FAIL") overall = "WARN";
+
+      results.push({ repo: name, status, detail: issues.length ? issues.join("; ") : "ok" });
+    }
+
+    lines.push(`Overall: ${overall}`);
+    for (const r of results) lines.push(`- ${r.repo}: ${r.status} - ${r.detail}`);
+    return { ok: true, data: { status: overall, results, text: lines.join("\n") }, sideEffects: [], reportFragments: ["repos check"] };
   }
 };
 

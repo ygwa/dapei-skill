@@ -1,5 +1,5 @@
 import { workspaceInit } from "./domains/workspace.ts";
-import { reposAdd, reposAnalyze, reposList, reposSync } from "./domains/repos.ts";
+import { reposAdd, reposAnalyze, reposCheck, reposList, reposSync } from "./domains/repos.ts";
 import { featureClose, featureCreate, featureReview, featureStatus } from "./domains/feature.ts";
 import { contextBuild } from "./domains/context.ts";
 import { workflowRunStage } from "./domains/workflow.ts";
@@ -20,6 +20,7 @@ export const capabilitySpecs: AnyCap[] = [
   reposAdd,
   reposSync,
   reposList,
+  reposCheck,
   reposAnalyze,
   featureCreate,
   contextBuild,

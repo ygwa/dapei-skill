@@ -1,0 +1,50 @@
+' ============================================================
+' 03 Feature 生命周期 DAG — 8 阶段
+' ============================================================
+@startuml docs/plantuml/03-feature-lifecycle
+!theme plain
+
+skinparam rectangle {
+  FontSize 11
+}
+
+title Feature Lifecycle DAG — 8 Stages
+
+skinparam state {
+  BackgroundColor #FFFFFF
+  BorderColor #333333
+  FontSize 11
+  ArrowColor #333333
+}
+
+title Feature Lifecycle DAG — 8 Stages
+
+state A as "analyze-current-state" #lightblue
+state G as "gap-analysis" #lightyellow
+state SD as "solution-design" #lightyellow
+state TB as "task-breakdown" #lightgreen
+state I as "implementation" #lightgreen
+state V as "local-validation" #lightgreen
+state R as "architecture-review" #plum
+state C as "acceptance" #plum
+
+A --> G
+G --> SD
+SD --> TB
+TB --> I
+I --> V
+V --> R
+R --> C
+
+note right of A : outputs: 01-current-state.md
+note right of G : outputs: 02-gap-analysis.md
+note right of SD : outputs: 03/04-*.md
+note right of TB : outputs: 05-task-breakdown.md
+note right of I : outputs: code changes
+note right of V : outputs: validation/test-report.md
+note right of R : outputs: architecture-review.md
+note right of C : outputs: acceptance + release-notes.md
+
+caption Stage confirmation required: solution-design | implementation | acceptance
+
+@enduml

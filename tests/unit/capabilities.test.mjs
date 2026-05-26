@@ -7,6 +7,26 @@ import { execFileSync } from 'node:child_process';
 
 const core = await import('../../packages/core/src/index.ts');
 
+function setupLocalGitRepo(repoPath, rootDir) {
+  execFileSync('git', ['init', repoPath], { encoding: 'utf8' });
+  execFileSync('git', ['-C', repoPath, 'config', 'user.name', 'test'], { encoding: 'utf8' });
+  execFileSync('git', ['-C', repoPath, 'config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+  writeFileSync(join(repoPath, 'README.md'), '# test');
+  execFileSync('git', ['-C', repoPath, 'add', '.'], { encoding: 'utf8' });
+  execFileSync('git', ['-C', repoPath, 'commit', '-m', 'init'], { encoding: 'utf8' });
+}
+
+function setupBareRemote(tmp) {
+  const remote = join(tmp, 'remote.git');
+  execFileSync('git', ['init', '--bare', remote], { encoding: 'utf8' });
+  return remote;
+}
+
+function addOriginAndPush(repoPath, remote) {
+  execFileSync('git', ['-C', repoPath, 'remote', 'add', 'origin', remote], { encoding: 'utf8' });
+  execFileSync('git', ['-C', repoPath, 'push', '-u', 'origin', 'main'], { encoding: 'utf8' });
+}
+
 test('runCapability throws on unknown capability', async () => {
   const tmp = mkdtempSync(join(tmpdir(), 'dapei-cap-'));
   try {
@@ -95,14 +115,11 @@ test('feature.create creates feature workspace with all dirs', async () => {
     mkdirSync(join(tmp, 'features'), { recursive: true });
     writeFileSync(join(tmp, '.dapei', 'workspace.yaml'), 'version: "0.2"\n');
 
-    // Setup a real git repo in repos/sample-app
+    // Setup a real git repo in repos/sample-app with a bare remote so fetch origin works
     const repoPath = join(tmp, 'repos', 'sample-app');
-    execFileSync('git', ['init', repoPath], { encoding: 'utf8' });
-    execFileSync('git', ['-C', repoPath, 'config', 'user.name', 'test'], { encoding: 'utf8' });
-    execFileSync('git', ['-C', repoPath, 'config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
-    writeFileSync(join(repoPath, 'README.md'), '# test');
-    execFileSync('git', ['-C', repoPath, 'add', '.'], { encoding: 'utf8' });
-    execFileSync('git', ['-C', repoPath, 'commit', '-m', 'init'], { encoding: 'utf8' });
+    setupLocalGitRepo(repoPath, tmp);
+    const remote = setupBareRemote(tmp);
+    addOriginAndPush(repoPath, remote);
 
     const { result } = await core.runCapability('feature.create', { name: 'my-feature', repos: 'sample-app', objective: 'test objective' }, { rootDir: tmp, now: new Date() });
 
@@ -129,12 +146,9 @@ test('workflow.runStage requires confirmation for solution-design', async () => 
 
     mkdirSync(join(tmp, 'repos'), { recursive: true });
     const repoPath = join(tmp, 'repos', 'sample-app');
-    execFileSync('git', ['init', repoPath], { encoding: 'utf8' });
-    execFileSync('git', ['-C', repoPath, 'config', 'user.name', 'test'], { encoding: 'utf8' });
-    execFileSync('git', ['-C', repoPath, 'config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
-    writeFileSync(join(repoPath, 'README.md'), '# test');
-    execFileSync('git', ['-C', repoPath, 'add', '.'], { encoding: 'utf8' });
-    execFileSync('git', ['-C', repoPath, 'commit', '-m', 'init'], { encoding: 'utf8' });
+    setupLocalGitRepo(repoPath, tmp);
+    const remote = setupBareRemote(tmp);
+    addOriginAndPush(repoPath, remote);
 
     const { result: fResult } = await core.runCapability('feature.create', { name: 'test-feature', repos: 'sample-app' }, { rootDir: tmp, now: new Date() });
     assert.equal(fResult.ok, true);
@@ -156,12 +170,9 @@ test('workflow.runStage succeeds with confirmation', async () => {
 
     mkdirSync(join(tmp, 'repos'), { recursive: true });
     const repoPath = join(tmp, 'repos', 'sample-app');
-    execFileSync('git', ['init', repoPath], { encoding: 'utf8' });
-    execFileSync('git', ['-C', repoPath, 'config', 'user.name', 'test'], { encoding: 'utf8' });
-    execFileSync('git', ['-C', repoPath, 'config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
-    writeFileSync(join(repoPath, 'README.md'), '# test');
-    execFileSync('git', ['-C', repoPath, 'add', '.'], { encoding: 'utf8' });
-    execFileSync('git', ['-C', repoPath, 'commit', '-m', 'init'], { encoding: 'utf8' });
+    setupLocalGitRepo(repoPath, tmp);
+    const remote = setupBareRemote(tmp);
+    addOriginAndPush(repoPath, remote);
 
     await core.runCapability('feature.create', { name: 'test-feature', repos: 'sample-app' }, { rootDir: tmp, now: new Date() });
 

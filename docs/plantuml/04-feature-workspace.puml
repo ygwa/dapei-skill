@@ -1,0 +1,72 @@
+' ============================================================
+' 04 Feature Workspace 目录结构
+' ============================================================
+@startuml docs/plantuml/04-feature-workspace
+!theme plain
+
+skinparam rectangle {
+  FontSize 11
+  BackgroundColor #FFFFFF
+}
+
+title Feature Workspace — features/feature/
+
+folder "features/feature/" as F #AliceBlue {
+  folder "repos/" as RE #lightyellow {
+    rectangle "repo1 (git worktree)"
+    rectangle "repo2 (git worktree)"
+  }
+
+  folder "docs/" as DO #lightgreen {
+    rectangle "01-current-state.md"
+    rectangle "02-gap-analysis.md"
+    rectangle "03-business-design.md"
+    rectangle "04-technical-design.md"
+    rectangle "05-task-breakdown.md"
+    rectangle "06-acceptance.md"
+  }
+
+  folder "context/" as CT #lightgreen {
+    rectangle "runtime-context.md"
+    rectangle "business-context.md"
+    rectangle "architecture-context.md"
+    rectangle "repo-context.md"
+    rectangle "feature-context.md"
+    rectangle "constraints.md"
+  }
+
+  folder "memory/" as ME #lightgreen {
+    rectangle "decision-log.md"
+    rectangle "risk.md"
+    rectangle "open-questions.md"
+  }
+
+  folder "reports/" as RP #lightgreen {
+    rectangle "feature-progress.md"
+    rectangle "daily-report.md"
+    rectangle "validation-report.md"
+    rectangle "architecture-review.md"
+    rectangle "stage-*.completed"
+  }
+
+  folder "tasks/" as TS #lightgreen {
+    rectangle "backlog.md"
+    rectangle "plan.md"
+  }
+
+  folder "tests/" as TE #lightgreen {
+    rectangle "test-plan.md"
+  }
+
+  rectangle "feature.yaml"
+}
+
+note bottom of F
+  feature.yaml defines:
+  name, objective, owner
+  isolation: worktree or symlink
+  repos, scope, acceptance
+  risk_level, dependencies
+end note
+
+@enduml

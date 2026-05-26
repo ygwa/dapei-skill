@@ -72,6 +72,13 @@ const routes: Route[] = [
     confidence: 0.9
   },
   {
+    pattern: /^(?=.*\brepos?\b)(?=.*\bcheck\b).*/i,
+    capability: "repos.check",
+    inputBuilder: (t, ctx) => ({ target: ctx.target || extractTarget(t) || "--all" }),
+    reason: "repo check intent",
+    confidence: 0.92
+  },
+  {
     pattern: /^(?=.*\bcreate\b)(?=.*\bfeature\b).*/i,
     capability: "feature.create",
     inputBuilder: (t, ctx) => ({ name: ctx.name || extractFeatureName(t), repos: ctx.repos || extractRepos(t), objective: ctx.objective || extractObjective(t) || "TBD" }),

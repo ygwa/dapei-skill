@@ -23,6 +23,7 @@ function parseLegacy(args: string[]): { capability: string; input: Record<string
   if (a === "repos" && b === "add") return { capability: "repos.add", input: { name: c, url: rest[0] } };
   if (a === "repos" && b === "sync") return { capability: "repos.sync", input: { target: c } };
   if (a === "repos" && b === "list") return { capability: "repos.list", input: {} };
+  if (a === "repos" && b === "check") return { capability: "repos.check", input: { target: c } };
   if (a === "repos" && b === "analyze") return { capability: "repos.analyze", input: { target: c } };
   if (a === "cognitive" && b === "discover") return { capability: "cognitive.discover", input: { target: c || "--all" } };
   if (a === "cognitive" && b === "list") return { capability: "cognitive.artifact.list", input: {} };
@@ -73,7 +74,7 @@ async function main() {
     }
 
     if (cli.args.length === 0 && cli.cmd === "legacy") {
-      console.log(`Usage:\n  dapei init workspace\n  dapei repos add <name> <git-url>\n  dapei repos sync <name|--all>\n  dapei repos list\n  dapei repos analyze <name|--all>\n  dapei create feature <name> --repos repo1,repo2 [--objective \"...\"]\n  dapei context build <feature> [--stage <stage>]\n  dapei run workflow <feature> --stage <stage>\n  dapei validate feature <name>\n  dapei review feature <name>\n  dapei report feature <name>\n  dapei close feature <name>\n  dapei status feature`);
+      console.log(`Usage:\n  dapei init workspace\n  dapei repos add <name> <git-url>\n  dapei repos sync <name|--all>\n  dapei repos list\n  dapei repos check <name|--all>\n  dapei repos analyze <name|--all>\n  dapei create feature <name> --repos repo1,repo2 [--objective \"...\"]\n  dapei context build <feature> [--stage <stage>]\n  dapei run workflow <feature> --stage <stage>\n  dapei validate feature <name>\n  dapei review feature <name>\n  dapei report feature <name>\n  dapei close feature <name>\n  dapei status feature`);
       process.exitCode = 1;
       return;
     }

@@ -1,0 +1,42 @@
+@startjson capability-spec
+{
+  "CapabilitySpec<I,O>": {
+    "id": "string",
+    "version": "string",
+    "inputSchema": {
+      "required": ["string"],
+      "properties": {
+        "fieldName": {
+          "type": "string | number | boolean | object | array",
+          "enum": [],
+          "minLength": "number"
+        }
+      },
+      "additionalProperties": "boolean"
+    },
+    "confirmGate": "solution-design | implementation | acceptance | null",
+    "outputs": ["string"],
+    "execute": "(ctx, input) => Promise<CapabilityResult<O>>"
+  },
+  "CapabilityResult<T>": {
+    "ok": "boolean",
+    "data": "T",
+    "sideEffects": ["string"],
+    "reportFragments": ["string"]
+  },
+  "CapabilityContext": {
+    "rootDir": "string",
+    "now": "Date"
+  },
+  "Capabilities_registered": [
+    "workspace.init",
+    "repos.add", "repos.sync", "repos.list", "repos.check", "repos.analyze",
+    "feature.create", "feature.close", "feature.review", "feature.status",
+    "context.build", "workflow.runStage",
+    "validation.run", "guardrailRun", "feature.report",
+    "cognitive.discover", "cognitive.artifact.validate",
+    "cognitive.artifact.upsert", "cognitive.artifact.list",
+    "cognitive.state.suggest"
+  ]
+}
+@endjson

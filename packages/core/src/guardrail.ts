@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { runSafe } from "../../runtime-adapters/src/system.ts";
 import { loadCognitiveIndex } from "./cognitive-index.ts";
+import { defaultBranch, featureRepoNames } from "./capabilities/shared.ts";
 
 export type GuardrailStatus = "PASS" | "WARN" | "FAIL";
 
@@ -69,9 +70,11 @@ function parseSimpleYamlRules(content: string): Array<Record<string, any>> {
   return rules;
 }
 
-function modifiedFiles(rootDir: string): string[] {
+function modifiedFiles(rootDir: string, opts?: { ignoreSubmodules?: boolean }): string[] {
   if (!existsSync(join(rootDir, ".git"))) return [];
-  const output = runSafe("git", ["status", "--porcelain"], rootDir);
+  const args = ["status", "--porcelain"];
+  if (opts?.ignoreSubmodules) args.push("--ignore-submodules=all");
+  const output = runSafe("git", args, rootDir);
   if (!output) return [];
   return output
     .split("\n")
@@ -81,23 +84,70 @@ function modifiedFiles(rootDir: string): string[] {
     .filter(Boolean);
 }
 
+function readWorkspaceConfig(rootDir: string): { guardrailMode: string; submodulePointerPolicy: "ignore" | "commit" } {
+  const workspaceYaml = join(rootDir, ".dapei", "workspace.yaml");
+  let guardrailMode = "report";
+  let submodulePointerPolicy: "ignore" | "commit" = "ignore";
+  if (!existsSync(workspaceYaml)) return { guardrailMode, submodulePointerPolicy };
+  const content = readFileSync(workspaceYaml, "utf8");
+  const m = content.match(/guardrail_mode:\s*["']?([a-z]+)["']?/);
+  if (m) guardrailMode = m[1];
+  const p = content.match(/submodule_pointer_policy:\s*["']?([a-z]+)["']?/);
+  if (p && (p[1] === "ignore" || p[1] === "commit")) submodulePointerPolicy = p[1];
+  return { guardrailMode, submodulePointerPolicy };
+}
+
+function baseRepoHealthFindings(rootDir: string, feature: string): { findings: string[]; status: GuardrailStatus } {
+  const findings: string[] = [];
+  let status: GuardrailStatus = "PASS";
+
+  const featureYamlPath = join(rootDir, "features", feature, "feature.yaml");
+  if (!existsSync(featureYamlPath)) return { findings, status };
+  const repos = featureRepoNames(readFileSync(featureYamlPath, "utf8"));
+
+  for (const repo of repos) {
+    const repoPath = join(rootDir, "repos", repo);
+    if (!existsSync(join(repoPath, ".git"))) {
+      findings.push(`BASE-001 base repo missing: repos/${repo} (Severity: high)`);
+      status = "FAIL";
+      continue;
+    }
+
+    const dirty = runSafe("git", ["-C", repoPath, "status", "--porcelain"], rootDir);
+    if (dirty) {
+      findings.push(`BASE-002 base repo dirty (禁止在基座仓库开发): repos/${repo} (Severity: high)`);
+      status = "FAIL";
+    }
+
+    const base = defaultBranch(repoPath);
+    const current = runSafe("git", ["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"], rootDir) || "HEAD";
+    if (current !== base) {
+      findings.push(`BASE-003 base repo not on default branch (expected '${base}', got '${current}'): repos/${repo} (Severity: high)`);
+      status = "FAIL";
+    }
+  }
+
+  return { findings, status };
+}
+
 export function runGuardrail(rootDir: string, feature: string): { status: GuardrailStatus; findings: string[]; mode: string; reportPath: string } {
   const featureDir = join(rootDir, "features", feature);
   if (!existsSync(featureDir)) {
     throw new Error(`feature not found: ${feature}`);
   }
 
-  const workspaceYaml = join(rootDir, ".dapei", "workspace.yaml");
-  let mode = "report";
-  if (existsSync(workspaceYaml)) {
-    const content = readFileSync(workspaceYaml, "utf8");
-    const m = content.match(/guardrail_mode:\s*["']?([a-z]+)["']?/);
-    if (m) mode = m[1];
-  }
+  const { guardrailMode: mode, submodulePointerPolicy } = readWorkspaceConfig(rootDir);
+  const ignoreSubmodules = submodulePointerPolicy === "ignore";
 
   const findings: string[] = [];
   let status: GuardrailStatus = "PASS";
-  const filesChanged = modifiedFiles(rootDir);
+  const filesChanged = modifiedFiles(rootDir, { ignoreSubmodules });
+
+  // Base repo pool must be clean & on default branch for any repo referenced by feature.yaml.
+  // This enforces the "repos is read-only base pool" discipline.
+  const baseHealth = baseRepoHealthFindings(rootDir, feature);
+  findings.push(...baseHealth.findings);
+  if (baseHealth.status === "FAIL") status = "FAIL";
 
   if (!existsSync(join(featureDir, "feature.yaml"))) {
     findings.push("LAYER-002 missing feature.yaml (Severity: high)");

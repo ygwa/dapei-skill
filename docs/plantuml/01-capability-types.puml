@@ -1,0 +1,78 @@
+' ============================================================
+' 01 Capability 数据结构 — TypeScript 接口
+' ============================================================
+@startuml docs/plantuml/01-capability-types
+!theme plain
+
+skinparam class {
+  BackgroundColor #F8F9FA
+  BorderColor #3B82F6
+  FontSize 11
+  ArrowColor #333333
+}
+
+title Capability Type Definitions
+
+class CapabilitySpec<I,O> {
+  +id: string
+  +version: string
+  +inputSchema: InputSchema
+  +confirmGate: string | null
+  +outputs: string[]
+  +execute(ctx, input): Promise<CapabilityResult<O>>
+}
+
+class InputSchema {
+  +required: string[]
+  +properties: Record<string, FieldDef>
+  +additionalProperties: boolean
+}
+
+class FieldDef {
+  +type: string
+  +enum: any[]
+  +minLength: number
+}
+
+class CapabilityResult<T> {
+  +ok: boolean
+  +data: T
+  +sideEffects: string[]
+  +reportFragments: string[]
+}
+
+class CapabilityContext {
+  +rootDir: string
+  +now: Date
+}
+
+class CapabilityRegistry {
+  +map: Map<string, CapabilitySpec>
+  +register(spec): void
+  +registerMany(specs): void
+  +get(id): CapabilitySpec
+  +all(): Record<string, CapabilitySpec>
+}
+
+CapabilitySpec --> InputSchema : inputSchema
+InputSchema --> FieldDef : properties
+CapabilitySpec --> CapabilityResult : returns
+CapabilitySpec --> CapabilityContext : ctx
+CapabilityRegistry --> CapabilitySpec : manages
+
+note bottom of CapabilitySpec
+  confirmGate values:
+  "solution-design" | "implementation" | "acceptance" | null
+end note
+
+note bottom of CapabilityRegistry
+  19 specs registered:
+  workspace.init
+  repos.add/sync/list/check/analyze
+  feature.create/close/review/status
+  context.build, workflow.runStage
+  validation.run, guardrailRun, feature.report
+  cognitive.discover/validate/upsert/list/state.suggest
+end note
+
+@enduml

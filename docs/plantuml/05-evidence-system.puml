@@ -1,0 +1,53 @@
+' ============================================================
+' 05 证据系统 — Evidence Contract (Cognitive Runtime 核心)
+' ============================================================
+@startuml docs/plantuml/05-evidence-system
+!theme plain
+
+skinparam rectangle {
+  FontSize 11
+}
+
+title Evidence System — Cognitive Runtime 核心契约
+
+title Evidence System — Cognitive Runtime Core Contract
+
+package "evidence.ts" as E {
+  rectangle "fact" #lightgreen
+  rectangle "inference" #lightyellow
+  rectangle "unknown" #lightcoral
+}
+
+package "BehaviorArtifacts" as ART {
+  rectangle "behavior-id.yaml"
+  rectangle "state-machines-entity.yaml"
+}
+
+package "CognitiveIndex" as IDX {
+  rectangle "index.yaml"
+}
+
+E --> ART
+ART --> IDX
+
+note top of fact
+  requires sources[]
+  Directly verifiable facts
+end note
+
+note top of inference
+  requires derived_from[]
+  Evidence-based inference
+end note
+
+note top of unknown
+  requires reason
+  Explicitly labeled unknowns
+end note
+
+note bottom of IDX
+  Cognitive index manifest
+  Links all validated artifacts
+end note
+
+@enduml

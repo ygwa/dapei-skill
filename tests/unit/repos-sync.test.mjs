@@ -63,13 +63,12 @@ test('reposSync reports pull or rebased status', async () => {
     const { result } = await core.runCapability('repos.sync', { target: 'local-repo' }, { rootDir: tmp, now: new Date() });
 
     const firstResult = result.data.results[0];
-    // reposSync can produce: pull success, rebase success, fetch, or sync conflict
+    // reposSync can produce: update (hash changed), up-to-date (no change), or error
     assert.ok(
-      firstResult.includes('pulled') ||
-      firstResult.includes('rebased') ||
-      firstResult.includes('fetch') ||
-      firstResult.includes('sync conflict'),
-      `Expected pull/rebase/fetch/sync-conflict, got: ${firstResult}`
+      firstResult.includes('up-to-date') ||
+      firstResult.includes('->') ||
+      firstResult.includes('update'),
+      `Expected up-to-date or update format, got: ${firstResult}`
     );
   } finally {
     rmSync(tmp, { recursive: true, force: true });

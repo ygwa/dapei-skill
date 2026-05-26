@@ -68,6 +68,7 @@ echo "PASS"
 echo -n "test 6 - repos lifecycle: "
 DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" repos add sample-app "$FIXTURE_REPO" >/dev/null 2>&1
 DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" repos list >/dev/null 2>&1
+DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" repos check --all >/dev/null 2>&1
 DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" repos analyze --all >/dev/null 2>&1
 [[ -f "$TEST_DIR/docs/as-is/repo-inventory.md" ]] || { echo "FAIL"; exit 1; }
 echo "PASS"
@@ -92,11 +93,42 @@ echo -n "test 9 - cognitive discover scaffold: "
 DAPEI_WORKSPACE_ROOT="$TEST_DIR" node "$SCRIPT_ROOT/engine/dapei-engine.ts" run --capability cognitive.discover --input '{"target":"sample-app"}' >/dev/null 2>&1
 [[ -f "$TEST_DIR/docs/as-is/behavior/_candidates.yaml" ]] || { echo "FAIL missing: _candidates.yaml"; exit 1; }
 grep -q "awaiting_agent_analysis" "$TEST_DIR/docs/as-is/behavior/_candidates.yaml" || { echo "FAIL missing: awaiting_agent_analysis status"; exit 1; }
-cp "$FIXTURE_SOURCE/expected/behavior/order-create.yaml" "$TEST_DIR/order-create.yaml"
+cp "$FIXTURE_SOURCE/__expected__/behavior/order-create.yaml" "$TEST_DIR/order-create.yaml"
 UPSERT_INPUT=$(node -e "const fs=require('fs'); console.log(JSON.stringify({type:'behavior', content: fs.readFileSync('$TEST_DIR/order-create.yaml','utf8')}))")
 DAPEI_WORKSPACE_ROOT="$TEST_DIR" node "$SCRIPT_ROOT/engine/dapei-engine.ts" run --capability cognitive.artifact.upsert --input "$UPSERT_INPUT" >/dev/null 2>&1
 [[ -f "$TEST_DIR/docs/as-is/behavior/order-create.yaml" ]] || { echo "FAIL missing: behavior artifact"; exit 1; }
 grep -q "order-create" "$TEST_DIR/.dapei/cognitive/index.yaml" || { echo "FAIL missing: index entry"; exit 1; }
+echo "PASS"
+
+echo -n "test 10 - parallel features (same repo): "
+DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" create feature smoke-feature-2 --repos sample-app --objective "Parallel feature should work" >/dev/null 2>&1
+[[ -e "$TEST_DIR/features/smoke-feature-2/repos/sample-app/.git" ]] || { echo "FAIL"; exit 1; }
+echo "PASS"
+
+echo -n "test 11 - worktree conflict detection (same branch bound elsewhere): "
+# Manually bind branch feature/conflict-feature to a worktree outside features/
+git -C "$TEST_DIR/repos/sample-app" branch feature/conflict-feature >/dev/null 2>&1 || true
+CONFLICT_WT="$TEST_DIR/conflict-wt"
+git -C "$TEST_DIR/repos/sample-app" worktree add "$CONFLICT_WT" feature/conflict-feature >/dev/null 2>&1
+set +e
+out=$(DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" create feature conflict-feature --repos sample-app --objective "should fail due to worktree conflict" 2>&1)
+code=$?
+set -e
+if [[ "$code" -eq 0 ]]; then
+  echo "FAIL expected error"
+  exit 1
+fi
+# Current CLI prints message only (without error code), so assert on the conflict message.
+echo "$out" | grep -q "already checked out by worktree" || { echo "FAIL missing conflict message"; exit 1; }
+# Cleanup manual worktree
+git -C "$TEST_DIR/repos/sample-app" worktree remove "$CONFLICT_WT" --force >/dev/null 2>&1 || true
+git -C "$TEST_DIR/repos/sample-app" worktree prune >/dev/null 2>&1 || true
+echo "PASS"
+
+echo -n "test 12 - feature close cleans worktree: "
+DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" close feature smoke-feature --yes >/dev/null 2>&1
+[[ ! -e "$TEST_DIR/features/smoke-feature/repos/sample-app" ]] || { echo "FAIL worktree path still exists"; exit 1; }
+git -C "$TEST_DIR/repos/sample-app" worktree list | grep -q "$TEST_DIR/features/smoke-feature/repos/sample-app" && { echo "FAIL worktree still bound"; exit 1; }
 echo "PASS"
 
 echo "=== all smoke tests passed ==="
