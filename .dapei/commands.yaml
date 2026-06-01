@@ -118,3 +118,137 @@ commands:
       - docs/decisions/<feature>-decisions.md
       - docs/feature-impact/<feature>.md
 
+  - name: workspace-validate
+    cli: "@dapei workspace validate"
+    purpose: check if workspace conforms to dapei structure specification
+    inputs: []
+    workflow:
+      - check-dapei-dir
+      - check-repos-dir
+      - check-features-dir
+    outputs: []
+
+  - name: workspace-status
+    cli: "@dapei workspace status"
+    purpose: show workspace overview - repo count, feature count, conformance
+    inputs: []
+    workflow:
+      - count-repos
+      - count-features
+      - check-conformance
+    outputs: []
+
+  - name: workflow-status
+    cli: "@dapei workflow status <feature>"
+    purpose: get current stage and completed stages for a feature
+    inputs:
+      - feature_name
+    workflow:
+      - read-progress
+      - list-completed-stages
+    outputs:
+      - features/<feature>/reports/feature-progress.md
+
+  - name: feature-status
+    cli: "@dapei feature status"
+    purpose: list all features and their current stages
+    inputs: []
+    workflow:
+      - scan-features
+      - emit-status
+    outputs: []
+
+  - name: feature-stage
+    cli: "@dapei feature stage <feature> <action> [--stage <stage>]"
+    purpose: get or set the current stage of a feature
+    inputs:
+      - feature_name
+      - action
+      - stage
+    workflow:
+      - get-stage
+      - set-stage
+    outputs:
+      - features/<feature>/reports/feature-progress.md
+
+  - name: feature-tasks
+    cli: "@dapei feature tasks <feature> <action> [--content <content>]"
+    purpose: list or append to feature backlog tasks
+    inputs:
+      - feature_name
+      - action
+      - content
+    workflow:
+      - read-backlog
+      - append-task
+    outputs:
+      - features/<feature>/tasks/backlog.md
+
+  - name: validation-detect
+    cli: "@dapei validation detect <repo>"
+    purpose: detect available test and validation commands for a repo
+    inputs:
+      - repo_name
+    workflow:
+      - read-manifest
+      - detect-commands
+    outputs: []
+
+  - name: validation-execute
+    cli: "@dapei validation execute <repo> <command>"
+    purpose: execute a validation command and return output
+    inputs:
+      - repo_name
+      - command
+    workflow:
+      - run-command
+      - capture-output
+    outputs: []
+
+  - name: memory-append
+    cli: "@dapei memory append <feature> <type> <content>"
+    purpose: record a decision, risk, question, or note to feature memory
+    inputs:
+      - feature_name
+      - type
+      - content
+    workflow:
+      - append-memory-entry
+    outputs:
+      - features/<feature>/memory/<type>.md
+
+  - name: repos-remove
+    cli: "@dapei repos remove <name> [--force]"
+    purpose: remove a repo from the registry and delete its directory
+    inputs:
+      - repo_name
+      - force
+    workflow:
+      - check-worktree-usage
+      - remove-from-registry
+      - delete-repo
+    outputs: []
+
+  - name: workspace-report
+    cli: "@dapei workspace report"
+    purpose: generate a workspace-level health report aggregating repos and features
+    inputs: []
+    workflow:
+      - collect-repos-status
+      - collect-features-progress
+      - emit-workspace-report
+    outputs: []
+
+  - name: audit-query
+    cli: "@dapei audit query [--since <date>] [--until <date>] [--capability <cap>] [--feature <feat>]"
+    purpose: query the capability audit log with filters
+    inputs:
+      - since
+      - until
+      - capability
+      - feature
+    workflow:
+      - parse-audit-log
+      - filter-entries
+    outputs: []
+

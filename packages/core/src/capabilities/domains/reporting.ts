@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { detectTestCommands, featureRepoNames, requireFields } from "../shared.ts";
@@ -6,8 +7,8 @@ import { runGuardrail } from "../../guardrail.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
 
-export const guardrailRun: AnyCap = {
-  id: "guardrail.run",
+export const featureGuardrail: AnyCap = {
+  id: "feature.guardrail",
   version: "1.0.0",
   inputSchema: { required: ["feature"] },
   async execute(ctx, input) {
@@ -68,6 +69,63 @@ export const validationRun: AnyCap = {
     const guardrailReport = join(featureDir, "reports", "guardrail-report.md");
     write(valReport, `# Validation Report\n\n- Feature: ${feature}\n- Status: ${status}\n- Test Status: ${status !== "PASS" ? "FAIL" : "PASS"}\n- Guardrail Status: ${guardrailStatus}\n- Errors: ${errors.length ? errors.join("; ") : "none"}\n- Test Report: reports/test-report.md\n- Guardrail Report: reports/guardrail-report.md\n`);
     return { ok: true, data: { status, errors }, sideEffects: ["validation reports"], reportFragments: ["validation done"] };
+  }
+};
+
+export const validationDetect: AnyCap = {
+  id: "validation.detect",
+  version: "1.0.0",
+  inputSchema: { required: ["repo"], properties: { repo: { type: "string", minLength: 1 } }, additionalProperties: false },
+  async execute(ctx, input) {
+    requireFields(input, ["repo"]);
+    const repo = String(input.repo);
+    const p = workspacePaths(ctx.rootDir);
+    const repoPath = join(p.reposDir, repo);
+    const commands = detectTestCommands(repoPath);
+    return { ok: true, data: { repo, commands }, sideEffects: [], reportFragments: ["test commands detected"] };
+  }
+};
+
+export const validationExecute: AnyCap = {
+  id: "validation.execute",
+  version: "1.0.0",
+  inputSchema: { required: ["repo", "command"], properties: { repo: { type: "string", minLength: 1 }, command: { type: "string", minLength: 1 } }, additionalProperties: false },
+  async execute(ctx, input) {
+    requireFields(input, ["repo", "command"]);
+    const repo = String(input.repo);
+    const command = String(input.command);
+    const p = workspacePaths(ctx.rootDir);
+    const repoPath = join(p.reposDir, repo);
+    const [bin, ...args] = command.split(" ");
+    let exitCode = 0;
+    let output = "";
+    try {
+      output = run(bin, args, repoPath);
+    } catch (e: any) {
+      exitCode = e.status || 1;
+      output = e.stdout?.toString?.() || e.message || String(e);
+    }
+    return { ok: true, data: { repo, command, exitCode, output }, sideEffects: [], reportFragments: ["validation executed"] };
+  }
+};
+
+export const validationReport: AnyCap = {
+  id: "validation.report",
+  version: "1.0.0",
+  inputSchema: { required: ["feature"], properties: { feature: { type: "string", minLength: 1 } }, additionalProperties: false },
+  async execute(ctx, input) {
+    requireFields(input, ["feature"]);
+    const feature = String(input.feature);
+    const p = workspacePaths(ctx.rootDir);
+    const valReport = join(p.featuresDir, feature, "reports", "validation-report.md");
+    const testReport = join(p.featuresDir, feature, "reports", "test-report.md");
+    const guardrailReport = join(p.featuresDir, feature, "reports", "guardrail-report.md");
+    const results: Record<string, { exists: boolean; path?: string }> = {
+      "validation-report.md": { exists: existsSync(valReport), path: existsSync(valReport) ? relative(p.rootDir, valReport) : undefined },
+      "test-report.md": { exists: existsSync(testReport), path: existsSync(testReport) ? relative(p.rootDir, testReport) : undefined },
+      "guardrail-report.md": { exists: existsSync(guardrailReport), path: existsSync(guardrailReport) ? relative(p.rootDir, guardrailReport) : undefined }
+    };
+    return { ok: true, data: { feature, reports: results }, sideEffects: [], reportFragments: ["validation report accessed"] };
   }
 };
 

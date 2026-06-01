@@ -17,9 +17,12 @@
 |------|------------|
 | 创建新 feature | `feature.create` |
 | 查看 feature 状态 | `feature.status` |
+| 获取/设置当前 stage | `feature.stage` |
+| 管理 backlog 任务 | `feature.tasks` |
+| 生成每日 review | `feature.review` |
 | 报告 feature 进展 | `feature.report` |
-| 关闭 feature | `feature.close` |
 | 执行 guardrail 检查 | `feature.guardrail` |
+| 关闭 feature | `feature.close` |
 
 ---
 

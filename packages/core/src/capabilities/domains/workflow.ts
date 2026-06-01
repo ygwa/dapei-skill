@@ -44,3 +44,30 @@ export const workflowRunStage: AnyCap = {
     return { ok: true, data: { stage, marker: relative(p.rootDir, marker) }, sideEffects: ["stage marker"], reportFragments: ["workflow stage completed"] };
   }
 };
+
+export const workflowStatus: AnyCap = {
+  id: "workflow.status",
+  version: "1.0.0",
+  inputSchema: { required: ["feature"], properties: { feature: { type: "string", minLength: 1 } }, additionalProperties: false },
+  async execute(ctx, input) {
+    requireFields(input, ["feature"]);
+    const feature = String(input.feature);
+    const p = workspacePaths(ctx.rootDir);
+    const featureDir = join(p.featuresDir, feature);
+    const progressFile = join(featureDir, "reports", "feature-progress.md");
+
+    if (!existsSync(progressFile)) {
+      return { ok: true, data: { feature, stage: null, completed: [] }, sideEffects: [], reportFragments: [] };
+    }
+
+    const content = read(progressFile);
+    const stageMatch = content.match(/## Stage: (\S+)/);
+    const currentStage = stageMatch ? stageMatch[1] : null;
+    const completed: string[] = [];
+    for (const file of ["analyze-current-state", "gap-analysis", "solution-design", "task-breakdown", "implementation", "local-validation", "architecture-review", "acceptance"]) {
+      if (existsSync(join(featureDir, "reports", `stage-${file}.completed`))) completed.push(file);
+    }
+
+    return { ok: true, data: { feature, currentStage, completed }, sideEffects: [], reportFragments: [] };
+  }
+};

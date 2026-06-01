@@ -16,8 +16,11 @@
 | 意图 | Capability |
 |------|------------|
 | 初始化新 workspace | `workspace.init` |
+| 生成 workspace 健康报告 | `workspace.report` |
 | 校验 workspace 结构 | `workspace.validate` |
 | 查看 workspace 概览 | `workspace.status` |
+| 记录决策/风险/问题 | `memory.append` |
+| 查询能力执行日志 | `audit.query` |
 
 ---
 

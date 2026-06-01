@@ -1,8 +1,9 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { CapabilityError } from "../../types.ts";
 import type { CapabilityResult, CapabilitySpec } from "../../types.ts";
-import { copyIfMissing, ensureDir, isConformingWorkspace, isEffectivelyEmpty, runSafe, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
+import { copyIfMissing, ensureDir, isConformingWorkspace, isEffectivelyEmpty, read, runSafe, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
+import { parseReposYamlNames } from "../shared.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
 
@@ -63,5 +64,87 @@ export const workspaceInit: AnyCap = {
     }
 
     return { ok: true, data: { message: `workspace initialized at ${p.rootDir}` }, sideEffects: ["filesystem"], reportFragments: ["workspace initialized"] };
+  }
+};
+
+export const workspaceReport: AnyCap = {
+  id: "workspace.report",
+  version: "1.0.0",
+  inputSchema: {},
+  async execute(ctx) {
+    const p = workspacePaths(ctx.rootDir);
+    const registry = join(p.dapeiDir, "repos.yaml");
+    const repos: Array<{ name: string; branch?: string; hash?: string; cloned: boolean }> = [];
+
+    if (existsSync(registry)) {
+      const names = parseReposYamlNames(read(registry));
+      for (const name of names) {
+        const repoPath = join(p.reposDir, name);
+        const cloned = existsSync(join(repoPath, ".git"));
+        if (cloned) {
+          repos.push({
+            name,
+            branch: runSafe("git", ["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"], p.rootDir) || undefined,
+            hash: runSafe("git", ["-C", repoPath, "rev-parse", "--short", "HEAD"], p.rootDir) || undefined,
+            cloned: true
+          });
+        } else {
+          repos.push({ name, cloned: false });
+        }
+      }
+    }
+
+    const features: Array<{ name: string; stage: string | null }> = [];
+    if (existsSync(p.featuresDir)) {
+      for (const name of readdirSync(p.featuresDir)) {
+        if (!existsSync(join(p.featuresDir, name, "feature.yaml"))) continue;
+        const progressFile = join(p.featuresDir, name, "reports", "feature-progress.md");
+        let stage: string | null = null;
+        if (existsSync(progressFile)) {
+          const m = read(progressFile).match(/## Stage: (\S+)/);
+          if (m) stage = m[1];
+        }
+        features.push({ name, stage });
+      }
+    }
+
+    return { ok: true, data: { repos, features }, sideEffects: [], reportFragments: ["workspace report generated"] };
+  }
+};
+
+export const workspaceValidate: AnyCap = {
+  id: "workspace.validate",
+  version: "1.0.0",
+  inputSchema: {},
+  async execute(ctx) {
+    const p = workspacePaths(ctx.rootDir);
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    if (!existsSync(join(p.dapeiDir, "workspace.yaml"))) {
+      errors.push(".dapei/workspace.yaml missing");
+    }
+    if (!existsSync(p.reposDir)) warnings.push("repos/ directory missing");
+    if (!existsSync(p.featuresDir)) warnings.push("features/ directory missing");
+    if (!existsSync(join(p.docsDir, "agents.md"))) warnings.push("docs/agents.md missing");
+
+    const status = errors.length === 0 ? (warnings.length === 0 ? "valid" : "warn") : "invalid";
+    return { ok: true, data: { status, errors, warnings }, sideEffects: [], reportFragments: ["workspace validated"] };
+  }
+};
+
+export const workspaceStatus: AnyCap = {
+  id: "workspace.status",
+  version: "1.0.0",
+  inputSchema: {},
+  async execute(ctx) {
+    const p = workspacePaths(ctx.rootDir);
+    const registry = join(p.dapeiDir, "repos.yaml");
+    const repoCount = existsSync(registry) ? parseReposYamlNames(read(registry)).length : 0;
+    const featureCount = existsSync(p.featuresDir)
+      ? readdirSync(p.featuresDir).filter((x) => existsSync(join(p.featuresDir, x, "feature.yaml"))).length
+      : 0;
+    const conforms = isConformingWorkspace(p.rootDir);
+    return { ok: true, data: { repoCount, featureCount, conforms }, sideEffects: [], reportFragments: ["workspace status"] };
   }
 };

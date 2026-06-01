@@ -17,8 +17,10 @@
 |------|------------|
 | 添加 repo 到 workspace | `repos.add` |
 | 同步 repo 最新状态 | `repos.sync` |
+| 检查 repo 健康状态 | `repos.check` |
 | 列出已管理 repo | `repos.list` |
 | 分析 repo 架构 | `repos.analyze` |
+| 移除 repo | `repos.remove` |
 
 ---
 

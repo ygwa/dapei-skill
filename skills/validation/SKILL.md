@@ -17,7 +17,8 @@
 |------|------------|
 | 发现 repo 测试命令 | `validation.detect` |
 | 执行测试并收集结果 | `validation.execute` |
-| 生成验证报告 | `validation.report` |
+| 执行完整验证流程 | `validation.run` |
+| 获取验证报告路径 | `validation.report` |
 
 ---
 

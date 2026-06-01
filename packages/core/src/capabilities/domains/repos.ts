@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
@@ -224,41 +224,107 @@ export const reposAnalyze: AnyCap = {
   async execute(ctx, input) {
     requireFields(input, ["target"]);
     const p = workspacePaths(ctx.rootDir);
-    ensureDir(join(p.docsDir, "as-is"));
-    ensureDir(join(p.docsDir, "architecture"));
     const target = String(input.target);
-    const report = join(p.docsDir, "as-is", "repo-inventory.md");
-    const technical = join(p.docsDir, "architecture", "technical-current-state.md");
-    const names = target === "--all" ? (existsSync(join(p.dapeiDir, "repos.yaml")) ? parseReposYamlNames(read(join(p.dapeiDir, "repos.yaml"))) : []) : [target];
-    let inventory = `# Repository Inventory\n\n- Generated At: ${new Date().toISOString()}\n\n`;
-    let tech = `# Technical Current State\n\n- Generated At: ${new Date().toISOString()}\n\n| Repo | Stack |\n|---|---|\n`;
+    const names = target === "--all" && existsSync(join(p.dapeiDir, "repos.yaml"))
+      ? parseReposYamlNames(read(join(p.dapeiDir, "repos.yaml")))
+      : [target];
+
+    const results: Array<{
+      name: string;
+      branch: string;
+      hash: string;
+      stack: string;
+      testCommands: string[];
+      structure: string[];
+      apiEndpoints: string[];
+      dbFiles: string[];
+      mqEvidence: string[];
+      todos: string[];
+    }> = [];
+
     for (const name of names) {
       const rp = join(p.reposDir, name);
       if (!existsSync(join(rp, ".git"))) continue;
-      const tests = detectTestCommands(rp).join(", ") || "TBD";
-      inventory += `## ${name}\n\n| Property | Value |\n|---|---|\n| Branch | ${runSafe("git", ["-C", rp, "rev-parse", "--abbrev-ref", "HEAD"], p.rootDir)} |\n| Revision | ${runSafe("git", ["-C", rp, "rev-parse", "--short", "HEAD"], p.rootDir)} |\n| Stack | ${detectRepoLanguage(rp)} |\n| Test Commands | ${tests} |\n\n`;
-      inventory += "### Module Structure (top 3 levels)\n\n```\n";
-      inventory += runSafe("find", [rp, "-maxdepth", "3", "-type", "d"], p.rootDir).split("\n").slice(0, 60).map((x: string) => x.replace(`${rp}/`, "")).join("\n") + "\n```\n\n";
-      const apiHits = runSafe("sh", ["-lc", `grep -rnE '\\.(get|post|put|delete|patch)\\s*\\(|@(Get|Post|Put|Delete|Patch|Request)Mapping' "${rp}" --include='*.js' --include='*.ts' --include='*.java' | head -30`], p.rootDir);
-      inventory += "### API Routes / Endpoints\n\n" + (apiHits ? `\
-\`\`\`\n${apiHits}\n\`\`\`\n\n` : "- No API routes detected by static scan.\n\n");
-      const dbHits = runSafe("sh", ["-lc", `find "${rp}" -type f \\( -name '*.sql' -o -path '*/migrations/*' -o -path '*/migrate/*' \\) | head -20`], p.rootDir);
-      inventory += "### Database / Data Layer Evidence\n\n" + (dbHits ? dbHits.split("\n").filter(Boolean).map((f: string) => `- ${f.replace(`${rp}/`, "")}`).join("\n") + "\n\n" : "- No database evidence detected.\n\n");
-      const mqHits = runSafe("sh", ["-lc", `grep -rliE '(kafka|rabbitmq|amqp|bull|celery|nats|SQS|SNS|EventBridge)' "${rp}" | head -15`], p.rootDir);
-      inventory += "### Message Queue / Event Evidence\n\n" + (mqHits ? mqHits.split("\n").filter(Boolean).map((f: string) => `- ${f.replace(`${rp}/`, "")}`).join("\n") + "\n\n" : "- No MQ/event evidence detected.\n\n");
-      const todoHits = runSafe("sh", ["-lc", `grep -rnE 'TODO|FIXME|HACK' "${rp}" --include='*.js' --include='*.ts' --include='*.java' --include='*.py' --include='*.go' --include='*.rs' | head -20`], p.rootDir);
-      inventory += "### Technical Debt Indicators\n\n" + (todoHits ? `\
-\`\`\`\n${todoHits}\n\`\`\`\n\n` : "- No TODO/FIXME/HACK indicators detected.\n\n");
-      tech += `| ${name} | ${detectRepoLanguage(rp)} |\n`;
+
+      const branch = runSafe("git", ["-C", rp, "rev-parse", "--abbrev-ref", "HEAD"], p.rootDir) || "";
+      const hash = runSafe("git", ["-C", rp, "rev-parse", "--short", "HEAD"], p.rootDir) || "";
+      const stack = detectRepoLanguage(rp);
+      const testCommands = detectTestCommands(rp);
+      const structure = (runSafe("find", [rp, "-maxdepth", "3", "-type", "d"], p.rootDir) || "").split("\n").slice(0, 60).map((x: string) => x.replace(`${rp}/`, ""));
+      const apiEndpoints = (runSafe("grep", ["-rnE", "\\.(get|post|put|delete|patch)\\s*\\(|@(Get|Post|Put|Delete|Patch|Request)Mapping", rp, "--include=*.js", "--include=*.ts", "--include=*.java"], p.rootDir) || "").split("\n").filter(Boolean).slice(0, 30);
+      const dbFiles = (runSafe("find", [rp, "-type", "f", "(", "-name", "*.sql", "-o", "-path", "*/migrations/*", "-o", "-path", "*/migrate/*", ")"], p.rootDir) || "").split("\n").filter(Boolean).slice(0, 20).map((f: string) => f.replace(`${rp}/`, ""));
+      const mqEvidence = (runSafe("grep", ["-rliE", "kafka|rabbitmq|amqp|bull|celery|nats|SQS|SNS|EventBridge", rp], p.rootDir) || "").split("\n").filter(Boolean).slice(0, 15).map((f: string) => f.replace(`${rp}/`, ""));
+      const todos = (runSafe("grep", ["-rnE", "TODO|FIXME|HACK", rp, "--include=*.js", "--include=*.ts", "--include=*.java", "--include=*.py", "--include=*.go", "--include=*.rs"], p.rootDir) || "").split("\n").filter(Boolean).slice(0, 20);
+
+      results.push({ name, branch, hash, stack, testCommands, structure, apiEndpoints, dbFiles, mqEvidence, todos });
     }
-    inventory += `\n## Cognitive Next Steps\n\n`;
-    inventory += `- Run \`@dapei analyze behavior for <repo>\` — Agent orients repo (tree + manifests), reads code, builds candidates\n`;
-    inventory += `- Agent writes candidate list to \`docs/as-is/behavior/_candidates.yaml\`\n`;
-    inventory += `- Deep-dive each candidate into \`docs/as-is/behavior/<id>.yaml\`\n`;
-    inventory += `- Validate with \`cognitive.artifact.upsert\` (requires evidence for kind=fact)\n`;
-    inventory += `- See \`skills/cognitive/SKILL.md\` for the discover → deep-dive protocol\n`;
-    write(report, inventory);
-    write(technical, tech + "\n## Architecture Unknowns\n\n- [ ] Service-to-service communication patterns\n");
-    return { ok: true, data: { report: relative(p.rootDir, report), technical: relative(p.rootDir, technical) }, sideEffects: ["docs generated"], reportFragments: ["repos analysis done"] };
+
+    return { ok: true, data: { repos: results }, sideEffects: [], reportFragments: ["repos scanned"] };
+  }
+};
+
+export const reposRemove: AnyCap = {
+  id: "repos.remove",
+  version: "1.0.0",
+  inputSchema: {
+    required: ["name"],
+    properties: {
+      name: { type: "string", minLength: 1 },
+      force: { type: "boolean" }
+    },
+    additionalProperties: false
+  },
+    async execute(ctx, input) {
+    requireFields(input, ["name"]);
+    const name = String(input.name);
+    const p = workspacePaths(ctx.rootDir);
+    const repoPath = join(p.reposDir, name);
+    const registry = join(p.dapeiDir, "repos.yaml");
+    if (!existsSync(join(repoPath, ".git"))) throw new CapabilityError("REPO_MISSING", `repos/${name} not found`);
+
+    // Check if any feature worktree is using this repo
+    if (existsSync(p.featuresDir)) {
+      for (const f of readdirSync(p.featuresDir)) {
+        const wt = join(p.featuresDir, f, "repos", name);
+        if (existsSync(join(wt, ".git"))) {
+          if (input.force !== true) throw new CapabilityError("REPO_IN_USE", `repos/${name} in use by feature '${f}'. use --force to override`);
+        }
+      }
+    }
+
+    // Remove from repos.yaml
+    if (existsSync(registry)) {
+      const content = read(registry);
+      const lines = content.split("\n");
+      const newLines: string[] = [];
+      let skipMode = false;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        // Start of a repo entry
+        const nameMatch = line.match(/^\s+- name:\s*"?([^"]+)"?/);
+        if (nameMatch && nameMatch[1] === name) {
+          skipMode = true;
+          continue;
+        }
+        if (skipMode) {
+          // Check if we've reached the next entry (a new "- name:" line)
+          if (line.match(/^\s+- name:\s*/)) {
+            // Exiting skip mode - this line starts a new entry, so process it normally
+            skipMode = false;
+            // fall through to push it below
+          } else {
+            // Still skipping lines belonging to removed entry
+            continue;
+          }
+        }
+        newLines.push(line);
+      }
+      write(registry, newLines.join("\n"));
+    }
+
+    // Remove the repo directory
+    runSafe("rm", ["-rf", repoPath], p.rootDir);
+
+    return { ok: true, data: { name }, sideEffects: ["repo removed", "registry updated"], reportFragments: [`repos ${name} removed`] };
   }
 };

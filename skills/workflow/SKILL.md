@@ -16,8 +16,8 @@
 | 意图 | Capability |
 |------|------------|
 | 运行单个 stage | `workflow.runStage` |
-| 构建 context bundle | `context.build` |
 | 查看 workflow 状态 | `workflow.status` |
+| 构建 context bundle | `context.build` |
 
 ---
 

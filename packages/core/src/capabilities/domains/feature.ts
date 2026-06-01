@@ -140,6 +140,94 @@ export const featureStatus: AnyCap = {
   }
 };
 
+export const featureStage: AnyCap = {
+  id: "feature.stage",
+  version: "1.0.0",
+  inputSchema: {
+    required: ["feature", "action"],
+    properties: {
+      feature: { type: "string", minLength: 1 },
+      action: { type: "string", enum: ["get", "set"] },
+      stage: { type: "string" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    requireFields(input, ["feature", "action"]);
+    const feature = String(input.feature);
+    const action = String(input.action);
+    const p = workspacePaths(ctx.rootDir);
+    const featureDir = join(p.featuresDir, feature);
+    const progressFile = join(featureDir, "reports", "feature-progress.md");
+
+    if (action === "get") {
+      if (!existsSync(progressFile)) return { ok: true, data: { stage: null }, sideEffects: [], reportFragments: [] };
+      const content = read(progressFile);
+      const m = content.match(/## Stage: (\S+)/);
+      return { ok: true, data: { stage: m ? m[1] : null }, sideEffects: [], reportFragments: [] };
+    }
+
+    if (action === "set") {
+      requireFields(input, ["stage"]);
+      const stage = String(input.stage);
+      ensureDir(join(featureDir, "reports"));
+      const marker = join(featureDir, "reports", `stage-${stage}.completed`);
+      write(marker, `stage: ${stage}\nset-at: ${new Date().toISOString()}\n`);
+      const prev = existsSync(progressFile) ? read(progressFile) : "# Feature Progress\n";
+      const hasStageLine = /## Stage: /.test(prev);
+      const updated = hasStageLine
+        ? prev.replace(/## Stage: .+$/m, `## Stage: ${stage}`)
+        : (prev.endsWith('\n') ? prev : prev + '\n') + `## Stage: ${stage}\n`;
+      write(progressFile, updated);
+      return { ok: true, data: { stage }, sideEffects: ["stage marker", "progress updated"], reportFragments: [`stage set to ${stage}`] };
+    }
+
+    throw new CapabilityError("INVALID_ACTION", `unknown action: ${action}`);
+  }
+};
+
+export const featureTasks: AnyCap = {
+  id: "feature.tasks",
+  version: "1.0.0",
+  inputSchema: {
+    required: ["feature", "action"],
+    properties: {
+      feature: { type: "string", minLength: 1 },
+      action: { type: "string", enum: ["list", "append"] },
+      content: { type: "string" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    requireFields(input, ["feature", "action"]);
+    const feature = String(input.feature);
+    const action = String(input.action);
+    const p = workspacePaths(ctx.rootDir);
+    const featureDir = join(p.featuresDir, feature);
+    const tasksDir = join(featureDir, "tasks");
+    ensureDir(tasksDir);
+
+    if (action === "list") {
+      const backlogFile = join(tasksDir, "backlog.md");
+      if (!existsSync(backlogFile)) return { ok: true, data: { text: "" }, sideEffects: [], reportFragments: [] };
+      return { ok: true, data: { text: read(backlogFile) }, sideEffects: [], reportFragments: [] };
+    }
+
+    if (action === "append") {
+      requireFields(input, ["content"]);
+      const content = String(input.content);
+      const backlogFile = join(tasksDir, "backlog.md");
+      const ts = new Date().toISOString();
+      const entry = content.includes("\n") ? content : `- ${content} (${ts})`;
+      const toWrite = existsSync(backlogFile) ? read(backlogFile) + "\n" + entry : `# Backlog\n\n${entry}\n`;
+      write(backlogFile, toWrite);
+      return { ok: true, data: { appended: true }, sideEffects: ["backlog updated"], reportFragments: ["task appended"] };
+    }
+
+    throw new CapabilityError("INVALID_ACTION", `unknown action: ${action}`);
+  }
+};
+
 export const featureReview: AnyCap = {
   id: "feature.review",
   version: "1.0.0",

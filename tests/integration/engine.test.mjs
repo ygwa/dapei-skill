@@ -46,6 +46,6 @@ test('engine run and route interfaces work in workspace', () => {
   });
   assert.match(routeOut, /"capability":\s*"validation.run"/);
 
-  const guardrailOut = run(['run', '--capability', 'guardrail.run', '--input', '{"feature":"f1"}'], repoRoot, { DAPEI_WORKSPACE_ROOT: ws });
+  const guardrailOut = run(['run', '--capability', 'feature.guardrail', '--input', '{"feature":"f1"}'], repoRoot, { DAPEI_WORKSPACE_ROOT: ws });
   assert.match(guardrailOut, /status/i);
 });
