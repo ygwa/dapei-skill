@@ -1,3 +1,8 @@
+---
+name: dapei-feature
+description: Use when managing feature lifecycle, creating features, or checking feature status. Triggers on "feature", "create feature", "feature status", "close feature" intents.
+---
+
 # dapei.feature skill
 
 负责 feature 的 create/status/review/report/close 生命周期管理。
@@ -10,6 +15,10 @@
 | 输出结构化 feature.yaml | 理解「这个 feature 要做什么」 |
 
 **禁止**：平台用硬编码模板替 Agent 做架构设计。
+
+**确认点约束**：阶段确认点（solution-design / implementation / acceptance）不能协商或跳过。
+- 确认点必须由用户明确触发，Agent 不能自行决定"够好了"
+- "轻量确认"、"快速过一下"、"用户没时间" 都是违反此约束
 
 ## 路由能力
 
@@ -112,3 +121,29 @@ stages:
 - **cognitive**：discover 阶段产出 as-is 文档
 - **validation**：validate feature 触发测试发现与执行
 - **workspace**：feature 创建于 workspace 根目录下
+
+---
+
+## 常见错误
+
+| 错误 | 后果 |
+|------|------|
+| "用户说跳过确认点" | 确认点由平台约束，用户无权跳过 |
+| "快速过一下就行" | 确认点要么完成要么不完成，没有"快速版" |
+| "用户没时间，等会儿补" | 确认点不能延迟，历史记录会不完整 |
+| 跳阶段推进 | 违反 workflow DAG 约束 |
+
+## 红线 — 禁止行为
+
+- **禁止跳过或协商确认点**
+- **禁止在未完成前置 stage 的情况下关闭 feature**
+- **禁止用"用户要求"作为跳流程的理由**
+
+## Rationalization 堵口
+
+| 借口 | 反驳 |
+|------|------|
+| "用户说跳过" | 确认点由平台约束，不是用户可覆盖的范围 |
+| "快速过一下就行" | 确认点没有"快速版"，完成就是完成 |
+| "用户没时间，等演示完再补" | 确认点不能延迟，演示不能替代正式确认 |
+| "反正代码都写完了，确认只是形式" | 代码写完 ≠ 通过确认，确认是独立的 gate |

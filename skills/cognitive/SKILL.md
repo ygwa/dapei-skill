@@ -1,3 +1,8 @@
+---
+name: dapei-cognitive
+description: Use when analyzing code repository behavior, understanding entry points, or documenting system architecture. Triggers on "analyze", "behavior", "discover", "orient", "cognitive" intents.
+---
+
 # dapei.cognitive skill
 
 Engineering Cognitive Runtime 行为认知工作流。**只提供流程方法，不提供具体实现指导。**
@@ -10,6 +15,11 @@ Engineering Cognitive Runtime 行为认知工作流。**只提供流程方法，
 | 输出结构化 YAML 契约 | 理解「这个入口做什么」 |
 
 **禁止**：平台用 grep/regex/语言特定关键字替 Agent 做语义理解。
+
+**禁止绕过**：紧急情况（如生产故障）不是跳过 artifact 记录的理由。
+- 快速定位调用点 + 立即创建 artifact 是同时进行的，不是先后的
+- grep/search 找到位置后必须写入 `docs/as-is/behavior/<id>.yaml`
+- "先快速解决，回头再补文档" = 违反此 skill
 
 ## 路由能力
 
@@ -121,3 +131,20 @@ Evidence 规则：`fact` → `sources[]`；`inference` → `derived_from[]`；`u
 ```
 @dapei list behaviors for sample-app
 ```
+
+---
+
+## 常见错误
+
+| 错误 | 后果 |
+|------|------|
+| 用 grep/regex 替代语义分析 | 丢失调用链上下文，无法理解行为 |
+| "紧急情况先用 grep，回头补文档" | 文档永远不会补，历史记录丢失 |
+| Phase 1-3 没做完直接跳 Phase 4 | 候选清单不完整，深析方向错误 |
+| inference 直接当 fact 使用 | confidence 降级，证据链断裂 |
+
+## 红线 — 禁止行为
+
+- **禁止用 grep 作为主要分析手段**
+- **禁止在紧急情况下跳过 artifact 创建**
+- **禁止跳过 Phase 直接输出 Report**

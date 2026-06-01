@@ -1,3 +1,8 @@
+---
+name: dapei-workflow
+description: Use when running workflow stages, managing feature stage progression, or building context bundles. Triggers on "workflow", "stage", "runStage", "context.build" intents.
+---
+
 # dapei.workflow skill
 
 负责 stage DAG 推进与 context build 生命周期。
@@ -10,6 +15,11 @@
 | 输出结构化 stage 进度和 context bundle | 理解「这个 stage 需要什么 context」 |
 
 **禁止**：平台替 Agent 做业务决策或写代码。
+
+**强制约束**：stage 顺序是 MANDATORY，不是建议。
+- discover → design → implement → validate → close 的依赖是铁律
+- "折中方案"、"快速确认"、"部分完成" 都等于违反 DAG
+- 任何跳阶段的行为都需要正式的回滚流程，不是"这次例外"
 
 ## 路由能力
 
@@ -120,6 +130,33 @@ stages:
 ```
 @dapei workflow status my-feature
 ```
+
+---
+
+## 常见错误
+
+| 错误 | 后果 |
+|------|------|
+| "用户说跳过就跳过" | 违反 DAG 约束，context 丢失上游信息 |
+| "之前做过了，直接标记完成" | 实际没走确认流程，artifact 不完整 |
+| "折中方案：只做轻量确认" | 确认点不能协商，轻量确认 ≠ 完成 |
+| implement → discover → design 回跳 | DAG 只允许向前推进，不允许回跳 |
+
+## 红线 — 禁止行为
+
+- **禁止跳阶段或"部分完成"阶段**
+- **禁止用用户要求作为跳阶段的理由**
+- **禁止"折中"确认点** — 确认点要么完成要么不完成
+- **禁止在未完成前置 stage 的情况下运行后续 stage**
+
+## Rationalization 堵口
+
+| 借口 | 反驳 |
+|------|------|
+| "用户说跳过" | 用户无权覆盖 DAG 约束，这由平台强制 |
+| "已经做过类似的" | 没走正式流程就不能标记完成 |
+| "折中方案够好了" | "够好"等于违反 MANDATORY 约束 |
+| "时间紧，先上线再说" | 时间压力不能作为跳流程的理由 |
 
 ---
 
