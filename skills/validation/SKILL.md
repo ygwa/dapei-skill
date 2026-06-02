@@ -118,7 +118,7 @@ results:
 ## 用户入口
 
 ```
-@dapei validate feature payment-refactor --stage implement
+@dapei validate feature payment-refactor --stage local-validation
 ```
 
 ```

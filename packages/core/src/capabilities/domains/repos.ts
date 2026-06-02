@@ -205,7 +205,7 @@ export const reposList: AnyCap = {
   async execute(ctx) {
     const p = workspacePaths(ctx.rootDir);
     const registry = join(p.dapeiDir, "repos.yaml");
-    if (!existsSync(registry)) return { ok: true, data: { text: "No reposs registered." }, sideEffects: [], reportFragments: [] };
+    if (!existsSync(registry)) return { ok: true, data: { text: "No repos registered." }, sideEffects: [], reportFragments: [] };
     const names = parseReposYamlNames(read(registry));
     const lines = [`Codebases (${names.length}):`];
     for (const name of names) {
@@ -259,7 +259,44 @@ export const reposAnalyze: AnyCap = {
       results.push({ name, branch, hash, stack, testCommands, structure, apiEndpoints, dbFiles, mqEvidence, todos });
     }
 
-    return { ok: true, data: { repos: results }, sideEffects: [], reportFragments: ["repos scanned"] };
+    const report = join(p.docsDir, "as-is", "repo-inventory.md");
+    const lines = [
+      "# Repo Inventory",
+      "",
+      `- Generated At: ${new Date().toISOString()}`,
+      `- Target: ${target}`,
+      `- Repos: ${results.length}`,
+      ""
+    ];
+    for (const r of results) {
+      lines.push(
+        `## ${r.name}`,
+        "",
+        `- Branch: ${r.branch || "unknown"}`,
+        `- Commit: ${r.hash || "unknown"}`,
+        `- Stack: ${r.stack || "unknown"}`,
+        `- Test Commands: ${r.testCommands.length ? r.testCommands.join(", ") : "none detected"}`,
+        "",
+        "### Structure",
+        ...(r.structure.length ? r.structure.map((x) => `- ${x}`) : ["- none"]),
+        "",
+        "### API Evidence",
+        ...(r.apiEndpoints.length ? r.apiEndpoints.map((x) => `- ${x}`) : ["- none"]),
+        "",
+        "### Database Evidence",
+        ...(r.dbFiles.length ? r.dbFiles.map((x) => `- ${x}`) : ["- none"]),
+        "",
+        "### Messaging Evidence",
+        ...(r.mqEvidence.length ? r.mqEvidence.map((x) => `- ${x}`) : ["- none"]),
+        "",
+        "### TODO Evidence",
+        ...(r.todos.length ? r.todos.map((x) => `- ${x}`) : ["- none"]),
+        ""
+      );
+    }
+    write(report, lines.join("\n"));
+
+    return { ok: true, data: { repos: results, report: relative(p.rootDir, report) }, sideEffects: ["repo inventory report"], reportFragments: ["repos scanned"] };
   }
 };
 

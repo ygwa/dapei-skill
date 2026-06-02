@@ -1,4 +1,4 @@
-# dapei.skill v0.1 Technical Design
+# dapei.skill v2.2 Technical Design
 
 ## Positioning
 
@@ -122,4 +122,3 @@ Evidence contract (`packages/core/src/evidence.ts`):
 - `kind=unknown` requires `reason`
 
 Phase roadmap: Behavior → State → Semantic Clustering → Capability Mapping → Cognitive Graph → Dynamic Context Budget.
-See `docs/plans/cognitive-runtime-roadmap.md`.

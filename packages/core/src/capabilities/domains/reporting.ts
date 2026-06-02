@@ -30,6 +30,7 @@ export const validationRun: AnyCap = {
     const valReport = join(featureDir, "reports", "validation-report.md");
     const testReport = join(featureDir, "reports", "test-report.md");
     let status = "PASS";
+    let testStatus = "PASS";
     const errors: string[] = [];
     const repos = featureRepoNames(read(join(featureDir, "feature.yaml")));
     let out = `# Test Report\n\n- Feature: ${feature}\n\n`;
@@ -38,6 +39,7 @@ export const validationRun: AnyCap = {
       out += `## Repo: ${repo}\n\n`;
       const cmds = detectTestCommands(rp);
       if (cmds.length === 0) {
+        testStatus = "FAIL";
         status = "FAIL";
         out += "- Status: SKIPPED\n- Reason: no candidate test command detected\n\n";
       }
@@ -51,7 +53,10 @@ export const validationRun: AnyCap = {
           code = e.status || 1;
           text = e.stdout?.toString?.() || e.message;
         }
-        if (code !== 0) status = "FAIL";
+        if (code !== 0) {
+          testStatus = "FAIL";
+          status = "FAIL";
+        }
         out += `### Command: \`${cmd}\`\n\n- Exit Code: ${code}\n\n\`\`\`text\n${text.split("\n").slice(-120).join("\n")}\n\`\`\`\n\n`;
       }
     }
@@ -67,7 +72,7 @@ export const validationRun: AnyCap = {
       guardrailStatus = "ERROR";
     }
     const guardrailReport = join(featureDir, "reports", "guardrail-report.md");
-    write(valReport, `# Validation Report\n\n- Feature: ${feature}\n- Status: ${status}\n- Test Status: ${status !== "PASS" ? "FAIL" : "PASS"}\n- Guardrail Status: ${guardrailStatus}\n- Errors: ${errors.length ? errors.join("; ") : "none"}\n- Test Report: reports/test-report.md\n- Guardrail Report: reports/guardrail-report.md\n`);
+    write(valReport, `# Validation Report\n\n- Feature: ${feature}\n- Status: ${status}\n- Test Status: ${testStatus}\n- Guardrail Status: ${guardrailStatus}\n- Errors: ${errors.length ? errors.join("; ") : "none"}\n- Test Report: reports/test-report.md\n- Guardrail Report: reports/guardrail-report.md\n`);
     return { ok: true, data: { status, errors }, sideEffects: ["validation reports"], reportFragments: ["validation done"] };
   }
 };

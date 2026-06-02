@@ -227,7 +227,7 @@ function extractObjective(t: string): string {
 }
 
 function extractStage(t: string): string {
-  const stages = ["analyze-current-state", "gap-analysis", "solution-design", "task-breakdown", "implementation", "validation", "acceptance"];
+  const stages = ["analyze-current-state", "gap-analysis", "solution-design", "task-breakdown", "implementation", "local-validation", "architecture-review", "acceptance"];
   for (const s of stages) {
     if (t.includes(s)) return s;
   }

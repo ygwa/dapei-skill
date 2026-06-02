@@ -28,11 +28,11 @@
 
 ### Add（添加）
 
-1. 验证 repo 路径存在或是有效 remote URL
-2. 创建 `repos/<name>/` 工作目录
-3. 初始化 `repo.yaml` 元数据
-4. 检测栈类型（Node/Python/Go/Java）和测试框架
-5. 创建初始 worktree 映射
+1. 验证 repo 名称和 Git remote URL
+2. 将 repo 添加到 `repos/<name>/` 基座池
+3. 更新 `.dapei/repos.yaml` 注册信息
+4. 对齐默认分支并 fast-forward 到 `origin/<default>`
+5. 后续 feature 创建时再映射 `features/<feature>/repos/<repo>` worktree
 
 **repo.yaml 示例**：
 ```yaml
@@ -100,7 +100,7 @@ directories:
 ## 用户入口
 
 ```
-@dapei repos add payment-service --path ./repos/payment-service --type local
+@dapei repos add payment-service git@github.com:org/payment-service.git
 ```
 
 ```

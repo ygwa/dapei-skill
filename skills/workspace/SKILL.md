@@ -30,14 +30,14 @@
 
 **目标**：创建符合 dapei 规范的 workspace 结构。
 
-1. 验证目标目录为空或不存在
-2. 创建标准目录结构：
+1. 验证当前目录为空，或已经符合 dapei workspace contract
+2. 在当前目录创建标准运行结构，不创建嵌套 `workspace/` 目录：
 
 ```
-workspace/
+./
 ├── .dapei/
 │   ├── workspace.yaml       # workspace 元数据
-│   ├── commands.yaml        # CLI 命令定义
+│   ├── commands.yaml        # capability 意图定义
 │   ├── schemas/             # artifact schema
 │   │   ├── behavior.schema.yaml
 │   │   ├── state-machine.schema.yaml
@@ -46,24 +46,23 @@ workspace/
 │       ├── naming.yaml
 │       ├── layering.yaml
 │       └── ddd.yaml
-├── repos/                   # repo worktree 根目录
-├── features/                 # feature 工作目录
-│   └── .keep
+├── repos/                   # managed repo 基座池
+├── features/                # feature 执行工作区
 └── docs/
-    ├── as-is/               # 现状分析
-    │   ├── repo-inventory.md
+    ├── as-is/               # durable 现状认知
     │   └── behavior/
-    ├── architecture/        # 架构文档
+    ├── architecture/        # 架构知识
     └── decisions/           # 决策记录
 ```
 
 3. 初始化 `.dapei/workspace.yaml`：
 ```yaml
-version: 1.0
-name: my-workspace
-root: /path/to/workspace
-initialized: 2025-05-20
-structure_version: "1.0"
+version: 0.2
+workspace:
+  name: my-workspace
+  root: .
+  default_branch: main
+  locale: zh-CN
 ```
 
 4. 初始化 `.dapei/commands.yaml`（从模板复制）
@@ -109,8 +108,8 @@ validation:
 - billing-core [active] last_synced: 2025-05-20
 
 ## Features (3)
-- payment-refactor [active] stage: implement
-- auth-overhaul [active] stage: design
+- payment-refactor [active] stage: implementation
+- auth-overhaul [active] stage: solution-design
 - api-gateway [closed] stage: -
 
 ## Structure
@@ -140,6 +139,6 @@ validation:
 ## 与其他 skill 的协作
 
 - **feature**：依赖 workspace 目录结构
-- **repos**：repos 存放于 workspace/repos/ 下
+- **repos**：repos 存放于当前 workspace root 的 `repos/` 下
 - **cognitive**：workspace 下的 docs/ 目录用于 cognitive 产物
 - **validation**：workspace validate 是 feature validate 的前置检查

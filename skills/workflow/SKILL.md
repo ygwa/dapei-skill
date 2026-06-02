@@ -17,7 +17,7 @@ description: Use when running workflow stages, managing feature stage progressio
 **禁止**：平台替 Agent 做业务决策或写代码。
 
 **强制约束**：stage 顺序是 MANDATORY，不是建议。
-- discover → design → implement → validate → close 的依赖是铁律
+- analyze-current-state → gap-analysis → solution-design → task-breakdown → implementation → local-validation → architecture-review → acceptance 的依赖是铁律
 - "折中方案"、"快速确认"、"部分完成" 都等于违反 DAG
 - 任何跳阶段的行为都需要正式的回滚流程，不是"这次例外"
 
@@ -38,27 +38,36 @@ description: Use when running workflow stages, managing feature stage progressio
 **标准 stage 顺序**：
 
 ```
-discover → design → implement → validate → close
+analyze-current-state → gap-analysis → solution-design → task-breakdown → implementation → local-validation → architecture-review → acceptance
 ```
 
 每个 stage 依赖前一个 stage 完成：
 
 ```yaml
 stages:
-  - name: discover
+  - name: analyze-current-state
     depends_on: []
     status: completed
-  - name: design
-    depends_on: [discover]
+  - name: gap-analysis
+    depends_on: [analyze-current-state]
     status: in_progress
-  - name: implement
-    depends_on: [design]
+  - name: solution-design
+    depends_on: [gap-analysis]
     status: pending
-  - name: validate
-    depends_on: [implement]
+  - name: task-breakdown
+    depends_on: [solution-design]
     status: pending
-  - name: close
-    depends_on: [validate]
+  - name: implementation
+    depends_on: [task-breakdown]
+    status: pending
+  - name: local-validation
+    depends_on: [implementation]
+    status: pending
+  - name: architecture-review
+    depends_on: [local-validation]
+    status: pending
+  - name: acceptance
+    depends_on: [architecture-review]
     status: pending
 ```
 
@@ -72,10 +81,10 @@ stages:
 6. 更新 progress report
 
 **runStage 校验规则**：
-- `solution-design` 必须有用户确认
-- `implement` 之前必须有 `discover` 和 `design`
-- `validate` 之前必须有 `implement`
-- `close` 之前必须有 `validate`
+- `solution-design` / `implementation` / `acceptance` 必须有用户确认
+- `implementation` 之前必须完成 `task-breakdown`
+- `local-validation` 之前必须完成 `implementation`
+- `acceptance` 之前必须完成 `architecture-review`
 
 ### context.build（构建上下文）
 
@@ -90,10 +99,10 @@ stages:
    - `context/memory/` 历史记录
 
 3. **L3: Stage-specific Context** — 按 stage 特化
-   - `discover`: cognitive.discover 输出
-   - `design`: `docs/design/` 决策稿
-   - `implement`: `docs/as-is/` 行为文档
-   - `validate`: `reports/validation-report.md`
+   - `analyze-current-state`: cognitive.discover 输出与 as-is 证据
+   - `solution-design`: `docs/03-business-design.md` 和 `docs/04-technical-design.md`
+   - `implementation`: `docs/05-task-breakdown.md` 与 repo worktree
+   - `local-validation`: `reports/validation-report.md`
 
 4. **L4: Runtime Context** — 运行时聚合
    - `context/runtime-context.md`（最终输出）
@@ -103,7 +112,7 @@ stages:
 每个 stage 完成后，记录：
 
 ```yaml
-- stage: design
+- stage: solution-design
   completed_at: 2025-05-20T14:30:00Z
   duration: 2h 15m
   checkpoints:
@@ -111,7 +120,7 @@ stages:
     - "Identified 3 behavior entries"
     - "Designed state machine for Order"
   next_steps:
-    - "Start implement stage"
+    - "Start implementation stage"
     - "Focus on payment flow"
 ```
 
@@ -120,11 +129,11 @@ stages:
 ## 用户入口
 
 ```
-@dapei run workflow my-feature --stage implement
+@dapei run workflow my-feature --stage implementation
 ```
 
 ```
-@dapei context build my-feature --stage design
+@dapei context build my-feature --stage solution-design
 ```
 
 ```
@@ -140,7 +149,7 @@ stages:
 | "用户说跳过就跳过" | 违反 DAG 约束，context 丢失上游信息 |
 | "之前做过了，直接标记完成" | 实际没走确认流程，artifact 不完整 |
 | "折中方案：只做轻量确认" | 确认点不能协商，轻量确认 ≠ 完成 |
-| implement → discover → design 回跳 | DAG 只允许向前推进，不允许回跳 |
+| implementation → analyze-current-state → solution-design 回跳 | DAG 只允许向前推进，不允许回跳 |
 
 ## 红线 — 禁止行为
 
@@ -162,7 +171,7 @@ stages:
 
 ## 与其他 skill 的协作
 
-- **cognitive**：discover 阶段使用 cognitive skill 生成 behavior 文档
+- **cognitive**：analyze-current-state 阶段使用 cognitive skill 生成 behavior 文档
 - **repos**：workflow 执行依赖 repos 的 worktree 状态
 - **validation**：validate stage 使用 validation skill 执行测试
 - **feature**：workflow 操作 feature.yaml 的 stage 状态

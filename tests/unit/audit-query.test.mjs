@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, appendFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, appendFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -13,6 +13,7 @@ function cleanTmp(tmp) {
 async function setupWorkspace(tmp) {
   await core.runCapability('workspace.init', {}, { rootDir: tmp, now: new Date() });
   mkdirSync(join(tmp, '.dapei', 'audit'), { recursive: true });
+  unlinkSync(join(tmp, '.dapei', 'audit', 'capability.log'));
 }
 
 function writeAuditEntry(tmp, capability, feature, ok = true) {

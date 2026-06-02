@@ -16,9 +16,9 @@ description: Use when managing feature lifecycle, creating features, or checking
 
 **禁止**：平台用硬编码模板替 Agent 做架构设计。
 
-**确认点约束**：阶段确认点（solution-design / implementation / acceptance）不能协商或跳过。
-- 确认点必须由用户明确触发，Agent 不能自行决定"够好了"
-- "轻量确认"、"快速过一下"、"用户没时间" 都是违反此约束
+**确认点约束**：阶段确认点（solution-design / implementation / acceptance）不能被 Agent 自行跳过。
+- 确认点必须由用户明确确认，或用户在请求中明确要求连续推进
+- "轻量确认"、"快速过一下"、"用户没时间" 不能替代正式确认与产物记录
 
 ## 路由能力
 
@@ -55,11 +55,21 @@ repos: [payment-service, billing-core]
 objective: "重构支付链路，拆分账务与支付职责"
 created: 2025-05-20
 stages:
-  - name: discover
+  - name: analyze-current-state
     status: completed
-  - name: design
+  - name: gap-analysis
     status: in_progress
-  - name: implement
+  - name: solution-design
+    status: pending
+  - name: task-breakdown
+    status: pending
+  - name: implementation
+    status: pending
+  - name: local-validation
+    status: pending
+  - name: architecture-review
+    status: pending
+  - name: acceptance
     status: pending
 ```
 
@@ -118,7 +128,7 @@ stages:
 ## 与其他 skill 的协作
 
 - **repos**：feature 依赖的 repo 映射到 worktree
-- **cognitive**：discover 阶段产出 as-is 文档
+- **cognitive**：analyze-current-state 阶段产出 as-is 文档
 - **validation**：validate feature 触发测试发现与执行
 - **workspace**：feature 创建于 workspace 根目录下
 
@@ -128,14 +138,14 @@ stages:
 
 | 错误 | 后果 |
 |------|------|
-| "用户说跳过确认点" | 确认点由平台约束，用户无权跳过 |
+| "用户说跳过确认点" | 需要显式确认或连续推进意图，不能把沉默当确认 |
 | "快速过一下就行" | 确认点要么完成要么不完成，没有"快速版" |
 | "用户没时间，等会儿补" | 确认点不能延迟，历史记录会不完整 |
 | 跳阶段推进 | 违反 workflow DAG 约束 |
 
 ## 红线 — 禁止行为
 
-- **禁止跳过或协商确认点**
+- **禁止 Agent 自行跳过或弱化确认点**
 - **禁止在未完成前置 stage 的情况下关闭 feature**
 - **禁止用"用户要求"作为跳流程的理由**
 
@@ -143,7 +153,7 @@ stages:
 
 | 借口 | 反驳 |
 |------|------|
-| "用户说跳过" | 确认点由平台约束，不是用户可覆盖的范围 |
+| "用户说跳过" | 用户可以明确确认推进，但不能省略必要产物和 stage 记录 |
 | "快速过一下就行" | 确认点没有"快速版"，完成就是完成 |
 | "用户没时间，等演示完再补" | 确认点不能延迟，演示不能替代正式确认 |
 | "反正代码都写完了，确认只是形式" | 代码写完 ≠ 通过确认，确认是独立的 gate |

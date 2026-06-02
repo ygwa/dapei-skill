@@ -1,0 +1,64 @@
+id: sample-repo-analysis
+repo: sample-node-repo
+analysis_date: "2026-06-02"
+phases_completed:
+  - orient
+  - strategy
+  - candidates
+  - deep_dive
+
+behavior:
+  entry_points:
+    - type: api
+      method: POST
+      path: /orders
+      handler: ordersRouter.post("/orders")
+      calls: createOrder
+
+    - type: api
+      method: GET
+      path: /orders/:id
+      handler: ordersRouter.get("/orders/:id")
+      response: hardcoded { id, status: "CREATED" }
+
+  core_flow:
+    name: order-create
+    steps:
+      - generate order with id ord-{timestamp}, userId, status=CREATED
+      - insert into orders table (comment only, no actual DB)
+      - call chargePayment(orderId, userId)
+      - publish order.created event with orderId
+
+  event_system:
+    type: in-memory publisher
+    file: src/events/publisher.ts
+    functions:
+      - publishEvent(name, payload) -> pushes to events array
+      - getPublishedEvents() -> returns all events
+
+  payment_integration:
+    file: src/services/paymentClient.ts
+    function: chargePayment(orderId, userId)
+    returns: { paymentId: "pay-{orderId}", status: "PENDING_PAYMENT" }
+
+state_machine:
+  entity: Order
+  states:
+    - CREATED
+    - PENDING_PAYMENT
+    - PAID
+    - CANCELLED
+  triggers:
+    - POST /orders -> CREATED
+    - order.created event -> CREATED (self-transition)
+    - payment.success -> PENDING_PAYMENT -> PAID
+
+risks:
+  - partial_failure: createOrder does chargePayment before publishEvent; if chargePayment fails, order is already created but no event published
+  - missing_db: comments say "insert into orders table" but no actual database code exists
+  - hardcoded_status: GET /orders/:id always returns CREATED regardless of actual state
+
+confidence:
+  level: high
+  evidence_type: direct_code
+  kind: fact

@@ -97,7 +97,7 @@ Each feature workspace contains:
 The AI advances through the feature workspace in stages:
 
 ```
-analyze-current-state → gap-analysis → solution-design → task-breakdown → implementation → validation → acceptance
+analyze-current-state → gap-analysis → solution-design → task-breakdown → implementation → local-validation → architecture-review → acceptance
 ```
 
 At each critical node (technical design, implementation, acceptance), the AI pauses for your confirmation rather than bulldozing through.
@@ -255,7 +255,6 @@ bash scripts/smoke-test.sh
 | [agents.md](agents.md) | Agent collaboration constraints for this repo |
 | [DESIGN.md](DESIGN.md) | Technical design documentation |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
-| [docs/plans/2026-05-17-dapei-roadmap.md](docs/plans/2026-05-17-dapei-roadmap.md) | Roadmap |
 | [SKILL.md](SKILL.md) | Agent Skill entry point |
 
 ---
