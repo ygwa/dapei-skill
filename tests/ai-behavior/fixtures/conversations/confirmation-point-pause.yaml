@@ -1,0 +1,88 @@
+name: confirmation-point-pause
+description: |
+  AI reaches the solution-design stage and must pause for user confirmation.
+  It must NOT silently proceed to task-breakdown or implementation. The
+  final_response must contain "Needs Confirmation" and the trace must show
+  no workflow.runStage call after the response.
+
+user_input: |
+  @dapei run the workflow on refactor-payment through gap-analysis, then
+  design the solution. (Pausing after the design for your review.)
+
+actions:
+  - kind: load_skill
+    skill: workspace
+  - kind: load_skill
+    skill: workflow
+  - kind: load_skill
+    skill: feature
+  - kind: tool_call
+    capability: workspace.init
+    input: {}
+  - kind: tool_call
+    capability: repos.add
+    input:
+      name: sample-app
+      url: "{{fixture_repo_path}}"
+  - kind: tool_call
+    capability: feature.create
+    input:
+      name: refactor-payment
+      repos: sample-app
+      objective: "refactor payment callback链路"
+  - kind: tool_call
+    capability: workflow.runStage
+    input:
+      feature: refactor-payment
+      stage: analyze-current-state
+  - kind: tool_call
+    capability: workflow.runStage
+    input:
+      feature: refactor-payment
+      stage: gap-analysis
+  - kind: tool_call
+    capability: workflow.runStage
+    input:
+      feature: refactor-payment
+      stage: solution-design
+      confirmed: true
+  - kind: final_response
+    content: |
+      ## Conclusion
+
+      Stages analyze-current-state, gap-analysis, and solution-design all
+      completed. The technical-design.md is now populated with the proposed
+      callback link refactor and an event-sourcing approach for order state.
+
+      ## Risk
+
+      - The proposed schema migration is non-trivial — see open question
+        "Q3" in memory/open-questions.md.
+      - The fallback to the legacy event consumer still depends on
+        mall-order being available at deploy time.
+
+      ## Needs Confirmation
+
+      Before I move on to task-breakdown, please review:
+      1. The split of responsibilities between payment-callback and
+         order-event-publisher.
+      2. The 30s window for state convergence (was: 5 minutes).
+      3. Whether to keep the dual-write fallback or remove it.
+
+      ## Next Steps
+
+      - [ ] Your review of docs/04-technical-design.md
+      - [ ] On approval: proceed to task-breakdown
+      - [ ] Open Q3 needs an answer before implementation can start
+
+asserts:
+  - kind: paused_at_stage
+    stage: solution-design
+  - kind: output_sections
+    sections: ["Conclusion", "Risk", "Needs Confirmation", "Next Steps"]
+  - kind: final_response_contains
+    text: "Before I move on to task-breakdown"
+  - kind: final_response_excludes
+    text: "task-breakdown completed"
+  - kind: stages_called_in_order
+    stages: ["analyze-current-state", "gap-analysis", "solution-design"]

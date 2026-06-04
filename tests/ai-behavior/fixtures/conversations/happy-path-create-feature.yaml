@@ -1,0 +1,77 @@
+name: happy-path-create-feature
+description: |
+  AI follows the documented happy path: read workspace skill, init workspace,
+  add repo, create feature, build context, then respond with the 4-section
+  format. This is the baseline — if this fixture fails, the agent is
+  fundamentally off-script.
+
+user_input: |
+  @dapei initialize the current project workspace, then add sample-app and
+  create a feature refactor-payment on it.
+
+actions:
+  - kind: load_skill
+    skill: workspace
+  - kind: load_skill
+    skill: repos
+  - kind: load_skill
+    skill: feature
+  - kind: tool_call
+    capability: workspace.init
+    input: {}
+  - kind: tool_call
+    capability: repos.add
+    input:
+      name: sample-app
+      url: "{{fixture_repo_path}}"
+  - kind: tool_call
+    capability: feature.create
+    input:
+      name: refactor-payment
+      repos: sample-app
+      objective: "refactor payment callback链路"
+  - kind: tool_call
+    capability: context.build
+    input:
+      feature: refactor-payment
+      stage: analyze-current-state
+  - kind: final_response
+    content: |
+      ## Conclusion
+
+      Workspace initialized, sample-app repo added, and `refactor-payment`
+      feature scaffolded with its analyze-current-state context.
+
+      ## Risk
+
+      First-time workspace init, no prior cognitive artifacts to inherit from.
+      Analyze-current-state will fall back to repo inventory.
+
+      ## Needs Confirmation
+
+      None — this turn was purely mechanical setup. The next turn
+      (gap-analysis) will need your confirmation to proceed.
+
+      ## Next Steps
+
+      - [ ] Read features/refactor-payment/docs/01-current-state.md
+      - [ ] Confirm the objective wording
+      - [ ] Proceed to gap-analysis
+
+asserts:
+  - kind: output_sections
+    sections: ["Conclusion", "Risk", "Needs Confirmation", "Next Steps"]
+  - kind: capability_called
+    capability: workspace.init
+  - kind: capability_called
+    capability: repos.add
+  - kind: capability_called
+    capability: feature.create
+  - kind: capability_called
+    capability: context.build
+  - kind: no_path_under
+    path_prefix: docs/as-is/behavior/
+    allow:
+      - docs/as-is/behavior/
+  - kind: only_path_under
+    path_prefix: features/refactor-payment/

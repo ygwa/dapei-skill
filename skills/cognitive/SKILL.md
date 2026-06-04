@@ -148,3 +148,13 @@ Evidence 规则：`fact` → `sources[]`；`inference` → `derived_from[]`；`u
 - **禁止用 grep 作为主要分析手段**
 - **禁止在紧急情况下跳过 artifact 创建**
 - **禁止跳过 Phase 直接输出 Report**
+
+---
+
+## 与其他 skill 的协作
+
+- **feature**：`analyze-current-state` 阶段产出 behavior / state-machine artifact,作为后续 `gap-analysis` 与 `solution-design` 的事实基础
+- **repos**：`cognitive.discover` 依赖 `repos.add` 已注册的目标 repo,`directory_tree` / `manifest_files` 来自 repo 本地文件
+- **validation**：当 `validation.run` 发现未覆盖行为时,触发 `cognitive.artifact.upsert` 补全 behavior 文档
+- **workflow**：`context.build` 在 L3 阶段注入 cognitive 索引摘要到 `runtime-context.md`
+- **workspace**：`workspace.init` 创建 `docs/as-is/behavior` 与 `docs/as-is/state-machines` 目录,cognitive artifact 落盘位置

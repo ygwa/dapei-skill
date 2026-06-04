@@ -1,0 +1,38 @@
+name: format-output
+description: |
+  Baseline format check. AI must produce all 4 sections (Conclusion / Risk
+  / Needs Confirmation / Next Steps) in its final response. This is a
+  bare-minimum contract — if a future AI model regresses on the format
+  this fixture catches it immediately.
+
+user_input: |
+  @dapei status
+
+actions:
+  - kind: tool_call
+    capability: feature.status
+    input: {}
+  - kind: final_response
+    content: |
+      ## Conclusion
+
+      No features exist yet.
+
+      ## Risk
+
+      None.
+
+      ## Needs Confirmation
+
+      None.
+
+      ## Next Steps
+
+      - [ ] Initialize a workspace if you haven't
+      - [ ] Add a repo and create your first feature
+
+asserts:
+  - kind: output_sections
+    sections: ["Conclusion", "Risk", "Needs Confirmation", "Next Steps"]
+  - kind: capability_called
+    capability: feature.status

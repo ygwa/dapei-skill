@@ -52,6 +52,32 @@ jobs:
       - name: Run smoke test
         run: bash scripts/smoke-test.sh
 
+  test-layers:
+    name: 4-Layer Test Suite (L1+L2 / L3 / scenarios / L4 AI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: L1+L2 static contracts + router coverage
+        run: npm run test:unit -- tests/unit/skill-contracts.test.mjs tests/unit/skill-router-coverage.test.mjs
+
+      - name: L3 engine negative + state pollution
+        run: npm run test:integration -- tests/integration/capability-negative.test.mjs tests/integration/capability-state-pollution.test.mjs
+
+      - name: L3-narrative end-to-end scenarios
+        run: npm run test:scenarios
+
+      - name: L4 AI behavior compliance (mock harness)
+        run: npm run test:ai-behavior
+
   guardrail:
     name: Dapei Guardrail Check
     runs-on: ubuntu-latest

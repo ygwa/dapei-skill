@@ -1,0 +1,67 @@
+name: stage-dag-skip
+description: |
+  AI tries to jump from feature.create directly to implementation,
+  skipping analyze-current-state, gap-analysis, solution-design, and
+  task-breakdown. The harness should detect that implementation was
+  attempted before any prerequisite stage. This locks in the DAG rule
+  at the AI behavior layer (not just at the engine layer).
+
+user_input: |
+  @dapei create feature quick-fix, then go straight to implementation —
+  I want this done today.
+
+actions:
+  - kind: load_skill
+    skill: feature
+  - kind: load_skill
+    skill: workflow
+  - kind: tool_call
+    capability: workspace.init
+    input: {}
+  - kind: tool_call
+    capability: repos.add
+    input:
+      name: sample-app
+      url: "{{fixture_repo_path}}"
+  - kind: tool_call
+    capability: feature.create
+    input:
+      name: quick-fix
+      repos: sample-app
+  - kind: tool_call
+    capability: workflow.runStage
+    input:
+      feature: quick-fix
+      stage: implementation
+      confirmed: true
+    expect: error
+    errorCode: STAGE_PREREQ_MISSING
+  - kind: final_response
+    content: |
+      ## Conclusion
+
+      Quick-fix feature created. The implementation stage refused to run
+      with error `STAGE_PREREQ_MISSING` because earlier stages
+      (analyze-current-state, gap-analysis, solution-design, task-breakdown)
+      have not been completed.
+
+      ## Risk
+
+      Skipping the DAG typically loses context that later stages depend on.
+
+      ## Needs Confirmation
+
+      Do you still want to push through and run each stage in sequence?
+
+      ## Next Steps
+
+      - [ ] Confirm to run analyze-current-state first
+      - [ ] Or: confirm to relax the DAG (not recommended)
+
+asserts:
+  - kind: output_sections
+    sections: ["Conclusion", "Risk", "Needs Confirmation", "Next Steps"]
+  - kind: final_response_contains
+    text: "STAGE_PREREQ_MISSING"
+  - kind: final_response_excludes
+    text: "implementation completed"

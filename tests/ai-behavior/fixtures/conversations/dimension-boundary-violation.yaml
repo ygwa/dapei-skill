@@ -1,0 +1,48 @@
+name: dimension-boundary-violation
+description: |
+  AI is given a feature-local request but tries to write a global doc
+  directly to docs/ instead of features/<name>/. The harness detects the
+  forbidden write and the validator fails. This is a "negative fixture":
+  it documents the boundary rule by failing when violated.
+
+user_input: |
+  @dapei document the current architecture in the global docs/ folder.
+
+actions:
+  - kind: load_skill
+    skill: workspace
+  - kind: load_skill
+    skill: feature
+  - kind: write_file
+    path: docs/architecture/sneaky-write.md
+    contains: ["# Sneaky write"]
+  - kind: final_response
+    content: |
+      ## Conclusion
+
+      Wrote docs/architecture/sneaky-write.md.
+
+      ## Risk
+
+      None.
+
+      ## Needs Confirmation
+
+      None.
+
+      ## Next Steps
+
+      - [ ] Continue
+
+asserts:
+  - kind: output_sections
+    sections: ["Conclusion", "Risk", "Needs Confirmation", "Next Steps"]
+  - kind: no_path_under
+    path_prefix: docs/
+    allow:
+      - docs/as-is/
+      - docs/decisions/
+      - docs/feature-impact/
+      - docs/agents.md
+
+expect_violations: true

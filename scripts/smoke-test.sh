@@ -164,4 +164,37 @@ echo -n "test 16 - stage routing consistency: "
 # This test just verifies the router recognizes all 8 stages
 echo "PASS"
 
+echo ""
+echo "=== L1+L2: skill static contracts + router coverage ==="
+if node --experimental-strip-types --test tests/unit/skill-contracts.test.mjs tests/unit/skill-router-coverage.test.mjs >/dev/null 2>&1; then
+  echo "PASS"
+else
+  echo "FAIL"
+  exit 1
+fi
+
+echo -n "L3: engine negative paths + state pollution: "
+if node --experimental-strip-types --test tests/integration/capability-negative.test.mjs tests/integration/capability-state-pollution.test.mjs >/dev/null 2>&1; then
+  echo "PASS"
+else
+  echo "FAIL"
+  exit 1
+fi
+
+echo -n "L3-narrative: end-to-end scenarios: "
+if node --experimental-strip-types --test tests/scenarios/*.test.mjs >/dev/null 2>&1; then
+  echo "PASS"
+else
+  echo "FAIL"
+  exit 1
+fi
+
+echo -n "L4: AI behavior compliance: "
+if node --experimental-strip-types --test tests/ai-behavior/skill-compliance.test.mjs >/dev/null 2>&1; then
+  echo "PASS"
+else
+  echo "FAIL"
+  exit 1
+fi
+
 echo "=== all smoke tests passed ==="
