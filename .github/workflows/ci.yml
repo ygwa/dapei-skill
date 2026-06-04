@@ -41,6 +41,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Setup test repo
         run: |
           mkdir -p repos
@@ -72,10 +80,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Run guardrail on existing features
         run: |
           if [ -d "features/payment-refactor" ]; then
-            ./scripts/dapei-guardrail payment-refactor || echo "Guardrail completed with findings"
+            ./scripts/dapei-guardrail payment-refactor
           else
             echo "No features to check"
           fi
@@ -91,9 +107,8 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install validation dependencies
-        run: |
-          npm install -g ajv ajv-formats js-yaml
+      - name: Install dependencies
+        run: npm ci
 
       - name: Validate schemas
         run: |
@@ -103,7 +118,7 @@ jobs:
             node -e "
               const fs = require('fs');
               const yaml = require('js-yaml');
-              const Ajv = require('ajv');
+              const Ajv = require('ajv/dist/2020');
               const addFormats = require('ajv-formats');
 
               const schemaContent = fs.readFileSync('$schema', 'utf8');
