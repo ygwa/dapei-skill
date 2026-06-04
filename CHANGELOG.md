@@ -5,6 +5,22 @@ All notable changes to `dapei.skill` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## How to record changes
+
+Add entries to the `[Unreleased]` section below as you land PRs.
+When cutting a release, `scripts/release.sh` will move the accumulated
+entries into a dated version section and reset `[Unreleased]` to empty.
+
+Use the `Added / Changed / Fixed / Removed` subsections as needed.
+Match the language and detail level of the existing release entries.
+
+## [Unreleased]
+
+### Added
+### Changed
+### Fixed
+### Removed
+
 ## [2.2.0] - 2026-05-23
 
 ### Added
