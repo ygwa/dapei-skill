@@ -248,6 +248,29 @@ bash scripts/smoke-test.sh
 
 ---
 
+## Versioning
+
+dapei-skill follows [Semantic Versioning](https://semver.org/). All releases are
+documented in [`CHANGELOG.md`](CHANGELOG.md).
+
+The full release process — when to bump, how to add a `CHANGELOG` entry,
+how to cut a tag — lives in [`docs/release-process.md`](docs/release-process.md).
+
+To cut a release (maintainer):
+
+```bash
+bash scripts/release.sh patch       # or minor / major / --auto
+git push origin main && git push origin vX.Y.Z
+```
+
+To install a specific version:
+
+```bash
+npx skills add ygwa/dapei-skill@vX.Y.Z
+```
+
+---
+
 ## References
 
 | Document | Description |
@@ -255,6 +278,7 @@ bash scripts/smoke-test.sh
 | [agents.md](agents.md) | Agent collaboration constraints for this repo |
 | [DESIGN.md](DESIGN.md) | Technical design documentation |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
+| [docs/release-process.md](docs/release-process.md) | How to cut a release |
 | [SKILL.md](SKILL.md) | Agent Skill entry point |
 
 ---
