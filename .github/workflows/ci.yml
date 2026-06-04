@@ -60,6 +60,10 @@ jobs:
           git add README.md
           git commit -m "initial"
 
+      - name: Register test repo with dapei
+        run: |
+          ./scripts/dapei repos add test-repo "$PWD/repos/test-repo"
+
       - name: Test dapei create feature
         run: |
           ./scripts/dapei create feature smoke-test \
