@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, cpSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 export function run(cmd: string, args: string[], cwd: string): string {
   return execFileSync(cmd, args, { cwd, encoding: "utf8" }).trim();
@@ -67,12 +67,14 @@ export function listFilesRecursively(base: string, ext: string[], max = 50): str
 }
 
 export function workspacePaths(rootDir: string) {
+  const resolvedRoot = resolve(rootDir);
   return {
-    rootDir: resolve(rootDir),
-    dapeiDir: resolve(rootDir, ".dapei"),
-    reposDir: resolve(rootDir, "repos"),
-    featuresDir: resolve(rootDir, "features"),
-    docsDir: resolve(rootDir, "docs"),
-    runtimeDir: resolve(rootDir, "runtime")
+    rootDir: resolvedRoot,
+    workspaceName: basename(resolvedRoot),
+    dapeiDir: resolve(resolvedRoot, ".dapei"),
+    reposDir: resolve(resolvedRoot, "repos"),
+    featuresDir: resolve(resolvedRoot, "features"),
+    docsDir: resolve(resolvedRoot, "docs"),
+    runtimeDir: resolve(resolvedRoot, "runtime")
   };
 }

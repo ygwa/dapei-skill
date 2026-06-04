@@ -4,6 +4,7 @@ import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
 import { ensureDir, read, run, runSafe, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
 import { defaultBranch, featureRepoNames, requireFields } from "../shared.ts";
+import { loadCognitiveIndex } from "../../cognitive-index.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
 
@@ -92,7 +93,7 @@ export const featureCreate: AnyCap = {
     ["docs", "context", "memory", "tests/regression", "reports", "tasks", "artifacts"].forEach((d) => ensureDir(join(featureDir, d)));
     write(join(featureDir, "context", "business-context.md"), "# Business Context\n");
     write(join(featureDir, "context", "architecture-context.md"), "# Architecture Context\n");
-    write(join(featureDir, "context", "repo-context.md"), "# Repo Context\n");
+    write(join(featureDir, "context", "repo-context.md"), "# Repo Context\n\nSee also: [related-cognitive-context.md](related-cognitive-context.md) for matching behavior models.\n");
     write(join(featureDir, "context", "feature-context.md"), `# Feature Context\n\n- Feature: ${name}\n- Objective: ${objective}\n- Repos: ${repos.join(", ")}\n`);
     write(join(featureDir, "context", "constraints.md"), "# Constraints\n\n- Keep changes scoped to this feature workspace.\n");
     write(join(featureDir, "reports", "feature-progress.md"), "# Feature Progress\n\n- Status: initialized\n");
@@ -105,6 +106,60 @@ export const featureCreate: AnyCap = {
     write(join(featureDir, "tasks", "backlog.md"), "# Backlog\n");
     write(join(featureDir, "tasks", "plan.md"), "# Plan\n\n## Current Stage\n\nTBD\n");
 
+    // Search and Inject Related Cognitive Context from Global Index
+    let relatedBehaviorsText = "# Related Cognitive Context\n\n";
+    try {
+      const index = loadCognitiveIndex(ctx.rootDir);
+      const matchedBehaviors: Array<{ id: string; path: string; repo?: string; kind: string; level: string }> = [];
+      const matchedStateMachines: Array<{ entity: string; path: string; repo?: string; kind: string; level: string }> = [];
+
+      const objectiveKeywords = objective
+        .toLowerCase()
+        .split(/[^a-zA-Z0-9\u4e00-\u9fa5]+/)
+        .filter(k => k.length > 2 || (k.length > 0 && /[\u4e00-\u9fa5]/.test(k)));
+
+      for (const b of index.behaviors) {
+        const repoMatches = b.repo && repos.includes(b.repo);
+        const keywordMatches = objectiveKeywords.some(keyword => b.id.toLowerCase().includes(keyword));
+        if (repoMatches || keywordMatches) {
+          matchedBehaviors.push(b);
+        }
+      }
+
+      for (const s of index.state_machines) {
+        const repoMatches = s.repo && repos.includes(s.repo);
+        const keywordMatches = objectiveKeywords.some(keyword => s.entity.toLowerCase().includes(keyword));
+        if (repoMatches || keywordMatches) {
+          matchedStateMachines.push(s);
+        }
+      }
+
+      if (matchedBehaviors.length > 0 || matchedStateMachines.length > 0) {
+        relatedBehaviorsText += `Detected the following related cognitive artifacts from the global workspace based on repos [${repos.join(", ")}] and objective keywords:\n\n`;
+
+        if (matchedBehaviors.length > 0) {
+          relatedBehaviorsText += `### Related Behaviors\n\n`;
+          for (const b of matchedBehaviors) {
+            relatedBehaviorsText += `- **[${b.id}](file:///${join(p.rootDir, b.path)})** (Confidence: ${b.kind}, Level: ${b.level})\n`;
+          }
+          relatedBehaviorsText += `\n`;
+        }
+
+        if (matchedStateMachines.length > 0) {
+          relatedBehaviorsText += `### Related State Machines\n\n`;
+          for (const s of matchedStateMachines) {
+            relatedBehaviorsText += `- **[${s.entity}](file:///${join(p.rootDir, s.path)})** (Confidence: ${s.kind}, Level: ${s.level})\n`;
+          }
+          relatedBehaviorsText += `\n`;
+        }
+      } else {
+        relatedBehaviorsText += "No matching behaviors or state machines found in the global index.\n";
+      }
+    } catch {
+      relatedBehaviorsText += "Failed to load global cognitive index.\n";
+    }
+    write(join(featureDir, "context", "related-cognitive-context.md"), relatedBehaviorsText);
+
     const templates = join(p.runtimeDir, "templates");
     const date = new Date().toISOString().slice(0, 10);
     const reposSummary = repos.join(", ");
@@ -113,6 +168,14 @@ export const featureCreate: AnyCap = {
       const out = join(featureDir, "docs", `${f}.md`);
       let content = existsSync(src) ? read(src) : `# ${f}\n`;
       content = content.replaceAll("{{date}}", date).replaceAll("{{objective}}", objective).replaceAll("{{repos}}", reposSummary);
+      if (f === "01-current-state") {
+        const replacement = "## Related Global Cognitive Context\n\nSee [related-cognitive-context.md](../context/related-cognitive-context.md) for matching behaviors and state machines loaded from the workspace.\n";
+        if (content.includes("## Current Module Structure")) {
+          content = content.replace("## Current Module Structure", `${replacement}\n## Current Module Structure`);
+        } else {
+          content += `\n${replacement}`;
+        }
+      }
       write(out, content);
     }
 

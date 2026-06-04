@@ -9,14 +9,18 @@
   ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
+    "build": "esbuild engine/dapei-engine.ts --bundle --platform=node --format=esm --outfile=dist/dapei-engine.js --external:node:* --minify",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "node --experimental-strip-types --test tests/unit/*.test.mjs",
     "test:integration": "node --experimental-strip-types --test tests/integration/*.test.mjs",
     "smoke": "bash scripts/smoke-test.sh",
-    "verify": "npm run typecheck && npm run test && npm run smoke"
+    "verify": "npm run typecheck && npm run build && npm run test && npm run smoke"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.9.1",
+    "esbuild": "^0.28.0",
+    "js-yaml": "^4.2.0",
     "typescript": "^6.0.3"
   }
 }

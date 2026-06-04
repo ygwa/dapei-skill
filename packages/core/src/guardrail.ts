@@ -4,70 +4,20 @@ import { join } from "node:path";
 import { runSafe } from "../../runtime-adapters/src/system.ts";
 import { loadCognitiveIndex } from "./cognitive-index.ts";
 import { defaultBranch, featureRepoNames } from "./capabilities/shared.ts";
+import { load } from "js-yaml";
 
 export type GuardrailStatus = "PASS" | "WARN" | "FAIL";
 
 function parseSimpleYamlRules(content: string): Array<Record<string, any>> {
-  const rules: Array<Record<string, any>> = [];
-  let current: Record<string, any> | null = null;
-  let inRules = false;
-  let inCheck = false;
-  let listKey = "";
-
-  for (const raw of content.split("\n")) {
-    const line = raw.split("#")[0].trimEnd();
-    const t = line.trim();
-    if (!t) continue;
-
-    if (t === "rules:") {
-      inRules = true;
-      inCheck = false;
-      continue;
+  try {
+    const doc = load(content) as any;
+    if (doc && Array.isArray(doc.rules)) {
+      return doc.rules;
     }
-    if (!inRules) continue;
-
-    if (t.startsWith("- ")) {
-      inCheck = false;
-      listKey = "";
-      current = {};
-      rules.push(current);
-      const rest = t.slice(2);
-      if (rest.includes(":")) {
-        const [k, ...v] = rest.split(":");
-        current[k.trim()] = v.join(":").trim().replace(/^['"]|['"]$/g, "");
-      }
-      continue;
-    }
-
-    if (!current) continue;
-
-    if (t === "check:") {
-      current.check = {};
-      inCheck = true;
-      continue;
-    }
-
-    if (inCheck && (t === "files:" || t === "patterns:")) {
-      listKey = t.replace(":", "");
-      current.check[listKey] = [];
-      continue;
-    }
-
-    if (inCheck && listKey && t.startsWith("- ")) {
-      current.check[listKey].push(t.slice(2).trim().replace(/^['"]|['"]$/g, ""));
-      continue;
-    }
-
-    if (t.includes(":")) {
-      const [k, ...v] = t.split(":");
-      const key = k.trim();
-      const value = v.join(":").trim().replace(/^['"]|['"]$/g, "");
-      if (inCheck) current.check[key] = value;
-      else current[key] = value;
-    }
+  } catch {
+    // Return empty on parsing error to preserve backward compatibility
   }
-
-  return rules;
+  return [];
 }
 
 function modifiedFiles(rootDir: string, opts?: { ignoreSubmodules?: boolean }): string[] {

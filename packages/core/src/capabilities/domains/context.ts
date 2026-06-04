@@ -78,7 +78,19 @@ export const contextBuild: AnyCap = {
     const featureYaml = read(join(featureDir, "feature.yaml"));
     const repos = featureRepoNames(featureYaml);
 
-    let content = `# Runtime Context\n\n- Feature: ${feature}\n- Stage: ${stage}\n- Generated At: ${new Date().toISOString()}\n\n`;
+    let content = `# Runtime Context\n\n` +
+      `## Workspace & Boundary Guidelines\n\n` +
+      `- **Current Workspace**: ${p.workspaceName} (Path: ${p.rootDir})\n` +
+      `- **Current Feature**: ${feature} (Stage: ${stage})\n` +
+      `- **Active Dimension**: Feature Dimension\n\n` +
+      `> [!IMPORTANT]\n` +
+      `> **KNOWLEDGE BOUNDARY RULES**:\n` +
+      `> 1. You are operating in the **Feature Dimension** for \`${feature}\`.\n` +
+      `> 2. All your designs, task lists, code changes, decisions, and risks MUST be saved under the feature directory \`features/${feature}/\`.\n` +
+      `> 3. Do **NOT** modify global files under the workspace root \`docs/\` (e.g. \`docs/as-is/\`, \`docs/architecture/\`) or \`.dapei/\` directly.\n` +
+      `> 4. Syncing local designs and behaviors back to the workspace root is performed automatically during the **Feature Close** workflow stage.\n\n` +
+      `---\n\n` +
+      `- Generated At: ${new Date().toISOString()}\n\n`;
 
     // L0/L1 workspace standards
     const sources = [join(p.docsDir, "standards"), join(p.runtimeDir, "ai-rules"), join(featureDir, "context"), join(featureDir, "docs"), join(featureDir, "tasks")];

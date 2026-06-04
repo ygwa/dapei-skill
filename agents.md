@@ -73,6 +73,35 @@ features/<feature>/repos/<repo>
 
 Feature docs, context, memory, tasks, tests, reports, and artifacts should stay inside the feature workspace unless the feature is being closed out and accepted knowledge is being written back to `docs/`.
 
+### Knowledge Boundary & Dimension Rules
+
+To maintain cognitive consistency, the AI must understand two distinct dimensions:
+
+1. **Feature Dimension (Local isolated design and tasks)**:
+   - When executing tasks or writing code/designs for a feature, all information must remain strictly inside `features/<feature>/`.
+   - AI must NOT directly edit global workspace folders like `docs/as-is/behavior/`, `docs/as-is/state-machines/`, `docs/architecture/`, or `.dapei/`.
+   - Local decisions, designs, risks, and artifacts are written to `features/<feature>/memory/`, `features/<feature>/docs/`, `features/<feature>/artifacts/`.
+   - The runtime context header (`runtime-context.md`) explicitly reminds the AI of this boundary.
+
+2. **Workspace Dimension (Global durable knowledge)**:
+   - Modifications to global repository documents or the global cognitive index should ONLY happen during the feature closeout stage (`feature.close`) or explicit workspace indexing commands.
+   - When a feature is close/archived, the agent backfills verified changes (decisions, behavioral models, state machine transitions) to the global workspace `docs/` and re-indexes the cognitive catalog.
+
+#### How Context Injection Works
+
+On `feature.create`:
+- The system automatically loads the global cognitive index.
+- Behaviors and state machines matching the specified `repos` or keywords in `objective` are injected into `features/<feature>/context/related-cognitive-context.md`.
+- `features/<feature>/docs/01-current-state.md` includes a reference to this file.
+- `features/<feature>/context/repo-context.md` links to the related cognitive context.
+
+On `context.build`:
+- The generated `runtime-context.md` includes a clear header at the top:
+  - Current Workspace Name and path
+  - Current Feature Name and active stage
+  - Explicit rules telling the AI: "You are in the Feature Dimension. Do NOT edit global files. Merge back to workspace only on feature close."
+- This ensures the AI always knows which dimension it is operating in.
+
 ## Agent Workflow
 
 For a user request, the Agent should:
