@@ -1,5 +1,9 @@
 # dapei.skill
 
+[![CI](https://github.com/ygwa/dapei-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/ygwa/dapei-skill/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/ygwa/dapei-skill)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/ygwa/dapei-skill?style=social)](https://github.com/ygwa/dapei-skill/stargazers)
+
 An AI Native Engineering Context OS that emerged from real project work — a set of practices developed through long-term collaboration between engineers and AI.
 
 No silver bullet. Many ideas are simple. But they've genuinely helped reduce real problems:
@@ -11,6 +15,22 @@ No silver bullet. Many ideas are simple. But they've genuinely helped reduce rea
 - Context collapse under multi-agent collaboration
 
 This is a collection of those experiences, packaged as a skill for AI agents to help others avoid the same pitfalls.
+
+---
+
+## Requirements
+
+| | |
+| --- | --- |
+| **Node.js** | `>= 22.6.0` (needed for `--experimental-strip-types` on the engine) |
+| **Git** | recent version with worktree support (Git 2.20+) |
+| **AI tool** | any that loads skills from a known path: Claude Code, Cursor, Copilot, Windsurf, … |
+| **OS** | macOS, Linux, or WSL2. Native Windows is not tested. |
+
+> A Vercel-Skills-compatible install (Option 1 below) handles the AI tool
+> integration automatically; if you go the manual route, the
+> `scripts/sync-local-skills.sh` helper covers Claude Code, Cursor, and
+> Agent Shell.
 
 ---
 
@@ -57,6 +77,55 @@ The full process we actually use — not theory, but lessons learned through rea
 North Star: **让 AI 持续参与系统认知** — understand how systems behave, how state changes, and how risks propagate — not just generate code.
 
 The internal shell entrypoint `scripts/dapei` is now only a thin adapter that forwards to the Node.js/TypeScript engine for backward compatibility. Execution logic lives in `engine/` and `packages/*` only.
+
+#### Cognitive Runtime (v2.2)
+
+> The 2.2 release adds durable **cognitive memory** for the AI: structured
+> YAML artifacts that capture what the system *does*, not just what it
+> *contains*.
+
+The Cognitive Runtime layer sits on top of the regular `repos.analyze` flow
+and produces three kinds of evidence-backed artifacts:
+
+| Artifact | Where it lives | What it answers |
+| --- | --- | --- |
+| Behavior | `docs/as-is/behavior/*.yaml` | "What does this endpoint actually do, end to end?" |
+| State machine | `docs/as-is/state-machines/*.yaml` | "What states can `<entity>` be in, and what transitions between them?" |
+| Evidence block | inside every artifact | "Is this fact, an inference, or unknown?" |
+
+Each artifact is created by the AI itself (not by a grep pre-scan) and must
+pass schema validation plus an evidence-quality check. The agent reads the
+code, drafts the artifact, the engine validates it, and the agent revises
+until it passes. Discoveries and the running index live in
+`.dapei/cognitive/index.yaml`.
+
+##### How to invoke
+
+```
+@dapei analyze behavior for sample-app, start with API discovery then deep-dive top endpoints
+```
+
+```
+@dapei analyze state for Order — derive from order-create, order-cancel, order-refund behavior
+```
+
+```
+@dapei cognitive list              # see all artifacts and the index
+@dapei cognitive validate <file>   # re-run schema + evidence check
+```
+
+Once an artifact exists, every subsequent `@dapei` request can reference it
+by name instead of re-reading the source — so a "what does checkout do?"
+question three months from now takes seconds, not minutes.
+
+##### Why this matters
+
+Without cognitive artifacts, the agent re-derives everything from code on
+every session. With them, the second session in a new feature inherits the
+analysis of the first. The cost reduction is real, and so is the
+consistency gain: two agents answering the same question give the same
+answer because they are both reading the same artifact, not their own
+re-derivation.
 
 ### Step 1: Establish Your Context
 
