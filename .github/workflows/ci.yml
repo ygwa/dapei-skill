@@ -49,34 +49,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Setup test repo
-        run: |
-          mkdir -p repos
-          git init -b main repos/test-repo
-          cd repos/test-repo
-          git config user.email "test@test.com"
-          git config user.name "Test User"
-          echo "# Test" > README.md
-          git add README.md
-          git commit -m "initial"
-
-      - name: Register test repo with dapei
-        run: |
-          ./scripts/dapei repos add test-repo "$PWD/repos/test-repo"
-
-      - name: Test dapei create feature
-        run: |
-          ./scripts/dapei create feature smoke-test \
-            --repos test-repo \
-            --objective "smoke test for dapei CLI" \
-            --owner "CI"
-
-      - name: Verify feature workspace
-        run: |
-          test -f features/smoke-test/feature.yaml || { echo "feature.yaml not found"; exit 1; }
-          test -f features/smoke-test/context/runtime-context.md || { echo "runtime context not found"; exit 1; }
-          test -d features/smoke-test/docs || { echo "docs not found"; exit 1; }
-          echo "Feature workspace structure verified"
+      - name: Run smoke test
+        run: bash scripts/smoke-test.sh
 
   guardrail:
     name: Dapei Guardrail Check
