@@ -52,7 +52,7 @@ jobs:
       - name: Setup test repo
         run: |
           mkdir -p repos
-          git init repos/test-repo
+          git init -b main repos/test-repo
           cd repos/test-repo
           git config user.email "test@test.com"
           git config user.name "Test User"
