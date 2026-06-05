@@ -17,6 +17,8 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
+- `docs/cdr-architecture.md` — Cognitive Discovery Runtime (CDR) architecture with CodeGraph substrate integration (proposed v1.0)
+
 ### Changed
 ### Fixed
 ### Removed

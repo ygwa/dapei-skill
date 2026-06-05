@@ -345,6 +345,7 @@ npx skills add ygwa/dapei-skill@vX.Y.Z
 | Document | Description |
 | --- | --- |
 | [agents.md](agents.md) | Agent collaboration constraints for this repo |
+| [docs/cdr-architecture.md](docs/cdr-architecture.md) | CDR + CodeGraph integration architecture (proposed v1.0) |
 | [DESIGN.md](DESIGN.md) | Technical design documentation |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 | [docs/release-process.md](docs/release-process.md) | How to cut a release |
