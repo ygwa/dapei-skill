@@ -36,7 +36,8 @@ export const workspaceInit: AnyCap = {
       join(p.docsDir, "business"), join(p.docsDir, "domain"), join(p.docsDir, "glossary"),
       join(p.docsDir, "workflows"), join(p.docsDir, "decisions"), join(p.docsDir, "feature-impact"),
       join(p.docsDir, "integrations"), join(p.docsDir, "observability"), join(p.docsDir, "playbooks"), join(p.docsDir, "specs"),
-      join(p.runtimeDir, "templates"), join(p.runtimeDir, "ai-rules")
+      join(p.runtimeDir, "templates"), join(p.runtimeDir, "ai-rules"),
+      join(p.docsDir, ".vitepress"), join(p.docsDir, ".vitepress", "theme"), join(p.docsDir, "scripts"), join(p.docsDir, "compiled")
     ];
     dirs.forEach(ensureDir);
 
@@ -58,6 +59,62 @@ export const workspaceInit: AnyCap = {
       copyIfMissing(join(sourceTemplates, name), join(p.runtimeDir, "templates", name));
     }
     copyIfMissing(join(engineHome, "runtime", "ai-rules", "README.md"), join(p.runtimeDir, "ai-rules", "README.md"));
+
+    // Copy VitePress config & compilation script templates
+    const sourceTemplatesDocs = join(engineHome, "runtime", "templates", "docs");
+    copyIfMissing(join(sourceTemplatesDocs, ".vitepress", "config.mts"), join(p.docsDir, ".vitepress", "config.mts"));
+    copyIfMissing(join(sourceTemplatesDocs, ".vitepress", "theme", "index.ts"), join(p.docsDir, ".vitepress", "theme", "index.ts"));
+    copyIfMissing(join(sourceTemplatesDocs, ".vitepress", "theme", "custom.css"), join(p.docsDir, ".vitepress", "theme", "custom.css"));
+    copyIfMissing(join(sourceTemplatesDocs, "scripts", "build-cognitive-pages.ts"), join(p.docsDir, "scripts", "build-cognitive-pages.ts"));
+    copyIfMissing(join(sourceTemplatesDocs, "index.md"), join(p.docsDir, "index.md"));
+
+    // Ensure placeholders for standard documentation to prevent 404s
+    const placeholderFiles = [
+      { path: join(p.docsDir, "architecture", "README.md"), title: "Architecture & Boundary" },
+      { path: join(p.docsDir, "standards", "README.md"), title: "Standards & Rules" },
+      { path: join(p.docsDir, "glossary", "README.md"), title: "Terminology Glossary" },
+      { path: join(p.docsDir, "decisions", "README.md"), title: "Design Decisions (ADR)" }
+    ];
+    placeholderFiles.forEach(({ path: filepath, title }) => {
+      if (!existsSync(filepath)) {
+        write(filepath, `# ${title}\n\n*Placeholder for workspace documentation.*\n`);
+      }
+    });
+
+    // Merge VitePress dev dependencies and package scripts
+    const packageJsonPath = join(p.rootDir, "package.json");
+    const newScripts = {
+      "docs:build-assets": "node --experimental-strip-types docs/scripts/build-cognitive-pages.ts",
+      "docs:dev": "npm run docs:build-assets && vitepress dev docs",
+      "docs:build": "npm run docs:build-assets && vitepress build docs",
+      "docs:preview": "vitepress preview docs"
+    };
+    const newDevDeps = {
+      "vitepress": "^1.5.0",
+      "vue": "^3.5.13",
+      "js-yaml": "^4.2.0"
+    };
+
+    if (existsSync(packageJsonPath)) {
+      try {
+        const current = JSON.parse(read(packageJsonPath));
+        current.scripts = { ...current.scripts, ...newScripts };
+        current.devDependencies = { ...current.devDependencies, ...newDevDeps };
+        write(packageJsonPath, JSON.stringify(current, null, 2) + "\n");
+      } catch (e) {
+        // Safe fallback
+      }
+    } else {
+      const initPkg = {
+        name: basename(p.rootDir),
+        version: "1.0.0",
+        private: true,
+        type: "module",
+        scripts: newScripts,
+        devDependencies: newDevDeps
+      };
+      write(packageJsonPath, JSON.stringify(initPkg, null, 2) + "\n");
+    }
 
     if (!existsSync(join(p.docsDir, "agents.md"))) {
       write(join(p.docsDir, "agents.md"), "# Workspace Agents\n\nUse this workspace as the durable source of engineering context.\n");

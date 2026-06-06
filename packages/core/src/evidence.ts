@@ -7,6 +7,7 @@ export type ArtifactType = "behavior" | "state-machine";
 export interface SourceRef {
   file: string;
   line?: number;
+  symbol_handle?: string;
   repo?: string;
 }
 
@@ -55,8 +56,9 @@ function parseSources(raw: unknown, path: string): SourceRef[] {
     const obj = asObject(item, `${path}[${i}]`);
     const file = requireString(obj.file, `${path}[${i}].file`);
     const line = typeof obj.line === "number" ? obj.line : undefined;
+    const symbol_handle = optionalString(obj.symbol_handle);
     const repo = optionalString(obj.repo);
-    return { file, line, repo };
+    return { file, line, symbol_handle, repo };
   });
 }
 
