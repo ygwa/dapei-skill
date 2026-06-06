@@ -5,10 +5,35 @@
 | Field | Value |
 | --- | --- |
 | Version | 1.0 |
-| Status | Proposed |
+| Status | **Implemented v0.1** (in `feature/cdr-runtime`; CodeGraph substrate not yet wired) |
 | Baseline | dapei.skill v2.2.x |
-| External dependency | [lzehrung/codegraph](https://github.com/lzehrung/codegraph) ≥ v1.8 (CLI / library / optional MCP) |
+| External dependency | [lzehrung/codegraph](https://github.com/lzehrung/codegraph) ≥ v1.8 (CLI / library / optional MCP) — **not wired in v0.1** |
 | User entry | `@dapei ...` (no new shell commands for end users) |
+| Implementation branch | `feature/cdr-runtime` |
+| Feature delivery doc | [`docs/features/cdr-runtime.md`](features/cdr-runtime.md) |
+
+### v0.1 Implementation Status (shipped on `feature/cdr-runtime`)
+
+| Capability | Status | Evidence |
+| --- | --- | --- |
+| `cdr.profile` | ✅ implemented | unit + integration tests in `tests/unit/cdr.test.mjs` |
+| `cdr.entries.prepare` / `confirm` | ✅ implemented | unit tests + E2E |
+| `cdr.behavior.upsert` | ✅ implemented | unit tests (fact / inference / unknown evidence rules) |
+| `cdr.state.derive` | ✅ implemented | unit tests (writes → CREATED, events → state hints) |
+| `cdr.domain.compose` | ✅ implemented | P1 rule (`derived_from` required) enforced |
+| `cdr.capability.map.init` | ✅ implemented | unit tests |
+| `cdr.index.list` | ✅ implemented | unit + E2E |
+| `cdr.doc.generate` | ✅ implemented | integration test runs real `vitepress build` (~1.2s) |
+| CodeGraph substrate | ❌ deferred to v1.0 | see "Out of scope for v0.1" below |
+
+#### Out of scope for v0.1 (planned for the CodeGraph branch)
+
+- CodeGraph CLI / library invocation in `cdr.profile` and `cdr.entries.prepare` (currently uses heuristic regex + tree)
+- Cross-repo dependency graph for `cdr.domain.compose`
+- Live call-graph evidence in `sources[]`
+- MCP adapter for in-editor navigation
+
+These are tracked in [`docs/features/cdr-runtime.md`](features/cdr-runtime.md) under "Out of scope / future work".
 
 ---
 
