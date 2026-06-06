@@ -11,6 +11,17 @@ import {
   cognitiveDiscover,
   cognitiveStateSuggest
 } from "./domains/cognitive.ts";
+import {
+  cdrProfile,
+  cdrEntriesPrepare,
+  cdrEntriesConfirm,
+  cdrDomainCompose,
+  cdrCapabilityMapInit,
+  cdrIndexList,
+  cdrBehaviorUpsert,
+  cdrStateDerive
+} from "./domains/cdr.ts";
+import { docGenerate } from "../../../doc-gen/src/doc-gen.ts";
 import { memoryAppend } from "./domains/memory.ts";
 import { auditQuery } from "./domains/audit.ts";
 import type { CapabilitySpec } from "../types.ts";
@@ -49,7 +60,18 @@ export const capabilitySpecs: AnyCap[] = [
   cognitiveArtifactValidate,
   cognitiveArtifactUpsert,
   cognitiveArtifactList,
-  cognitiveStateSuggest
+  cognitiveStateSuggest,
+  // CDR capabilities
+  cdrProfile,
+  cdrEntriesPrepare,
+  cdrEntriesConfirm,
+  cdrDomainCompose,
+  cdrCapabilityMapInit,
+  cdrIndexList,
+  cdrBehaviorUpsert,
+  cdrStateDerive,
+  // Documentation generation
+  docGenerate
 ];
 
 export const capabilities: Record<string, AnyCap> = Object.fromEntries(

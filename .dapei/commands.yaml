@@ -252,3 +252,134 @@ commands:
       - filter-entries
     outputs: []
 
+  - name: cdr-profile
+    cli: "@dapei profile repo <name>"
+    purpose: generate a tech profile YAML for one repo (language, framework, manifest files, directory tree, test commands)
+    inputs:
+      - repo_name
+    workflow:
+      - resolve-repo-path
+      - detect-language-and-framework
+      - scan-manifest-files
+      - emit-profile-yaml
+    outputs:
+      - docs/as-is/profiles/<repo>.yaml
+
+  - name: cdr-entries-prepare
+    cli: "@dapei discover entries for <repo>"
+    purpose: scan a repo for entry-point candidate files (controller, route, resource, handler, listener, consumer, scheduler, job)
+    inputs:
+      - repo_name
+    workflow:
+      - resolve-repo-path
+      - scan-for-entry-patterns
+      - emit-entries-candidates-yaml
+    outputs:
+      - docs/as-is/entries/<repo>.yaml
+
+  - name: cdr-entries-confirm
+    cli: "@dapei confirm entry <entry_id> in <repo>"
+    purpose: mark one entry candidate as confirmed and attach a human-written summary for downstream behavior mining
+    inputs:
+      - repo_name
+      - entry_id
+      - summary
+    workflow:
+      - load-entries-yaml
+      - mark-entry-confirmed
+      - write-summary
+    outputs:
+      - docs/as-is/entries/<repo>.yaml
+
+  - name: cdr-state-derive
+    cli: "@dapei discover states for <entity> in <repo>"
+    purpose: derive a state-machine draft from a specified list of confirmed behaviors' writes and events (inference-level, Agent must confirm)
+    inputs:
+      - entity
+      - behaviors
+      - repo
+    workflow:
+      - load-behaviors-for-entity
+      - extract-states-from-writes-and-events
+      - build-transitions
+      - emit-draft-state-machine
+    outputs:
+      - docs/as-is/state-machines/<entity>.yaml
+
+  - name: cdr-behavior-upsert
+    cli: "@dapei upsert behavior <id> (via cognitive.artifact.upsert)"
+    purpose: validate a behavior YAML and insert it into the cognitive index (used by Agent after tracing an entry; evidence-block required)
+    inputs:
+      - id
+      - repo
+      - entry
+      - writes
+      - events
+      - calls
+      - risks
+      - confidence
+      - sources
+    workflow:
+      - validate-evidence-block
+      - validate-behavior-schema
+      - write-behavior-yaml
+      - update-cognitive-index
+    outputs:
+      - docs/as-is/behavior/<id>.yaml
+      - .dapei/cognitive/index.yaml
+
+  - name: cdr-domain-compose
+    cli: "@dapei compose domain <name> from <behaviors>"
+    purpose: cluster behaviors into a domain YAML with required derived_from reference (P1 rule enforcement)
+    inputs:
+      - domain
+      - description
+      - behaviors
+    workflow:
+      - verify-behaviors-in-index
+      - compose-domain-yaml
+      - validate-derived-from
+      - write-domain-yaml
+    outputs:
+      - docs/as-is/domains/<domain>.yaml
+
+  - name: cdr-capability-map-init
+    cli: "@dapei init capability map for <product>"
+    purpose: initialize the L1 product capability map referencing existing domain artifacts
+    inputs:
+      - product
+      - capabilities
+    workflow:
+      - validate-capability-ids
+      - emit-capability-map-yaml
+    outputs:
+      - docs/as-is/capabilities/product-map.yaml
+
+  - name: cdr-index-list
+    cli: "@dapei list assets [--repo <repo>] [--kind <fact|inference|unknown>]"
+    purpose: list all cognitive assets (behaviors, state machines, domains, capability maps, unknowns) with optional filters
+    inputs:
+      - repo
+      - kind
+    workflow:
+      - load-cognitive-index
+      - filter-by-inputs
+      - render-summary
+    outputs: []
+
+  - name: cdr-doc-generate
+    cli: "@dapei generate documentation portal [--output-dir <dir>]"
+    purpose: compile docs/as-is/* cognitive assets into a VitePress-ready static site with Mermaid diagrams and confidence badges
+    inputs:
+      - output_dir
+    workflow:
+      - ensure-output-dirs
+      - load-all-cognitive-assets
+      - render-l1-capability-pages
+      - render-l2-domain-pages
+      - render-l3-behavior-and-state-pages
+      - render-profile-pages
+      - emit-vitepress-config
+    outputs:
+      - .dapei/docs-portal/
+

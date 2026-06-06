@@ -9,5 +9,10 @@
     "allowImportingTsExtensions": true,
     "types": ["node"]
   },
-  "include": ["packages/**/*.ts", "engine/**/*.ts"]
+  "include": ["packages/**/*.ts", "engine/**/*.ts"],
+  "exclude": [
+    "packages/doc-gen/templates/**",
+    "node_modules",
+    "dist"
+  ]
 }

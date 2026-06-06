@@ -230,6 +230,11 @@ export const cognitiveArtifactList: AnyCap = {
       if (kindFilter && s.kind !== kindFilter) return false;
       return true;
     });
+    const domains = index.domains.filter((d) => {
+      if (repoFilter && d.repo !== repoFilter) return false;
+      return true;
+    });
+    const capabilityMaps = index.capability_maps;
     const unknowns = index.unknowns;
 
     const lines = [
@@ -238,6 +243,8 @@ export const cognitiveArtifactList: AnyCap = {
       `- Updated: ${index.updated_at}`,
       `- Behaviors: ${behaviors.length}`,
       `- State Machines: ${stateMachines.length}`,
+      `- Domains: ${domains.length}`,
+      `- Capability Maps: ${capabilityMaps.length}`,
       `- Unknowns: ${unknowns.length}`,
       ``,
       `## Behaviors`,
@@ -246,13 +253,19 @@ export const cognitiveArtifactList: AnyCap = {
       `## State Machines`,
       ...(stateMachines.length ? stateMachines.map((s) => `- ${s.entity} [${s.kind}/${s.level}] ${s.path}${s.repo ? ` (${s.repo})` : ""}`) : ["- none"]),
       ``,
+      `## Domains`,
+      ...(domains.length ? domains.map((d) => `- ${d.domain} ${d.path} derived_from: [${d.derived_from.join(", ")}]${d.repo ? ` (${d.repo})` : ""}`) : ["- none"]),
+      ``,
+      `## Capability Maps`,
+      ...(capabilityMaps.length ? capabilityMaps.map((c) => `- ${c.product} ${c.path} (${c.capability_count} capabilities)`) : ["- none"]),
+      ``,
       `## Unknowns`,
       ...(unknowns.length ? unknowns.map((u) => `- ${u.id}: ${u.reason}`) : ["- none"])
     ];
 
     return {
       ok: true,
-      data: { text: lines.join("\n"), behaviors, state_machines: stateMachines, unknowns, updated_at: index.updated_at },
+      data: { text: lines.join("\n"), behaviors, state_machines: stateMachines, domains, capability_maps: capabilityMaps, unknowns, updated_at: index.updated_at },
       sideEffects: [],
       reportFragments: ["cognitive list"]
     };

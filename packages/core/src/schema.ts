@@ -7,6 +7,44 @@ function jsonTypeOf(v: Json): "string" | "number" | "boolean" | "object" | "arra
   return typeof v as "string" | "number" | "boolean" | "object";
 }
 
+// Documentation-only TypeScript shapes for cognitive artifacts.
+// Runtime validation lives in evidence.ts (validateArtifact) against the JSON
+// schemas under .dapei/schemas/*.yaml — do not bypass that with these aliases.
+
+import type { ConfidenceBlock, SourceRef } from "./evidence.ts";
+
+export interface BehaviorSpec {
+  id: string;
+  repo?: string;
+  entry: { type: "api" | "mq" | "cron" | "rpc" | "cache" | "search" | "other"; method?: string; path?: string; topic?: string; schedule?: string; handler?: string };
+  writes?: Array<{ table?: string; target?: string; operation?: "insert" | "update" | "delete" | "upsert" | "read"; fields?: string[] }>;
+  events?: string[];
+  calls?: string[];
+  risks?: string[];
+  confidence: ConfidenceBlock;
+  sources?: SourceRef[];
+  derived_from?: string[];
+  reason?: string;
+  investigation_hint?: string;
+}
+
+export interface DomainSpec {
+  domain: string;
+  name?: string;
+  description?: string;
+  modules?: Array<{ name: string; description?: string; responsibilities?: string[] }>;
+  derived_from: string[];
+  confidence: ConfidenceBlock;
+  sources?: SourceRef[];
+  repo?: string;
+  reason?: string;
+}
+
+export interface CapabilityMapSpec {
+  product: string;
+  capabilities: Array<{ id: string; name: string; description?: string; domains?: string[] }>;
+}
+
 export function validateInputSchema(input: Record<string, Json>, schema: {
   required?: string[];
   properties?: Record<string, { type?: "string" | "number" | "boolean" | "object" | "array"; enum?: Array<string | number | boolean>; minLength?: number }>;
