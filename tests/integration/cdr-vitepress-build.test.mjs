@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, cpSync, symlinkSync, existsSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, symlinkSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'url';
@@ -16,6 +16,33 @@ const core = await import('../../packages/core/src/index.ts');
 async function generatePortalInTmp() {
   const tmp = mkdtempSync(join(tmpdir(), 'dapei-vp-int-'));
   await core.runCapability('workspace.init', {}, { rootDir: tmp, now: new Date() });
+
+  // v0.3: create a real `demo` repo with src/orders.ts so the evidence
+  // validator (P1 red line) accepts the file:line pointer.
+  const repoDir = join(tmp, 'repos', 'demo');
+  mkdirSync(repoDir, { recursive: true });
+  mkdirSync(join(repoDir, 'src'), { recursive: true });
+  const ordersContent = [
+    "import { Router } from 'express';",
+    "const router = Router();",
+    "",
+    "router.post('/orders', async (req, res) => {",
+    "  // Validate input",
+    "  const items = req.body.items;",
+    "  if (!items || items.length === 0) return res.status(400).end();",
+    "  // Reserve stock",
+    "  await stockService.lockItems(items);",
+    "  // Persist order",
+    "  const order = await orderRepo.create({ items });",
+    "  res.json(order);",
+    "});",
+    "",
+    "export default router;",
+    ""
+  ].join("\n");
+  writeFileSync(join(repoDir, 'src', 'orders.ts'), ordersContent);
+  writeFileSync(join(repoDir, 'package.json'), JSON.stringify({ name: 'demo', version: '1.0.0' }));
+
   await core.runCapability('cdr.behavior.upsert', {
     id: 'order-create', repo: 'demo', entry: { type: 'api', method: 'POST', path: '/orders' },
     steps: [{ name: 'Validate', action: 'check stock' }, { name: 'Reserve', action: 'lock items' }],

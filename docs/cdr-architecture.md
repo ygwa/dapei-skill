@@ -5,12 +5,45 @@
 | Field | Value |
 | --- | --- |
 | Version | 1.0 |
-| Status | **Implemented v0.2** (in `feature/cdr-mining`; CodeGraph substrate not yet wired) |
+| Status | **Implemented v0.3** (in `feature/cdr-v0.3-ai-as-scanner`; CodeGraph substrate not yet wired) |
 | Baseline | dapei.skill v2.2.x |
-| External dependency | [lzehrung/codegraph](https://github.com/lzehrung/codegraph) ≥ v1.8 (CLI / library / optional MCP) — **not wired in v0.1 / v0.2** |
+| External dependency | [lzehrung/codegraph](https://github.com/lzehrung/codegraph) ≥ v1.8 (CLI / library / optional MCP) — **not wired in v0.1 / v0.2 / v0.3** |
 | User entry | `@dapei ...` (no new shell commands for end users) |
-| Implementation branches | `feature/cdr-runtime` (v0.1), `feature/cdr-mining` (v0.2) |
-| Feature delivery docs | [`docs/features/cdr-runtime.md`](features/cdr-runtime.md), [`docs/features/cdr-mining.md`](features/cdr-mining.md) |
+| Implementation branches | `feature/cdr-runtime` (v0.1), `feature/cdr-mining` (v0.2), `feature/cdr-v0.3-ai-as-scanner` (v0.3) |
+| Feature delivery docs | [`docs/features/cdr-runtime.md`](features/cdr-runtime.md), [`docs/features/cdr-mining.md`](features/cdr-mining.md), [`docs/features/cdr-v0.3-ai-as-scanner.md`](features/cdr-v0.3-ai-as-scanner.md) |
+
+## Core Principle (v0.3): AI as scanner, engine as validator
+
+**Why v0.3 exists**: v0.2 hardcoded regex/annotation parsers for Spring / NestJS / FastAPI / Express into the engine (~150 lines of framework-specific code). Every new framework required new code. Worse, the engine was actively *stealing* a job the AI could already do — reading code.
+
+v0.3 inverts the responsibility split:
+
+| v0.2 (regex-bound) | v0.3 (AI as scanner) |
+| --- | --- |
+| Engine reads every code file, runs 4 framework regexes, emits candidates with `framework: spring` / `nestjs` / `fastapi` / `express` | Engine returns the code file listing (cheap, deterministic). AI reads the content and decides. |
+| Quarkus / Ktor / Hapi / Actix / Axum / Django / Fastify / gRPC / GraphQL / dynamic routes = all leak through | Anything the AI can read works. No maintenance. |
+| `entries[].framework: "spring"` carries the platform's opinion | `discovered_by: "ai"` — engine doesn't opine on framework |
+| `cdr.entries.confirm` only needs `summary` | `cdr.entries.confirm` requires `sources[]` (P1 red line) |
+| 35 framework-assertion tests | 35 evidence-validation tests (line out of range, file missing, fact without sources) |
+
+**Non-negotiables** that did not change:
+
+- The engine is still 100% deterministic. No LLM calls in the engine path. The AI is *outside* the engine, in the chat session, driving `runCapability` calls. CI stays fast, tests stay reproducible, cost stays under control.
+- The P1 red lines (kind=fact requires sources, domain requires derived_from, etc.) are now actually enforceable because the engine, not the Agent, owns the "evidence exists" check.
+- The workflow descriptions from `cognitive.discover` v2.1 still hold: "Agent chooses how to locate behavior entry points for this stack — platform does not prescribe keywords or patterns." v0.3 makes v0.2 actually consistent with that principle.
+
+### v0.3 Implementation Status (on `feature/cdr-v0.3-ai-as-scanner`)
+
+| Capability | Status | Evidence |
+| --- | --- | --- |
+| `cdr.entries.candidate` (file listing, no pattern) | ✅ implemented | unit test asserts Spring/NestJS/FastAPI files all returned as plain code files (no special framework detection) |
+| `cdr.entries.propose` (single entry, evidence-validated) | ✅ implemented | unit tests reject: missing sources, line out of range, file not in repo, invalid id |
+| `cdr.entries.prepare` (thin orchestrator delegating to .candidate) | ✅ implemented | unit test asserts `entries[]` field is gone, `workflow.prefer = "cdr.entries.candidate"`, `deprecated: true` |
+| `cdr.entries.confirm` requires sources[] + validates evidence | ✅ implemented | unit tests reject: confirm without sources, confirm with non-existent file |
+| `validateEvidencePoints(ctx, doc)` shared helper | ✅ implemented | used by 6 capabilities; tests cover fact+strict, inference+loose, explicit-repo-on-inference |
+| `cdr.profile` v2 (no `frameworks` field) | ✅ implemented | unit test asserts `frameworks:` no longer in profile yaml |
+| Evidence validation in `cdr.behavior.upsert` / `cdr.state.derive` / `cdr.domain.compose` / `cdr.business.compose` | ✅ implemented | unit tests for each |
+| L4 ai-behavior transcript for full candidate → propose → confirm | ✅ implemented | `tests/ai-behavior/fixtures/conversations/cdr-ai-as-scanner.yaml` |
 
 ### v0.2 Implementation Status (shipped on `feature/cdr-mining`)
 

@@ -17,6 +17,17 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
+- **CDR v0.3 — AI as scanner** (on `feature/cdr-v0.3-ai-as-scanner`)
+  - `cdr.entries.candidate` — new capability that returns a code file listing (`files[]` with `relpath` / `language` / `content` slices) for the AI to read. **No pattern matching** — language-agnostic, framework-agnostic.
+  - `cdr.entries.propose` — new capability for the AI to submit a single entry point with `sources[]`; the engine validates every `sources[].file` exists under `repos/<repo>/<file>` and every `line` is in range (P1 red line).
+  - `cdr.entries.prepare` — reduced to a thin orchestrator that delegates to `cdr.entries.candidate` and returns a workflow description. Marked `deprecated: true` in its return data; new code should call `cdr.entries.candidate` directly.
+  - `cdr.entries.confirm` — now requires `sources[]`; the engine rejects confirmation without evidence.
+  - `validateEvidencePoints(ctx, doc)` — single shared helper used by `cdr.entries.propose`, `cdr.entries.confirm`, `cdr.behavior.upsert`, `cdr.state.derive`, `cdr.domain.compose`, `cdr.business.compose`. Enforces: `kind=fact` requires `sources[].file` to exist in repo; `line` (when present) must be in range; `kind=inference` skips strict validation but still validates sources that carry an explicit `repo` field.
+  - `cdr.profile` — removed `frameworks` field. The engine no longer prescribes which frameworks a repo uses; the AI reads `manifest_files` + `directory_tree` to decide.
+  - New L4 transcript fixture `tests/ai-behavior/fixtures/conversations/cdr-ai-as-scanner.yaml` covers the full `candidate → propose → confirm` flow.
+  - 35 framework-assertion tests in `tests/unit/cdr.test.mjs` replaced with evidence-validation tests (line out of range, file missing, kind=fact without sources, idempotent propose, etc.).
+  - `docs/features/cdr-v0.3-ai-as-scanner.md` — feature delivery doc.
+  - **Net code change**: cdr.ts went from 1139 lines to 1100 lines despite adding 2 new capabilities — 150 lines of framework-specific regex deleted.
 - **CDR v0.2 — annotation-aware entry detection + business-rule artifacts** (on `feature/cdr-mining`)
 - `cdr.entries.prepare` v2: reads file content (up to 200KB per file) and applies per-framework annotation regexes for **Spring** (`@RestController` + `@GetMapping`/`@PostMapping`/etc., with class-level `@RequestMapping` concatenation; supports no-paren variants like `@PostMapping`), **NestJS** (`@Controller('...')` + `@Get`/`@Post`/etc.), **FastAPI** (`@app.get`/`@router.post`), and **Express** (`app.get`/`router.post`). Annotation-discovered entries replace filename-discovered entries for the same file; they carry `method` / `path` / `line` / `framework` fields so the Agent doesn't have to re-derive them. Class-level base paths (`@RequestMapping`, `@Controller`) are auto-prepended when method-level paths are relative.
 - `cdr.entries.confirm`: now accepts optional `framework` / `method` / `path` / `line` inputs that get persisted onto the entry YAML.

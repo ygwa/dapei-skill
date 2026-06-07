@@ -139,15 +139,19 @@ and requirements (`features/`):
 | Capability | User intent | Output |
 | --- | --- | --- |
 | `cdr.profile` | `@dapei profile repo mall-order` | `docs/as-is/profiles/<repo>.yaml` |
-| `cdr.entries.prepare` | `@dapei discover entries for mall-order` | `docs/as-is/entries/<repo>.yaml` (candidates, annotation-aware in v0.2) |
-| `cdr.entries.confirm` | `@dapei confirm entry order-create in mall-order` | same file, status `confirmed` |
-| `cdr.behavior.upsert` | via `cognitive.artifact.upsert` after deep-dive | `docs/as-is/behavior/<id>.yaml` |
+| `cdr.entries.candidate` (v0.3) | `@dapei discover entries for mall-order` | code file listing with content slices (no pattern matching) |
+| `cdr.entries.propose` (v0.3) | `runCapability(...)` with one entry + `sources[]` | `docs/as-is/entries/<repo>.yaml` (engine validates file exists + line in range) |
+| `cdr.entries.prepare` (v0.3, thin orchestrator) | same intent, retained for backward compat | delegates to `cdr.entries.candidate` |
+| `cdr.entries.confirm` | `@dapei confirm entry order-create in mall-order` | requires `sources[]`; same file, status `confirmed` |
+| `cdr.behavior.upsert` | via `cognitive.artifact.upsert` after deep-dive | `docs/as-is/behavior/<id>.yaml` (fact-level evidence validated) |
 | `cdr.state.derive` | `@dapei discover states for Order` | `docs/as-is/state-machines/<entity>.yaml` |
 | `cdr.domain.compose` | `@dapei compose domain Transaction` | `docs/as-is/domains/<domain>.yaml` |
 | `cdr.capability.map.init` | `@dapei init capability map for E-Commerce Mall` | `docs/as-is/capabilities/product-map.yaml` |
 | `cdr.business.compose` | `@dapei compose business order-amount-positive` | `docs/as-is/business-rules/<id>.yaml` (5 kinds: invariant / constraint / authorization / sla / compensation) |
 | `cdr.index.list` | `@dapei list assets` | in-memory summary |
 | `cdr.doc.generate` | `@dapei generate documentation portal` | `.dapei/docs-portal/` (VitePress, 6 sections incl. business-rules/) |
+
+> **v0.3 design principle (AI as scanner)**: the engine no longer hardcodes framework knowledge. It returns the code file listing to the AI, and the AI uses its reading ability to identify entry points. This means Quarkus / Ktor / Hapi / Actix / Axum / Django / Fastify / gRPC / GraphQL / dynamic routes all work without engine changes. The engine's job is reduced to: **list files cheaply, validate evidence strictly**. See [`docs/cdr-architecture.md`](docs/cdr-architecture.md#core-principle-v03-ai-as-scanner-engine-as-validator) and [`docs/features/cdr-v0.3-ai-as-scanner.md`](docs/features/cdr-v0.3-ai-as-scanner.md).
 
 P1 red lines the engine enforces (not the Agent):
 
@@ -159,6 +163,9 @@ P1 red lines the engine enforces (not the Agent):
   the reasoning chain
 - `behavior` with `kind: unknown` **must** carry `reason` — distinguishes
   "not yet investigated" from "ignored"
+- **(v0.3)** Every `sources[].file` must exist in `repos/<repo>/<file>` and
+  `line` (when present) must be in range — engine validates the evidence
+  actually points at real code
 
 The VitePress portal at `.dapei/docs-portal/` is a real, buildable static
 site. It uses three custom Vue 3 components (BehaviorFlow, StateMachine,
@@ -173,8 +180,9 @@ npx vitepress preview    # serve the static site
 ```
 
 Chinese (中文) intent variants are also routed by the `@dapei` parser: `分析`
-→ `cdr.profile`, `扫描入口` → `cdr.entries.prepare`, `推导状态` → `cognitive.state.suggest`,
-`组合领域` → `cdr.domain.compose`, `初始化功能地图` → `cdr.capability.map.init`,
+→ `cdr.profile`, `扫描入口` → `cdr.entries.prepare` (v0.3 thin orchestrator; prefer `cdr.entries.candidate` directly), `推导状态` → `cognitive.state.suggest`,
+`组合领域` → `cdr.domain.compose`, `组合业务规则` → `cdr.business.compose`,
+`初始化功能地图` → `cdr.capability.map.init`,
 `生成文档门户` → `cdr.doc.generate`, `列出资产` → `cdr.index.list`, `确认入口` →
 `cdr.entries.confirm`.
 
@@ -396,9 +404,10 @@ npx skills add ygwa/dapei-skill@vX.Y.Z
 | Document | Description |
 | --- | --- |
 | [agents.md](agents.md) | Agent collaboration constraints for this repo |
-| [docs/cdr-architecture.md](docs/cdr-architecture.md) | CDR + CodeGraph integration architecture (v0.2 implemented; v1.0 proposed) |
+| [docs/cdr-architecture.md](docs/cdr-architecture.md) | CDR + CodeGraph integration architecture (v0.3 implemented; v1.0 proposed) |
 | [docs/features/cdr-runtime.md](docs/features/cdr-runtime.md) | Feature delivery doc for `feature/cdr-runtime` (v0.1) |
 | [docs/features/cdr-mining.md](docs/features/cdr-mining.md) | Feature delivery doc for `feature/cdr-mining` (v0.2: annotation-aware entries + business-rule artifacts) |
+| [docs/features/cdr-v0.3-ai-as-scanner.md](docs/features/cdr-v0.3-ai-as-scanner.md) | Feature delivery doc for `feature/cdr-v0.3-ai-as-scanner` (v0.3: AI as scanner, engine as validator) |
 | [DESIGN.md](DESIGN.md) | Technical design documentation |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 | [docs/release-process.md](docs/release-process.md) | How to cut a release |

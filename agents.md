@@ -138,8 +138,8 @@ CDR is the **L3 process-asset layer** that sits between `repos/` (raw code) and 
 
 | Layer | What it answers | Where it lives | How it is produced |
 | --- | --- | --- | --- |
-| L0 — Profile | "What is this repo, technically?" | `docs/as-is/profiles/<repo>.yaml` | `cdr.profile` (deterministic) |
-| L2 — Entries | "What are the entry points worth deep-diving?" | `docs/as-is/entries/<repo>.yaml` | `cdr.entries.prepare` (heuristic) + `cdr.entries.confirm` (Agent) |
+| L0 — Profile | "What is this repo, technically?" | `docs/as-is/profiles/<repo>.yaml` | `cdr.profile` (deterministic; AI reads `manifest_files` to infer stack) |
+| L2 — Entries | "What are the entry points worth deep-diving?" | `docs/as-is/entries/<repo>.yaml` | `cdr.entries.candidate` (engine lists code files) → AI reads `content` → `cdr.entries.propose` (AI submits one entry with `sources[]`; engine validates `file` exists + `line` in range) → `cdr.entries.confirm` (requires `sources[]`) |
 | L3 — Behavior | "What does this endpoint actually do, end to end?" | `docs/as-is/behavior/<id>.yaml` | `cdr.behavior.upsert` (Agent reads code, engine validates evidence) |
 | L3 — State machine | "What states can `<entity>` be in, and what transitions?" | `docs/as-is/state-machines/<entity>.yaml` | `cdr.state.derive` (inference draft) + Agent confirmation |
 | L2 — Domain | "Which behaviors cluster into a domain?" | `docs/as-is/domains/<domain>.yaml` | `cdr.domain.compose` (P1: `derived_from` required) |
@@ -189,8 +189,9 @@ Prioritize in this order:
 1. P0: make the modular platform complete, committed, and smoke-tested.
 2. P1: **Cognitive Runtime Phase 1** — behavior facts, evidence system, cognitive index. **Shipped in 2.2.0.**
 3. P1: **Cognitive Runtime Phase 2** — state transition layer, inconsistency detection.
-4. P1: **Cognitive Discovery Runtime v0.1** — `cdr.profile` / `cdr.entries.*` / `cdr.behavior.upsert` / `cdr.state.derive` / `cdr.domain.compose` / `cdr.capability.map.init` / `cdr.doc.generate` / `cdr.index.list`. **Shipped on `feature/cdr-runtime` (awaiting merge to main).**
-5. P1: **Cognitive Discovery Runtime v0.2** — annotation-aware entry detection (Spring / NestJS / FastAPI / Express) + `business-rule` artifact type (`invariant` / `constraint` / `authorization` / `sla` / `compensation`) + `cdr.business.compose` capability. **Shipped on `feature/cdr-mining` (awaiting merge to main).**
+4. P1: **Cognitive Discovery Runtime v0.1** — `cdr.profile` / `cdr.entries.*` / `cdr.behavior.upsert` / `cdr.state.derive` / `cdr.domain.compose` / `cdr.capability.map.init` / `cdr.doc.generate` / `cdr.index.list`. **Shipped on `feature/cdr-runtime` (merged).**
+5. P1: **Cognitive Discovery Runtime v0.2** — annotation-aware entry detection (Spring / NestJS / FastAPI / Express) + `business-rule` artifact type (`invariant` / `constraint` / `authorization` / `sla` / `compensation`) + `cdr.business.compose` capability. **Shipped on `feature/cdr-mining` (merged).**
+6. P1: **Cognitive Discovery Runtime v0.3 — AI as scanner** — `cdr.entries.prepare` reduced to a thin orchestrator; new `cdr.entries.candidate` returns a code file listing (no pattern matching), new `cdr.entries.propose` accepts a single entry with `sources[]` and the engine validates every `sources[].file` exists in `repos/<repo>/<file>` and `line` is in range. `cdr.entries.confirm` now requires `sources[]` (P1 red line). 35 framework-assertion tests replaced with evidence-validation tests; new L4 ai-behavior transcript fixture for the full candidate → propose → confirm flow. **On `feature/cdr-v0.3-ai-as-scanner` (awaiting merge).** The design principle: AI is the scanner, engine is the validator — language-agnostic, framework-agnostic, no regex maintenance burden.
 6. P1: repos-to-docs bootstrap with Agent-driven deep analysis.
 7. P1: stage-aware context engineering with cognitive summaries.
 8. P1: real feature planning and design generation.

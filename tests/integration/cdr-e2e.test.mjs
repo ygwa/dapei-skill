@@ -43,18 +43,45 @@ test('cdr e2e: profile → entries → behavior → state → domain → capabil
     assert.ok(profileRes.data.language.includes('nodejs'));
     assert.ok(existsSync(join(tmp, 'docs/as-is/profiles/sample-app.yaml')));
 
-    // Step 2: cdr.entries.prepare — scan repo for entry candidates
-    const { result: entriesRes } = await core.runCapability('cdr.entries.prepare', { repo: 'sample-app' }, c(tmp));
+    // Step 2: cdr.entries.candidate — engine lists code files (v0.3: no pattern matching)
+    const { result: entriesRes } = await core.runCapability('cdr.entries.candidate', { repo: 'sample-app' }, c(tmp));
     assert.equal(entriesRes.ok, true);
-    assert.ok(entriesRes.data.entry_count >= 1);
-    const entries = entriesRes.data.entries;
-    const orderCreate = entries.find((e) => String(e.anchor).includes('orderController'));
-    assert.ok(orderCreate, 'orderController.ts must surface as an entry candidate');
+    assert.ok(entriesRes.data.file_count >= 1);
+    const files = entriesRes.data.files;
+    const orderCtrlFile = files.find((f) => String(f.relpath).includes('orderController.ts'));
+    assert.ok(orderCtrlFile, 'orderController.ts must surface as a code file');
+    assert.ok(orderCtrlFile.content.length > 0, 'file content must be inlined for AI to read');
+
+    // Step 2b: cdr.entries.propose — AI submits one entry with evidence
+    // (In v0.3 the AI reads the content and decides which files are entry points)
+    const proposeRes = await core.runCapability(
+      'cdr.entries.propose',
+      {
+        repo: 'sample-app',
+        id: 'order-cancel',
+        type: 'api',
+        file: 'src/routes/orderController.ts',
+        line: 4,
+        method: 'POST',
+        path: '/orders/:id/cancel',
+        summary: 'POST /orders/:id/cancel — order cancellation flow',
+        sources: [{ file: 'src/routes/orderController.ts', line: 4, repo: 'sample-app' }]
+      },
+      c(tmp)
+    );
+    assert.equal(proposeRes.result.ok, true);
+    assert.equal(proposeRes.result.data.status, 'candidate');
 
     // Step 3: cdr.entries.confirm — Agent marks one entry as worth deep-diving
     await core.runCapability(
       'cdr.entries.confirm',
-      { repo: 'sample-app', entry_id: orderCreate.id, summary: 'POST /orders/:id/cancel — order cancellation flow', priority: 'P0' },
+      {
+        repo: 'sample-app',
+        entry_id: 'order-cancel',
+        summary: 'POST /orders/:id/cancel — order cancellation flow',
+        priority: 'P0',
+        sources: [{ file: 'src/routes/orderController.ts', line: 4, repo: 'sample-app' }]
+      },
       c(tmp)
     );
     const entriesDoc = readFileSync(join(tmp, 'docs/as-is/entries/sample-app.yaml'), 'utf8');
