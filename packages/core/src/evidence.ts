@@ -2,11 +2,12 @@ import { CapabilityError } from "./types.ts";
 
 export type EvidenceKind = "fact" | "inference" | "unknown";
 export type ConfidenceLevel = "high" | "medium" | "low";
-export type ArtifactType = "behavior" | "state-machine";
+export type ArtifactType = "behavior" | "state-machine" | "domain" | "capability-map";
 
 export interface SourceRef {
   file: string;
   line?: number;
+  symbol_handle?: string;
   repo?: string;
 }
 
@@ -55,8 +56,9 @@ function parseSources(raw: unknown, path: string): SourceRef[] {
     const obj = asObject(item, `${path}[${i}]`);
     const file = requireString(obj.file, `${path}[${i}].file`);
     const line = typeof obj.line === "number" ? obj.line : undefined;
+    const symbol_handle = optionalString(obj.symbol_handle);
     const repo = optionalString(obj.repo);
-    return { file, line, repo };
+    return { file, line, symbol_handle, repo };
   });
 }
 
@@ -187,9 +189,85 @@ export function validateStateMachineArtifact(doc: Record<string, unknown>): stri
   return errors;
 }
 
+export function validateDomainArtifact(doc: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+  const domain = optionalString(doc.domain);
+  if (!domain) errors.push("domain: missing domain name");
+  else if (!ID_PATTERN.test(domain.toLowerCase().replace(/[^a-z0-9-]/g, "-"))) errors.push("domain: name must match ID pattern");
+
+  if (doc.description !== undefined && typeof doc.description !== "string") {
+    errors.push("domain: description must be a string");
+  }
+
+  if (Array.isArray(doc.modules)) {
+    for (const [i, m] of doc.modules.entries()) {
+      if (!m || typeof m !== "object" || Array.isArray(m)) {
+        errors.push(`domain: modules[${i}] must be an object`);
+        continue;
+      }
+      const mo = m as Record<string, unknown>;
+      if (!optionalString(mo.name)) errors.push(`domain: modules[${i}].name is required`);
+    }
+  }
+
+  try {
+    const confidence = parseConfidence(doc.confidence || { level: "medium", kind: "inference" });
+    const sources = parseSources(doc.sources, "sources");
+    const derived_from = Array.isArray(doc.derived_from)
+      ? doc.derived_from.map((x) => String(x))
+      : [];
+    const reason = optionalString(doc.reason);
+
+    // P1 Rule: domain artifacts require derived_from
+    if (!derived_from.length) {
+      errors.push(`domain:${domain || "?"}: domain artifacts must specify derived_from referring to behavior IDs`);
+    }
+
+    errors.push(
+      ...validateEvidenceFields(
+        { confidence, sources, derived_from, reason, investigation_hint: optionalString(doc.investigation_hint) },
+        `domain:${domain || "?"}`
+      )
+    );
+  } catch (e: any) {
+    if (e instanceof CapabilityError) errors.push(e.message);
+    else errors.push("domain: invalid confidence block");
+  }
+
+  return errors;
+}
+
+export function validateCapabilityMapArtifact(doc: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+  const product = optionalString(doc.product);
+  if (!product) errors.push("capability-map: missing product name");
+
+  if (!Array.isArray(doc.capabilities) || doc.capabilities.length === 0) {
+    errors.push("capability-map: capabilities must be a non-empty array");
+  } else {
+    for (const [i, cap] of doc.capabilities.entries()) {
+      if (!cap || typeof cap !== "object" || Array.isArray(cap)) {
+        errors.push(`capability-map: capabilities[${i}] must be an object`);
+        continue;
+      }
+      const c = cap as Record<string, unknown>;
+      if (!optionalString(c.id)) errors.push(`capability-map: capabilities[${i}].id is required`);
+      if (!optionalString(c.name)) errors.push(`capability-map: capabilities[${i}].name is required`);
+      if (c.domains !== undefined && !Array.isArray(c.domains)) {
+        errors.push(`capability-map: capabilities[${i}].domains must be an array`);
+      }
+    }
+  }
+
+  return errors;
+}
+
 export function validateArtifact(type: ArtifactType, doc: Record<string, unknown>): string[] {
   if (type === "behavior") return validateBehaviorArtifact(doc);
-  return validateStateMachineArtifact(doc);
+  if (type === "state-machine") return validateStateMachineArtifact(doc);
+  if (type === "domain") return validateDomainArtifact(doc);
+  if (type === "capability-map") return validateCapabilityMapArtifact(doc);
+  return [`unknown artifact type: ${type}`];
 }
 
 export function assertValidArtifact(type: ArtifactType, doc: Record<string, unknown>): void {

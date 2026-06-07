@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 const core = await import('../../packages/core/src/index.ts');
 
 function setupLocalGitRepo(repoPath, rootDir) {
-  execFileSync('git', ['init', repoPath], { encoding: 'utf8' });
+  execFileSync('git', ['init', '-b', 'main', repoPath], { encoding: 'utf8' });
   execFileSync('git', ['-C', repoPath, 'config', 'user.name', 'test'], { encoding: 'utf8' });
   execFileSync('git', ['-C', repoPath, 'config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
   writeFileSync(join(repoPath, 'README.md'), '# test');

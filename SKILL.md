@@ -26,6 +26,7 @@ version: 2.2.0
 - workflow 类意图 -> `skills/workflow/SKILL.md` -> `context.build|workflow.runStage`
 - validation 类意图 -> `skills/validation/SKILL.md` -> `validation.run`
 - cognitive 类意图 -> `skills/cognitive/SKILL.md` -> `cognitive.discover|cognitive.artifact.*|cognitive.state.suggest`
+- cdr/知识提取/文档门户 类意图 -> `skills/cdr/SKILL.md` -> `cdr.profile|cdr.entries.*|cdr.domain.compose|cdr.capability.map.init|cdr.index.list|cdr.doc.generate`
 
 ## 阶段确认点
 

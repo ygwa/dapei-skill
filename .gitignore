@@ -18,6 +18,14 @@ node_modules/
 # Build outputs
 dist/
 build/
+
+# Agent / IDE scratch (never commit)
+/.omo/
+/.agent-shell/
+/SKILL-preview.html
+/.worktrees/
+worktrees/
+worktrees
 *.tsbuildinfo
 .DS_Store
 
@@ -38,3 +46,4 @@ plans/
 .worktrees
 worktrees/
 worktrees
+/.agent-shell/

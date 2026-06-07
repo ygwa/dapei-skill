@@ -6,10 +6,6 @@
   "engines": {
     "node": ">=22.6.0"
   },
-  "workspaces": [
-    "packages/*",
-    "engine"
-  ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "build": "esbuild engine/dapei-engine.ts --bundle --platform=node --format=esm --outfile=dist/dapei-engine.js --external:node:* --minify",
@@ -22,6 +18,7 @@
     "verify": "npm run typecheck && npm run build && npm run test && npm run smoke"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.27.1",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.9.1",
     "ajv": "^8.20.0",
