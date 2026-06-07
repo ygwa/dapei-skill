@@ -13,6 +13,8 @@ import {
 } from "./domains/cognitive.ts";
 import {
   cdrProfile,
+  cdrEntriesCandidate,
+  cdrEntriesPropose,
   cdrEntriesPrepare,
   cdrEntriesConfirm,
   cdrDomainCompose,
@@ -64,6 +66,8 @@ export const capabilitySpecs: AnyCap[] = [
   cognitiveStateSuggest,
   // CDR capabilities
   cdrProfile,
+  cdrEntriesCandidate,
+  cdrEntriesPropose,
   cdrEntriesPrepare,
   cdrEntriesConfirm,
   cdrDomainCompose,

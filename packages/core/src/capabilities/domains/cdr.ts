@@ -1,8 +1,8 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
-import { assertValidArtifact, validateArtifact, parseConfidence } from "../../evidence.ts";
+import { assertValidArtifact, validateArtifact, parseConfidence, type SourceRef } from "../../evidence.ts";
 import type { ArtifactType } from "../../evidence.ts";
 import {
   artifactRelativePath,
@@ -18,7 +18,7 @@ import { ensureDir, read, write, runSafe, workspacePaths, listFilesRecursively }
 export type AnyCap = CapabilitySpec<any, any>;
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Constants
 // ---------------------------------------------------------------------------
 
 const MANIFEST_MARKERS = [
@@ -29,211 +29,46 @@ const MANIFEST_MARKERS = [
   "mix.exs", "pubspec.yaml", "Package.swift", "CMakeLists.txt"
 ];
 
-const FRAMEWORK_HINTS: Array<{ file: string; hint: string }> = [
-  { file: "next.config.js", hint: "next.js" },
-  { file: "next.config.mjs", hint: "next.js" },
-  { file: "next.config.ts", hint: "next.js" },
-  { file: "nuxt.config.ts", hint: "nuxt" },
-  { file: "angular.json", hint: "angular" },
-  { file: "vite.config.ts", hint: "vite" },
-  { file: "vite.config.js", hint: "vite" },
-  { file: "nest-cli.json", hint: "nestjs" },
-  { file: "tsconfig.json", hint: "typescript" },
-  { file: "Dockerfile", hint: "docker" },
-  { file: "docker-compose.yml", hint: "docker-compose" },
-  { file: "docker-compose.yaml", hint: "docker-compose" },
-];
+/** File extensions that the engine will hand back to the AI for entry discovery. */
+const CODE_EXTS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".kt", ".scala",
+  ".py", ".rb", ".go", ".rs", ".php", ".cs", ".swift", ".m", ".mm", ".dart"];
 
-/** Entry-point heuristic patterns (case-insensitive match against filenames). */
-const ENTRY_PATTERNS: Array<{ regex: RegExp; type: "api" | "mq" | "cron" | "other" }> = [
-  { regex: /controller/i, type: "api" },
-  { regex: /route/i, type: "api" },
-  { regex: /resource/i, type: "api" },
-  { regex: /handler/i, type: "other" },
-  { regex: /listener/i, type: "mq" },
-  { regex: /consumer/i, type: "mq" },
-  { regex: /scheduler/i, type: "cron" },
-  { regex: /job/i, type: "cron" },
-];
+/** Cap on a file's content slice returned by cdr.entries.candidate, in bytes. */
+const MAX_FILE_BYTES = 200_000;
 
-const FILE_CONTENT_SCAN_BYTES = 200_000;
+/** A reasonable number of files to hand back per candidate call. */
+const MAX_FILES_PER_CANDIDATE = 200;
 
-interface AnnotationMatch {
-  framework: string;
-  type: "api";
-  method?: string;
-  path: string;
-  line: number;
-}
+const EXT_TO_LANG: Record<string, string> = {
+  ".ts": "typescript", ".tsx": "typescript", ".js": "javascript", ".jsx": "javascript",
+  ".mjs": "javascript", ".cjs": "javascript",
+  ".java": "java", ".kt": "kotlin", ".scala": "scala",
+  ".py": "python", ".rb": "ruby", ".go": "go", ".rs": "rust",
+  ".php": "php", ".cs": "csharp", ".swift": "swift",
+  ".dart": "dart", ".m": "objc", ".mm": "objcpp"
+};
 
-const CLASS_LEVEL_PATTERNS: Array<{
-  framework: string;
-  fileExt: string[];
-  regex: RegExp;
-  pathGroup: number;
-}> = [
-  {
-    framework: "spring",
-    fileExt: [".java"],
-    regex: /@RequestMapping\s*\(\s*(?:value\s*=\s*)?["']([^"']+)["']/g,
-    pathGroup: 1
-  },
-  {
-    framework: "nestjs",
-    fileExt: [".ts", ".js"],
-    regex: /@Controller\s*\(\s*["']([^"']+)["']/g,
-    pathGroup: 1
-  }
-];
+const ENTRY_TYPES = new Set(["api", "mq", "cron", "rpc", "cache", "search", "other"]);
 
-const ANNOTATION_PATTERNS: Array<{
-  framework: string;
-  fileExt: string[];
-  matches: Array<{ regex: RegExp; method?: string; require: RegExp; pathGroup: number; methodGroup?: number }>;
-}> = [
-  {
-    framework: "spring",
-    fileExt: [".java"],
-    matches: [
-      {
-        // Method annotation — path in parens is optional (empty/missing → use class-level).
-        regex: /@(Get|Post|Put|Delete|Patch)Mapping\s*(?:\(\s*["']?([^"']*)["']?\s*\))?/g,
-        methodGroup: 1,
-        pathGroup: 2,
-        require: /@(RestController|Controller)\b/
-      },
-      {
-        regex: /@RequestMapping\s*\(\s*(?:value\s*=\s*)?["']([^"']+)["']/g,
-        pathGroup: 1,
-        require: /@(RestController|Controller)\b/
-      }
-    ]
-  },
-  {
-    framework: "nestjs",
-    fileExt: [".ts", ".js"],
-    matches: [
-      {
-        // Method decorator — path in parens is optional.
-        regex: /@(Get|Post|Put|Delete|Patch)\s*(?:\(\s*["']?([^"']*)["']?\s*\))?/g,
-        methodGroup: 1,
-        pathGroup: 2,
-        require: /@Controller\b/
-      },
-      {
-        regex: /@Controller\s*\(\s*["']([^"']+)["']/g,
-        pathGroup: 1,
-        require: /@Controller\s*\(/
-      }
-    ]
-  },
-  {
-    framework: "fastapi",
-    fileExt: [".py"],
-    matches: [
-      {
-        regex: /@(app|router)\.(get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']/g,
-        methodGroup: 2,
-        pathGroup: 3,
-        require: /@\s*(?:FastAPI|APIRouter|router|app)/
-      }
-    ]
-  },
-  {
-    framework: "express",
-    fileExt: [".ts", ".js"],
-    matches: [
-      {
-        regex: /(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']/g,
-        methodGroup: 1,
-        pathGroup: 2,
-        require: /\b(?:express\s*\(\s*)?Router\s*\(\s*\)/
-      }
-    ]
-  }
-];
-
-function safeStat(filePath: string): number | null {
-  try {
-    return statSync(filePath).size;
-  } catch {
-    return null;
-  }
-}
-
-function lineOfOffset(content: string, offset: number): number {
-  let line = 1;
-  for (let i = 0; i < offset && i < content.length; i++) {
-    if (content[i] === "\n") line++;
-  }
-  return line;
-}
-
-function joinUrlPath(base: string | undefined, suffix: string): string {
-  if (!base) return suffix;
-  if (!suffix) return base;
-  const b = base.replace(/\/+$/, "");
-  const s = suffix.startsWith("/") ? suffix : "/" + suffix;
-  return b + s;
-}
-
-function extractClassLevelPath(filePath: string, content: string): string | undefined {
-  const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
-  for (const fw of CLASS_LEVEL_PATTERNS) {
-    if (!fw.fileExt.includes(ext)) continue;
-    fw.regex.lastIndex = 0;
-    const m = fw.regex.exec(content);
-    if (m) {
-      const p = (m[fw.pathGroup] || "").trim();
-      if (p) return p.replace(/\/+$/, "");
-    }
-  }
-  return undefined;
-}
-
-function scanFileForAnnotations(filePath: string, content: string): AnnotationMatch[] {
-  const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
-  const classLevel = extractClassLevelPath(filePath, content);
-  const out: AnnotationMatch[] = [];
-  for (const framework of ANNOTATION_PATTERNS) {
-    if (!framework.fileExt.includes(ext)) continue;
-    if (!framework.matches.some((m) => m.require.test(content))) continue;
-    for (const pat of framework.matches) {
-      // Skip the class-level @RequestMapping / @Controller pattern here — it's
-      // already consumed by extractClassLevelPath.
-      if (pat.pathGroup === 1 && pat.methodGroup === undefined && pat.regex.source.includes("RequestMapping")) continue;
-      if (pat.pathGroup === 1 && pat.methodGroup === undefined && pat.regex.source.includes("Controller")) continue;
-      pat.regex.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = pat.regex.exec(content)) !== null) {
-        const rawPath = (m[pat.pathGroup] || "").trim();
-        const method = pat.methodGroup ? (m[pat.methodGroup] || "").toUpperCase() : undefined;
-        if (!method) continue;
-        const finalPath = joinUrlPath(classLevel, rawPath);
-        if (!finalPath) continue;
-        out.push({
-          framework: framework.framework,
-          type: "api",
-          method,
-          path: finalPath,
-          line: lineOfOffset(content, m.index)
-        });
-        if (m.index === pat.regex.lastIndex) pat.regex.lastIndex++;
-      }
-    }
-  }
-  return out;
-}
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function toKebab(name: string): string {
   return name
-    .replace(/\.[^.]+$/, "")           // strip extension
-    .replace(/([a-z])([A-Z])/g, "$1-$2") // camelCase → kebab
+    .replace(/\.[^.]+$/, "")
+    .replace(/([a-z])([A-Z])/g, "$1-$2")
     .replace(/[_\s]+/g, "-")
     .replace(/[^a-z0-9-]/gi, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     .toLowerCase();
+}
+
+function languageHintForFile(relpath: string): string {
+  const idx = relpath.lastIndexOf(".");
+  if (idx < 0) return "unknown";
+  return EXT_TO_LANG[relpath.slice(idx).toLowerCase()] || "unknown";
 }
 
 function repoDirectoryTree(repoPath: string, rootDir: string): string {
@@ -257,12 +92,6 @@ function repoManifestFiles(repoPath: string): string[] {
   return MANIFEST_MARKERS.filter((name) => existsSync(join(repoPath, name)));
 }
 
-function detectFrameworkHints(repoPath: string): string[] {
-  return FRAMEWORK_HINTS
-    .filter((h) => existsSync(join(repoPath, h.file)))
-    .map((h) => h.hint);
-}
-
 function profilesDir(rootDir: string): string {
   return join(workspacePaths(rootDir).docsDir, "as-is", "profiles");
 }
@@ -275,13 +104,90 @@ function capabilitiesDir(rootDir: string): string {
   return join(workspacePaths(rootDir).docsDir, "as-is", "capabilities");
 }
 
+/**
+ * P1 red-line: when an artifact is `kind=fact` (a direct claim about code),
+ * every sources[] entry must point at a real file in a registered repo, with
+ * line (when present) in range. For `kind=inference` or `kind=unknown`,
+ * sources[] are optional citations, and we do NOT strictly require them to
+ * have a repo (derived_from[] carries the inference chain instead).
+ *
+ * This helper enforces that uniformly across all artifact upsert paths so the
+ * engine, not the Agent, owns the "evidence exists" check.
+ *
+ * Returns an array of error strings; empty array means all sources validated.
+ */
+function validateEvidencePoints(
+  ctx: { rootDir: string },
+  doc: Record<string, unknown>,
+  options: { strictRepo?: boolean } = {}
+): string[] {
+  const errors: string[] = [];
+  const sources = Array.isArray(doc.sources) ? doc.sources : [];
+  if (!sources.length) return errors;
+
+  const confidence = doc.confidence as { kind?: string } | undefined;
+  const isFact = confidence?.kind === "fact";
+  // For non-facts, only validate sources that have an explicit `repo` field —
+  // defense against typos. Sources without repo on an inference draft are
+  // treated as loose pointers and skipped.
+  const sourcesWithRepo = sources.filter(
+    (s) => s && typeof s === "object" && !Array.isArray(s) && typeof (s as Record<string, unknown>).repo === "string" && (s as Record<string, unknown>).repo
+  );
+  if (!isFact && !options.strictRepo && !sourcesWithRepo.length) return errors;
+
+  const defaultRepo = doc.repo ? String(doc.repo) : undefined;
+  const cache = new Map<string, { size: number; lineCount: number }>();
+
+  for (const [i, src] of sources.entries()) {
+    if (!src || typeof src !== "object" || Array.isArray(src)) {
+      errors.push(`sources[${i}] must be an object`);
+      continue;
+    }
+    const s = src as Record<string, unknown>;
+    const hasExplicitRepo = typeof s.repo === "string" && (s.repo as string).trim();
+    if (!isFact && !options.strictRepo && !hasExplicitRepo) continue;
+    const file = typeof s.file === "string" && s.file.trim() ? s.file.trim() : "";
+    if (!file) {
+      errors.push(`sources[${i}].file is required`);
+      continue;
+    }
+    const repoName = hasExplicitRepo ? (s.repo as string).trim() : defaultRepo;
+    if (!repoName) {
+      if (isFact) {
+        errors.push(`sources[${i}].repo is required (no default repo on artifact)`);
+      }
+      continue;
+    }
+    const rel = join("repos", repoName, file);
+    const abs = join(ctx.rootDir, rel);
+    if (!existsSync(abs)) {
+      errors.push(`sources[${i}].file not found in repo '${repoName}': ${file}`);
+      continue;
+    }
+    if (typeof s.line === "number") {
+      let info = cache.get(rel);
+      if (!info) {
+        const content = read(abs);
+        info = { size: content.length, lineCount: content.split("\n").length };
+        cache.set(rel, info);
+      }
+      if (s.line < 1 || s.line > info.lineCount) {
+        errors.push(
+          `sources[${i}].line ${s.line} out of range (file repos/${repoName}/${file} has ${info.lineCount} lines)`
+        );
+      }
+    }
+  }
+  return errors;
+}
+
 // ---------------------------------------------------------------------------
 // 1. cdr.profile
 // ---------------------------------------------------------------------------
 
 export const cdrProfile: AnyCap = {
   id: "cdr.profile",
-  version: "1.0.0",
+  version: "2.0.0",
   inputSchema: {
     required: ["repo"],
     properties: { repo: { type: "string", minLength: 1 } },
@@ -298,16 +204,17 @@ export const cdrProfile: AnyCap = {
     }
 
     const language = detectRepoLanguage(repoPath);
-    const frameworks = detectFrameworkHints(repoPath);
     const manifestFiles = repoManifestFiles(repoPath);
     const directoryTree = repoDirectoryTree(repoPath, p.rootDir);
     const testCommands = detectTestCommands(repoPath);
 
+    // v0.3: removed `frameworks` field. The engine no longer prescribes which
+    // frameworks a repo uses — the AI reads manifest_files + directory_tree
+    // and decides. See cdr-architecture.md "AI as scanner" principle.
     const profileData: Record<string, YamlValue> = {
       repo,
       generated_at: ctx.now.toISOString(),
       language,
-      frameworks,
       manifest_files: manifestFiles,
       directory_tree: directoryTree,
       test_commands: testCommands
@@ -324,7 +231,6 @@ export const cdrProfile: AnyCap = {
         repo,
         path: relative(p.rootDir, outFile),
         language,
-        frameworks,
         manifest_files: manifestFiles,
         test_commands: testCommands
       },
@@ -335,15 +241,25 @@ export const cdrProfile: AnyCap = {
 };
 
 // ---------------------------------------------------------------------------
-// 2. cdr.entries.prepare
+// 2. cdr.entries.candidate — cheap file listing (no pattern matching)
+//
+// v0.3 redesign: the engine does NOT prescribe which files are entry points.
+// It returns a list of code files with content slices, and the AI decides
+// which are entry points via cdr.entries.propose. This is language-agnostic
+// and framework-agnostic — Quarkus / Ktor / Hapi / Actix / Axum / Django /
+// Fastify / gRPC / GraphQL all work without code changes here.
 // ---------------------------------------------------------------------------
 
-export const cdrEntriesPrepare: AnyCap = {
-  id: "cdr.entries.prepare",
+export const cdrEntriesCandidate: AnyCap = {
+  id: "cdr.entries.candidate",
   version: "1.0.0",
   inputSchema: {
     required: ["repo"],
-    properties: { repo: { type: "string", minLength: 1 } },
+    properties: {
+      repo: { type: "string", minLength: 1 },
+      max_files: { type: "number" },
+      max_bytes: { type: "number" }
+    },
     additionalProperties: false
   },
   async execute(ctx, input) {
@@ -356,113 +272,241 @@ export const cdrEntriesPrepare: AnyCap = {
       throw new CapabilityError("REPO_MISSING", `repos/${repo} not found`);
     }
 
-    // Scan for entry point candidate files
-    const codeExts = [".ts", ".js", ".java", ".py", ".go", ".rs", ".kt", ".scala", ".rb", ".php"];
-    const allFiles = listFilesRecursively(repoPath, codeExts, 500);
+    const maxFiles = typeof input.max_files === "number" && input.max_files > 0
+      ? Math.min(input.max_files, 1000)
+      : MAX_FILES_PER_CANDIDATE;
+    const maxBytes = typeof input.max_bytes === "number" && input.max_bytes > 0
+      ? Math.min(input.max_bytes, 2_000_000)
+      : MAX_FILE_BYTES;
 
-    const candidates: Array<Record<string, YamlValue>> = [];
-    const seenFilenameIds = new Set<string>();
-    const seenAnnotationKeys = new Set<string>();
-
-    for (const filePath of allFiles) {
-      const relFile = relative(repoPath, filePath);
-      const fileName = filePath.split("/").pop() || "";
-
-      for (const pattern of ENTRY_PATTERNS) {
-        if (pattern.regex.test(fileName)) {
-          const id = toKebab(fileName);
-          if (seenFilenameIds.has(id)) break;
-          seenFilenameIds.add(id);
-
-          candidates.push({
-            id,
-            type: pattern.type,
-            status: "candidate",
-            anchor: relFile,
-            discovered_by: "platform"
-          });
-          break;
-        }
-      }
-    }
+    const allFiles = listFilesRecursively(repoPath, CODE_EXTS, maxFiles);
+    const fileEntries: Array<Record<string, YamlValue>> = [];
+    const skipped: Array<{ relpath: string; reason: string }> = [];
 
     for (const filePath of allFiles) {
       const relFile = relative(repoPath, filePath);
-      const stat = safeStat(filePath);
-      if (stat === null || stat > FILE_CONTENT_SCAN_BYTES) continue;
+      let content = "";
+      let truncated = false;
 
-      let content: string;
       try {
-        content = read(filePath);
+        const raw = read(filePath);
+        if (raw.length > maxBytes) {
+          content = raw.slice(0, maxBytes);
+          truncated = true;
+          skipped.push({ relpath: relFile, reason: `exceeds ${maxBytes} bytes` });
+        } else {
+          content = raw;
+        }
       } catch {
+        skipped.push({ relpath: relFile, reason: "unreadable" });
         continue;
       }
 
-      const matches = scanFileForAnnotations(filePath, content);
-      if (matches.length === 0) continue;
-
-      // Annotation results are strictly more informative than a filename hit
-      // (specific method+path vs. a whole file) — drop the latter when the
-      // former is present.
-      const filtered = candidates.filter((c) => c.anchor !== relFile);
-      candidates.length = 0;
-      candidates.push(...filtered);
-
-      const fileBase = toKebab(relFile.split("/").pop() || relFile);
-      for (const m of matches) {
-        const dedupKey = `${relFile}|${m.method || ""}|${m.path}`;
-        if (seenAnnotationKeys.has(dedupKey)) continue;
-        seenAnnotationKeys.add(dedupKey);
-
-        const id = `${fileBase}-${(m.method || "ANY").toLowerCase()}-${toKebab(m.path)}`;
-        const entry: Record<string, YamlValue> = {
-          id,
-          type: m.type,
-          status: "candidate",
-          anchor: relFile,
-          line: m.line,
-          path: m.path,
-          framework: m.framework,
-          discovered_by: "platform-annotation"
-        };
-        if (m.method) entry.method = m.method;
-        candidates.push(entry);
-      }
+      fileEntries.push({
+        relpath: relFile,
+        language: languageHintForFile(relFile),
+        size_bytes: content.length,
+        truncated,
+        content
+      });
     }
 
-    const entriesDoc: Record<string, YamlValue> = {
-      repo,
-      generated_at: ctx.now.toISOString(),
-      entry_count: candidates.length,
-      entries: candidates as unknown as YamlValue
+    return {
+      ok: true,
+      data: {
+        repo,
+        file_count: fileEntries.length,
+        files: fileEntries as unknown as YamlValue,
+        skipped: skipped as unknown as YamlValue,
+        max_bytes: maxBytes,
+        workflow: {
+          step: 1,
+          phase: "candidate",
+          goal: "AI reads file content and decides which files are entry points",
+          next: "For each entry point: runCapability('cdr.entries.propose', {id, file, line, type, sources: [...]})"
+        }
+      },
+      sideEffects: [],
+      reportFragments: [`listed ${fileEntries.length} code file(s) in ${repo} for AI triage`]
     };
+  }
+};
 
+// ---------------------------------------------------------------------------
+// 3. cdr.entries.propose — AI submits one entry, engine validates evidence
+// ---------------------------------------------------------------------------
+
+export const cdrEntriesPropose: AnyCap = {
+  id: "cdr.entries.propose",
+  version: "1.0.0",
+  inputSchema: {
+    required: ["repo", "id", "file", "line", "type"],
+    properties: {
+      repo: { type: "string", minLength: 1 },
+      id: { type: "string", minLength: 1 },
+      type: { type: "string", enum: [...ENTRY_TYPES] },
+      file: { type: "string", minLength: 1 },
+      line: { type: "number" },
+      method: { type: "string" },
+      path: { type: "string" },
+      summary: { type: "string" },
+      sources: { type: "array" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    requireFields(input, ["repo", "id", "file", "line", "type"]);
+    const repo = String(input.repo);
+    const id = String(input.id);
+    const type = String(input.type);
+    const file = String(input.file);
+    const line = typeof input.line === "number" ? input.line : undefined;
+    const method = input.method ? String(input.method) : undefined;
+    const path = input.path ? String(input.path) : undefined;
+    const summary = input.summary ? String(input.summary) : undefined;
+    const sources = Array.isArray(input.sources) ? input.sources : [];
+
+    if (!/^[a-z0-9-]+$/.test(id)) {
+      throw new CapabilityError("INVALID_INPUT", "id must match ^[a-z0-9-]+$");
+    }
+    if (!sources.length) {
+      throw new CapabilityError(
+        "INVALID_INPUT",
+        "sources[] is required — every entry proposal must cite at least one source location"
+      );
+    }
+
+    const p = workspacePaths(ctx.rootDir);
+    const repoPath = join(p.reposDir, repo);
+    if (!existsSync(repoPath)) {
+      throw new CapabilityError("REPO_MISSING", `repos/${repo} not found`);
+    }
+
+    const entryDoc: Record<string, unknown> = {
+      id,
+      type,
+      status: "candidate",
+      discovered_by: "ai",
+      anchor: file,
+      line,
+      sources
+    };
+    if (method) entryDoc.method = method;
+    if (path) entryDoc.path = path;
+    if (summary) entryDoc.summary = summary;
+
+    // P1 red line: validate every sources[].file/line points at real code
+    const evidenceErrors = validateEvidencePoints(ctx, entryDoc);
+    if (evidenceErrors.length) {
+      throw new CapabilityError("INVALID_EVIDENCE", evidenceErrors.join("; "));
+    }
+
+    // Idempotent append: read existing entries, drop any with same id, push new
     const outDir = entriesDir(ctx.rootDir);
     ensureDir(outDir);
     const outFile = join(outDir, `${repo}.yaml`);
-    write(outFile, stringifyYamlDocument(entriesDoc));
+
+    let doc: Record<string, YamlValue>;
+    if (existsSync(outFile)) {
+      doc = parseYamlDocument(read(outFile));
+    } else {
+      doc = {
+        repo,
+        generated_at: ctx.now.toISOString(),
+        entry_count: 0,
+        entries: []
+      };
+    }
+
+    const entries = Array.isArray(doc.entries) ? (doc.entries as Array<Record<string, YamlValue>>) : [];
+    const filtered = entries.filter((e) => e && e.id !== id);
+    filtered.push(entryDoc as unknown as Record<string, YamlValue>);
+    doc.entries = filtered as unknown as YamlValue;
+    doc.entry_count = filtered.length;
+    doc.generated_at = ctx.now.toISOString();
+
+    write(outFile, stringifyYamlDocument(doc));
 
     return {
       ok: true,
       data: {
         repo,
         path: relative(p.rootDir, outFile),
-        entry_count: candidates.length,
-        entries: candidates
+        id,
+        type,
+        status: "candidate",
+        file,
+        line: line ?? null,
+        method: method || null,
+        entry_path: path || null
       },
-      sideEffects: [`entries prepared: ${relative(p.rootDir, outFile)}`],
-      reportFragments: [`found ${candidates.length} entry candidates in ${repo}`]
+      sideEffects: [`entry proposed: ${id} in ${repo}`],
+      reportFragments: [`AI proposed entry ${id} (${type}) at ${file}:${line}`]
     };
   }
 };
 
 // ---------------------------------------------------------------------------
-// 3. cdr.entries.confirm
+// 4. cdr.entries.prepare — thin orchestrator (v0.3: delegates to .candidate)
+//
+// Kept for backward compatibility with router patterns like
+// "discover entries for X" / "扫描入口 for X". The actual work is done by
+// cdr.entries.candidate (returns file list) and cdr.entries.propose
+// (records one entry). This capability just returns a workflow description
+// so the Agent knows the next step.
+// ---------------------------------------------------------------------------
+
+export const cdrEntriesPrepare: AnyCap = {
+  id: "cdr.entries.prepare",
+  version: "2.0.0",
+  inputSchema: {
+    required: ["repo"],
+    properties: { repo: { type: "string", minLength: 1 } },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    // Delegate to cdr.entries.candidate to do the actual file listing, then
+    // wrap its result with a workflow description so the Agent knows what
+    // to do next.
+    const candResult = await cdrEntriesCandidate.execute(ctx, input);
+    if (!candResult.ok) return candResult;
+
+    const candidate = candResult.data as {
+      repo: string;
+      file_count: number;
+      files: Array<Record<string, YamlValue>>;
+      skipped: Array<{ relpath: string; reason: string }>;
+    };
+
+    return {
+      ok: true,
+      data: {
+        ...candidate,
+        workflow: {
+          step: 1,
+          phase: "orient",
+          goal: "AI reads code files and identifies entry points (HTTP routes, MQ consumers, cron jobs, RPC handlers, etc.)",
+          next: "For each entry point: runCapability('cdr.entries.propose', {repo, id, type, file, line, sources:[{file, line, repo}]})",
+          deprecated: true,
+          prefer: "cdr.entries.candidate"
+        }
+      },
+      sideEffects: candResult.sideEffects,
+      reportFragments: candResult.reportFragments
+    };
+  }
+};
+
+// ---------------------------------------------------------------------------
+// 5. cdr.entries.confirm — mark a candidate entry as confirmed
+//
+// v0.3: requires sources[] pointing at real code. This is the engine's
+// guard against AI "fast-confirming" entries without pointing at evidence.
 // ---------------------------------------------------------------------------
 
 export const cdrEntriesConfirm: AnyCap = {
   id: "cdr.entries.confirm",
-  version: "1.0.0",
+  version: "2.0.0",
   inputSchema: {
     required: ["repo", "entry_id", "summary"],
     properties: {
@@ -470,10 +514,7 @@ export const cdrEntriesConfirm: AnyCap = {
       entry_id: { type: "string", minLength: 1 },
       summary: { type: "string", minLength: 1 },
       priority: { type: "string" },
-      framework: { type: "string" },
-      method: { type: "string" },
-      path: { type: "string" },
-      line: { type: "number" }
+      sources: { type: "array" }
     },
     additionalProperties: false
   },
@@ -482,17 +523,24 @@ export const cdrEntriesConfirm: AnyCap = {
     const repo = String(input.repo);
     const entryId = String(input.entry_id);
     const summary = String(input.summary);
-    const framework = input.framework ? String(input.framework) : undefined;
-    const method = input.method ? String(input.method) : undefined;
-    const path = input.path ? String(input.path) : undefined;
-    const line = typeof input.line === "number" ? input.line : undefined;
     const priority = input.priority ? String(input.priority) : undefined;
+    const sources = Array.isArray(input.sources) ? input.sources : [];
+
+    if (!sources.length) {
+      throw new CapabilityError(
+        "INVALID_INPUT",
+        "sources[] is required — confirming an entry without evidence is a P1 violation"
+      );
+    }
 
     const outDir = entriesDir(ctx.rootDir);
     const outFile = join(outDir, `${repo}.yaml`);
 
     if (!existsSync(outFile)) {
-      throw new CapabilityError("FILE_MISSING", `entries file not found: ${relative(ctx.rootDir, outFile)}. Run cdr.entries.prepare first.`);
+      throw new CapabilityError(
+        "FILE_MISSING",
+        `entries file not found: ${relative(ctx.rootDir, outFile)}. Run cdr.entries.candidate + cdr.entries.propose first.`
+      );
     }
 
     const doc = parseYamlDocument(read(outFile));
@@ -506,13 +554,22 @@ export const cdrEntriesConfirm: AnyCap = {
       if (entry && typeof entry === "object" && !Array.isArray(entry)) {
         const e = entry as Record<string, YamlValue>;
         if (String(e.id) === entryId) {
+          // Validate the new sources[] before allowing confirmation
+          const updated = {
+            ...(e as Record<string, unknown>),
+            status: "confirmed",
+            summary,
+            sources
+          };
+          const evidenceErrors = validateEvidencePoints(ctx, updated);
+          if (evidenceErrors.length) {
+            throw new CapabilityError("INVALID_EVIDENCE", evidenceErrors.join("; "));
+          }
+
           e.status = "confirmed";
           e.summary = summary;
+          e.sources = sources as unknown as YamlValue;
           if (priority) e.priority = priority;
-          if (framework) e.framework = framework;
-          if (method) e.method = method;
-          if (path) e.path = path;
-          if (line !== undefined) e.line = line;
           found = true;
           break;
         }
@@ -533,19 +590,16 @@ export const cdrEntriesConfirm: AnyCap = {
         status: "confirmed",
         summary,
         priority: priority || null,
-        framework: framework || null,
-        method: method || null,
-        path: path || null,
-        line: line ?? null
+        sources: sources as unknown as YamlValue
       },
       sideEffects: [`entry confirmed: ${entryId}`],
-      reportFragments: [`confirmed entry ${entryId} in ${repo}`]
+      reportFragments: [`confirmed entry ${entryId} in ${repo} with ${sources.length} source(s)`]
     };
   }
 };
 
 // ---------------------------------------------------------------------------
-// 4. cdr.domain.compose
+// 6. cdr.domain.compose
 // ---------------------------------------------------------------------------
 
 export const cdrDomainCompose: AnyCap = {
@@ -557,7 +611,8 @@ export const cdrDomainCompose: AnyCap = {
       domain: { type: "string", minLength: 1 },
       description: { type: "string", minLength: 1 },
       behaviors: { type: "array" },
-      repo: { type: "string" }
+      repo: { type: "string" },
+      sources: { type: "array" }
     },
     additionalProperties: false
   },
@@ -577,7 +632,6 @@ export const cdrDomainCompose: AnyCap = {
     const cp = cognitivePaths(ctx.rootDir);
     const index = loadCognitiveIndex(ctx.rootDir);
 
-    // Verify referenced behaviors exist in the index
     const missingBehaviors: string[] = [];
     const matchedBehaviors: Array<Record<string, YamlValue>> = [];
 
@@ -586,7 +640,6 @@ export const cdrDomainCompose: AnyCap = {
       if (!found) {
         missingBehaviors.push(bid);
       } else {
-        // Load the behavior artifact if it exists
         const behaviorPath = join(ctx.rootDir, found.path);
         if (existsSync(behaviorPath)) {
           const behaviorDoc = parseYamlDocument(read(behaviorPath));
@@ -629,6 +682,13 @@ export const cdrDomainCompose: AnyCap = {
       }
     };
     if (repo) domainDoc.repo = repo;
+    if (Array.isArray(input.sources)) domainDoc.sources = input.sources as unknown as YamlValue;
+
+    // P1: if sources[] provided, validate they point at real code
+    const evidenceErrors = validateEvidencePoints(ctx, domainDoc as Record<string, unknown>);
+    if (evidenceErrors.length) {
+      throw new CapabilityError("INVALID_EVIDENCE", evidenceErrors.join("; "));
+    }
 
     // Validate before writing (P1 rule enforcement)
     const errors = validateArtifact("domain", domainDoc as Record<string, unknown>);
@@ -656,7 +716,7 @@ export const cdrDomainCompose: AnyCap = {
 };
 
 // ---------------------------------------------------------------------------
-// 4b. cdr.business.compose
+// 7. cdr.business.compose
 // ---------------------------------------------------------------------------
 
 export const cdrBusinessCompose: AnyCap = {
@@ -691,6 +751,12 @@ export const cdrBusinessCompose: AnyCap = {
     if (input.reason) doc.reason = String(input.reason);
     doc.confidence = input.confidence as YamlValue;
 
+    // P1: validate sources[] point at real code
+    const evidenceErrors = validateEvidencePoints(ctx, doc as Record<string, unknown>);
+    if (evidenceErrors.length) {
+      throw new CapabilityError("INVALID_EVIDENCE", evidenceErrors.join("; "));
+    }
+
     const errors = validateArtifact("business-rule", doc as Record<string, unknown>);
     if (errors.length) {
       throw new CapabilityError("INVALID_ARTIFACT", errors.join("; "));
@@ -722,7 +788,7 @@ export const cdrBusinessCompose: AnyCap = {
 };
 
 // ---------------------------------------------------------------------------
-// 5. cdr.capability.map.init
+// 8. cdr.capability.map.init
 // ---------------------------------------------------------------------------
 
 export const cdrCapabilityMapInit: AnyCap = {
@@ -765,7 +831,6 @@ export const cdrCapabilityMapInit: AnyCap = {
       capabilities: capEntries as unknown as YamlValue
     };
 
-    // Validate before writing
     const errors = validateArtifact("capability-map", mapDoc as Record<string, unknown>);
     if (errors.length) {
       throw new CapabilityError("INVALID_ARTIFACT", errors.join("; "));
@@ -790,7 +855,7 @@ export const cdrCapabilityMapInit: AnyCap = {
 };
 
 // ---------------------------------------------------------------------------
-// 6. cdr.index.list
+// 9. cdr.index.list
 // ---------------------------------------------------------------------------
 
 export const cdrIndexList: AnyCap = {
@@ -809,21 +874,18 @@ export const cdrIndexList: AnyCap = {
     const repoFilter = input.repo ? String(input.repo) : undefined;
     const kindFilter = input.kind ? String(input.kind) : undefined;
 
-    // Filter behaviors
     const behaviors = index.behaviors.filter((b) => {
       if (repoFilter && b.repo !== repoFilter) return false;
       if (kindFilter && b.kind !== kindFilter) return false;
       return true;
     });
 
-    // Filter state machines
     const stateMachines = index.state_machines.filter((s) => {
       if (repoFilter && s.repo !== repoFilter) return false;
       if (kindFilter && s.kind !== kindFilter) return false;
       return true;
     });
 
-    // Scan for domain artifacts
     const domains: Array<Record<string, string>> = [];
     if (existsSync(cp.domainDir)) {
       const domainFiles = listFilesRecursively(cp.domainDir, [".yaml", ".yml"], 50);
@@ -843,7 +905,6 @@ export const cdrIndexList: AnyCap = {
       }
     }
 
-    // Scan for capability maps
     const capMaps: Array<Record<string, string>> = [];
     const capDir = capabilitiesDir(ctx.rootDir);
     if (existsSync(capDir)) {
@@ -864,7 +925,6 @@ export const cdrIndexList: AnyCap = {
       }
     }
 
-    // Filter business rules (in-memory, not filesystem-scanned — index is authoritative)
     const businessRules = (index.business_rules || []).filter((b) => {
       if (repoFilter && b.repo !== repoFilter) return false;
       if (kindFilter && b.evidence_kind !== kindFilter) return false;
@@ -934,7 +994,7 @@ export const cdrIndexList: AnyCap = {
 };
 
 // ---------------------------------------------------------------------------
-// 7. cdr.behavior.upsert
+// 10. cdr.behavior.upsert
 // ---------------------------------------------------------------------------
 
 export const cdrBehaviorUpsert: AnyCap = {
@@ -974,6 +1034,12 @@ export const cdrBehaviorUpsert: AnyCap = {
     if (input.reason) doc.reason = String(input.reason);
     doc.confidence = input.confidence as YamlValue;
 
+    // P1: validate sources[] point at real code (file exists, line in range)
+    const evidenceErrors = validateEvidencePoints(ctx, doc as Record<string, unknown>);
+    if (evidenceErrors.length) {
+      throw new CapabilityError("INVALID_EVIDENCE", evidenceErrors.join("; "));
+    }
+
     const errors = validateArtifact("behavior", doc as Record<string, unknown>);
     if (errors.length) {
       throw new CapabilityError("INVALID_ARTIFACT", errors.join("; "));
@@ -1005,7 +1071,7 @@ export const cdrBehaviorUpsert: AnyCap = {
 };
 
 // ---------------------------------------------------------------------------
-// 8. cdr.state.derive
+// 11. cdr.state.derive
 // ---------------------------------------------------------------------------
 
 function extractStatesAndTransitionsFromBehavior(
@@ -1049,7 +1115,8 @@ export const cdrStateDerive: AnyCap = {
     properties: {
       entity: { type: "string", minLength: 1 },
       behaviors: { type: "array" },
-      repo: { type: "string" }
+      repo: { type: "string" },
+      sources: { type: "array" }
     },
     additionalProperties: false
   },
@@ -1106,6 +1173,13 @@ export const cdrStateDerive: AnyCap = {
       initial_state: initialState
     };
     if (repo) draft.repo = repo;
+    if (Array.isArray(input.sources)) draft.sources = input.sources as unknown as YamlValue;
+
+    // P1: validate sources[] point at real code
+    const evidenceErrors = validateEvidencePoints(ctx, draft as Record<string, unknown>);
+    if (evidenceErrors.length) {
+      throw new CapabilityError("INVALID_EVIDENCE", evidenceErrors.join("; "));
+    }
 
     const errors = validateArtifact("state-machine", draft as Record<string, unknown>);
     if (errors.length) {

@@ -1,0 +1,129 @@
+name: cdr-ai-as-scanner
+description: |
+  v0.3 redesign: the engine does NOT prescribe which files are entry points.
+  Instead, it returns a code file listing (cdr.entries.candidate) and the AI
+  reads the content to decide which are entry points, then proposes each one
+  via cdr.entries.propose with sources[]. The engine validates that the
+  sources[].file actually exists in repos/<repo>/<file> and that line is in
+  range.
+
+  This transcript verifies the new flow:
+  1. Agent calls cdr.entries.candidate to get the file list
+  2. Agent reads file content (via the returned `content` field) and decides
+     which files are entry points
+  3. Agent calls cdr.entries.propose with one entry per file, citing the
+     real file:line as evidence
+  4. Engine validates evidence (file exists, line in range) and writes entries
+
+  If the agent submits a proposal with a non-existent file or out-of-range
+  line, the engine rejects it — this is the P1 red line.
+
+user_input: |
+  @dapei discover entries for sample-app, then propose 2 of them as entry points.
+
+actions:
+  - kind: load_skill
+    skill: cdr
+  - kind: tool_call
+    capability: workspace.init
+    input: {}
+  - kind: tool_call
+    capability: repos.add
+    input:
+      name: sample-app
+      url: "{{fixture_repo_path}}"
+  - kind: tool_call
+    capability: cdr.profile
+    input:
+      repo: sample-app
+  - kind: tool_call
+    capability: cdr.entries.candidate
+    input:
+      repo: sample-app
+  - kind: tool_call
+    capability: cdr.entries.propose
+    input:
+      repo: sample-app
+      id: order-create
+      type: api
+      file: src/routes/orders.ts
+      line: 6
+      method: POST
+      path: /orders
+      summary: "POST /orders — create order"
+      sources:
+        - file: src/routes/orders.ts
+          line: 6
+          repo: sample-app
+  - kind: tool_call
+    capability: cdr.entries.propose
+    input:
+      repo: sample-app
+      id: order-cancel
+      type: api
+      file: src/routes/orderController.ts
+      line: 4
+      method: POST
+      path: "/orders/:id/cancel"
+      summary: "POST /orders/:id/cancel — cancel order"
+      sources:
+        - file: src/routes/orderController.ts
+          line: 4
+          repo: sample-app
+  - kind: tool_call
+    capability: cdr.entries.confirm
+    input:
+      repo: sample-app
+      entry_id: order-cancel
+      summary: "POST /orders/:id/cancel — cancel order (P0)"
+      priority: P0
+      sources:
+        - file: src/routes/orderController.ts
+          line: 4
+          repo: sample-app
+  - kind: final_response
+    content: |
+      ## Conclusion
+
+      Discovered 2 entry points in sample-app via the v0.3 AI-as-scanner flow:
+      `order-create` (POST /orders) and `order-cancel` (POST /orders/:id/cancel).
+      Both proposals were accepted by the engine after evidence validation
+      (file exists, line in range). `order-cancel` is now confirmed.
+
+      ## Risk
+
+      The new flow moves the entry-detection burden from the engine to the AI.
+      This means the engine no longer detects Quarkus / Ktor / Hapi / Axum /
+      gRPC / GraphQL / custom frameworks — it relies on the AI's reading
+      ability. The LLM cost and latency of step 2 is now non-zero.
+
+      ## Needs Confirmation
+
+      - Are these 2 entries the right set to deep-dive, or should I expand
+        the candidate scan and propose more?
+
+      ## Next Steps
+
+      - [ ] Run `cdr.behavior.upsert` to extract business behavior for `order-cancel`
+      - [ ] Run `cdr.state.derive` for the Order state machine
+      - [ ] Run `cdr.doc.generate` to refresh the VitePress portal
+
+asserts:
+  - kind: capability_called
+    capability: workspace.init
+  - kind: capability_called
+    capability: repos.add
+  - kind: capability_called
+    capability: cdr.profile
+  - kind: capability_called
+    capability: cdr.entries.candidate
+  - kind: capability_called
+    capability: cdr.entries.propose
+  - kind: capability_called
+    capability: cdr.entries.confirm
+  - kind: output_sections
+    sections: ["Conclusion", "Risk", "Needs Confirmation", "Next Steps"]
+  - kind: only_path_under
+    path_prefix: docs/as-is/entries/
+    allow:
+      - docs/as-is/entries/sample-app.yaml
