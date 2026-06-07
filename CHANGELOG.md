@@ -17,6 +17,14 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
+### Changed
+### Fixed
+### Removed
+
+## [3.0.0] - 2026-06-08
+
+
+### Added
 - **CDR v0.3 — AI as scanner** (on `feature/cdr-v0.3-ai-as-scanner`)
   - `cdr.entries.candidate` — new capability that returns a code file listing (`files[]` with `relpath` / `language` / `content` slices) for the AI to read. **No pattern matching** — language-agnostic, framework-agnostic.
   - `cdr.entries.propose` — new capability for the AI to submit a single entry point with `sources[]`; the engine validates every `sources[].file` exists under `repos/<repo>/<file>` and every `line` is in range (P1 red line).
