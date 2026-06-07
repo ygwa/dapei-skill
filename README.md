@@ -139,14 +139,15 @@ and requirements (`features/`):
 | Capability | User intent | Output |
 | --- | --- | --- |
 | `cdr.profile` | `@dapei profile repo mall-order` | `docs/as-is/profiles/<repo>.yaml` |
-| `cdr.entries.prepare` | `@dapei discover entries for mall-order` | `docs/as-is/entries/<repo>.yaml` (candidates) |
+| `cdr.entries.prepare` | `@dapei discover entries for mall-order` | `docs/as-is/entries/<repo>.yaml` (candidates, annotation-aware in v0.2) |
 | `cdr.entries.confirm` | `@dapei confirm entry order-create in mall-order` | same file, status `confirmed` |
 | `cdr.behavior.upsert` | via `cognitive.artifact.upsert` after deep-dive | `docs/as-is/behavior/<id>.yaml` |
 | `cdr.state.derive` | `@dapei discover states for Order` | `docs/as-is/state-machines/<entity>.yaml` |
 | `cdr.domain.compose` | `@dapei compose domain Transaction` | `docs/as-is/domains/<domain>.yaml` |
 | `cdr.capability.map.init` | `@dapei init capability map for E-Commerce Mall` | `docs/as-is/capabilities/product-map.yaml` |
+| `cdr.business.compose` | `@dapei compose business order-amount-positive` | `docs/as-is/business-rules/<id>.yaml` (5 kinds: invariant / constraint / authorization / sla / compensation) |
 | `cdr.index.list` | `@dapei list assets` | in-memory summary |
-| `cdr.doc.generate` | `@dapei generate documentation portal` | `.dapei/docs-portal/` (VitePress) |
+| `cdr.doc.generate` | `@dapei generate documentation portal` | `.dapei/docs-portal/` (VitePress, 6 sections incl. business-rules/) |
 
 P1 red lines the engine enforces (not the Agent):
 
@@ -395,8 +396,9 @@ npx skills add ygwa/dapei-skill@vX.Y.Z
 | Document | Description |
 | --- | --- |
 | [agents.md](agents.md) | Agent collaboration constraints for this repo |
-| [docs/cdr-architecture.md](docs/cdr-architecture.md) | CDR + CodeGraph integration architecture (v0.1 implemented; v1.0 proposed) |
-| [docs/features/cdr-runtime.md](docs/features/cdr-runtime.md) | Feature delivery doc for `feature/cdr-runtime` (what landed, why, how to verify) |
+| [docs/cdr-architecture.md](docs/cdr-architecture.md) | CDR + CodeGraph integration architecture (v0.2 implemented; v1.0 proposed) |
+| [docs/features/cdr-runtime.md](docs/features/cdr-runtime.md) | Feature delivery doc for `feature/cdr-runtime` (v0.1) |
+| [docs/features/cdr-mining.md](docs/features/cdr-mining.md) | Feature delivery doc for `feature/cdr-mining` (v0.2: annotation-aware entries + business-rule artifacts) |
 | [DESIGN.md](DESIGN.md) | Technical design documentation |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 | [docs/release-process.md](docs/release-process.md) | How to cut a release |

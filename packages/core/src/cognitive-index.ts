@@ -34,6 +34,15 @@ export interface IndexCapabilityMapEntry {
   capability_count: number;
 }
 
+export interface IndexBusinessRuleEntry {
+  id: string;
+  kind: string;
+  path: string;
+  repo?: string;
+  evidence_kind: string;
+  evidence_level: string;
+}
+
 export interface CognitiveIndex {
   version: string;
   updated_at: string;
@@ -41,6 +50,7 @@ export interface CognitiveIndex {
   state_machines: IndexStateMachineEntry[];
   domains: IndexDomainEntry[];
   capability_maps: IndexCapabilityMapEntry[];
+  business_rules: IndexBusinessRuleEntry[];
   unknowns: Array<{ id: string; artifact_type?: string; reason: string; investigation_hint?: string }>;
 }
 
@@ -64,7 +74,16 @@ export function cognitivePaths(rootDir: string) {
 export function loadCognitiveIndex(rootDir: string): CognitiveIndex {
   const { indexFile } = cognitivePaths(rootDir);
   if (!existsSync(indexFile)) {
-    return { version: "1.0", updated_at: new Date(0).toISOString(), behaviors: [], state_machines: [], domains: [], capability_maps: [], unknowns: [] };
+    return {
+      version: "1.0",
+      updated_at: new Date(0).toISOString(),
+      behaviors: [],
+      state_machines: [],
+      domains: [],
+      capability_maps: [],
+      business_rules: [],
+      unknowns: []
+    };
   }
   const doc = parseYamlDocument(read(indexFile));
   return {
@@ -74,6 +93,7 @@ export function loadCognitiveIndex(rootDir: string): CognitiveIndex {
     state_machines: Array.isArray(doc.state_machines) ? (doc.state_machines as unknown as IndexStateMachineEntry[]) : [],
     domains: Array.isArray(doc.domains) ? (doc.domains as unknown as IndexDomainEntry[]) : [],
     capability_maps: Array.isArray(doc.capability_maps) ? (doc.capability_maps as unknown as IndexCapabilityMapEntry[]) : [],
+    business_rules: Array.isArray(doc.business_rules) ? (doc.business_rules as unknown as IndexBusinessRuleEntry[]) : [],
     unknowns: Array.isArray(doc.unknowns) ? (doc.unknowns as unknown as CognitiveIndex["unknowns"]) : []
   };
 }
@@ -95,6 +115,10 @@ export function artifactRelativePath(type: ArtifactType, doc: Record<string, unk
   }
   if (type === "capability-map") {
     return `docs/as-is/capabilities/product-map.yaml`;
+  }
+  if (type === "business-rule") {
+    const id = String(doc.id || "unknown").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+    return `docs/as-is/business-rules/${id}.yaml`;
   }
   const entity = String(doc.entity || "unknown").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
   return `docs/as-is/state-machines/${entity}.yaml`;
@@ -147,7 +171,23 @@ export function upsertIndexEntry(
     const capCount = Array.isArray(doc.capabilities) ? doc.capabilities.length : 0;
     index.capability_maps = index.capability_maps.filter((c) => c.product !== product);
     index.capability_maps.push({ product, path: relPath, capability_count: capCount });
+  } else if (type === "business-rule") {
+    const id = String(doc.id);
+    const kind = optionalString(doc.kind) || "unknown";
+    index.business_rules = index.business_rules.filter((b) => b.id !== id);
+    index.business_rules.push({
+      id,
+      kind,
+      path: relPath,
+      repo,
+      evidence_kind: confidence.kind,
+      evidence_level: confidence.level
+    });
   }
 
   return index;
+}
+
+function optionalString(v: unknown): string | undefined {
+  return typeof v === "string" && v.trim() ? v.trim() : undefined;
 }

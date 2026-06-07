@@ -17,45 +17,36 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
-- **Cognitive Discovery Runtime (CDR) v0.1** — L3 process-asset layer (profile → entries → behavior → state → domain → capability map → doc portal)
-- CDR capabilities: `cdr.profile`, `cdr.entries.prepare`, `cdr.entries.confirm`, `cdr.behavior.upsert`, `cdr.state.derive`, `cdr.domain.compose`, `cdr.capability.map.init`, `cdr.index.list`, `cdr.doc.generate` (registered in `packages/core/src/capabilities/index.ts`)
-- Evidence validators for `domain` and `capability-map` artifact types in `packages/core/src/evidence.ts`; P1 red lines enforced (derived_from, sources, reason)
-- TS type aliases `BehaviorSpec` / `DomainSpec` / `CapabilityMapSpec` in `packages/core/src/schema.ts` for IDE aid; runtime validation still goes through `evidence.ts`
-- `@dapei` router patterns for all 8 CDR capabilities in English plus 8 Chinese (中文) variants: `分析` / `扫描入口` / `确认入口` / `推导状态` / `组合领域` / `初始化功能地图` / `生成文档门户` / `列出资产`
-- `skills/cdr/SKILL.md` — user entry section with 8 `@dapei` examples, 4 red lines, 3 product principles, 6-stage workflow
-- `.dapei/commands.yaml` — 8 CDR command entries (cli / purpose / inputs / workflow / outputs)
-- `SKILL.md` — cdr line in module routing section
-- `packages/doc-gen/` — independent workspace package for VitePress portal generation (`type: "module"`, vitepress@^1.6.0 + vue@^3.5.0)
-- 3 Vue 3 components in `packages/doc-gen/templates/components/`: `BehaviorFlow.vue` (step timeline + Mermaid flowchart), `StateMachine.vue` (state chips + stateDiagram), `CodeLink.vue` (vscode:// + GitHub remote links with `symbol_handle` tooltip)
-- VitePress theme scaffold in `packages/doc-gen/templates/theme/index.ts` registering the 3 components globally
-- Generated portal structure: `package.json` (type:module) + `.vitepress/config.mts` + `.vitepress/theme/{index.ts,components/*.vue}` + per-section markdown
-- Test coverage:
-  - `tests/unit/cdr.test.mjs` — 36 cases (28 unit + 8 Chinese router, covering all 8 CDR capabilities + evidence P1/P3 rules)
-  - `tests/integration/cdr-e2e.test.mjs` — full pipeline E2E (profile → entries → behavior × 2 → state → domain → capability map → doc.generate)
-  - `tests/integration/cdr-vitepress-build.test.mjs` — runs real `vitepress build` against a generated portal (1.4s, verifies Vue components in built bundle)
-- `docs/cdr-architecture.md` — promoted from "Proposed v1.0" to "Implemented v0.1" with status table
-- `docs/features/cdr-runtime.md` — feature delivery document (split / verification matrix / exit criteria)
+- **CDR v0.2 — annotation-aware entry detection + business-rule artifacts** (on `feature/cdr-mining`)
+- `cdr.entries.prepare` v2: reads file content (up to 200KB per file) and applies per-framework annotation regexes for **Spring** (`@RestController` + `@GetMapping`/`@PostMapping`/etc., with class-level `@RequestMapping` concatenation; supports no-paren variants like `@PostMapping`), **NestJS** (`@Controller('...')` + `@Get`/`@Post`/etc.), **FastAPI** (`@app.get`/`@router.post`), and **Express** (`app.get`/`router.post`). Annotation-discovered entries replace filename-discovered entries for the same file; they carry `method` / `path` / `line` / `framework` fields so the Agent doesn't have to re-derive them. Class-level base paths (`@RequestMapping`, `@Controller`) are auto-prepended when method-level paths are relative.
+- `cdr.entries.confirm`: now accepts optional `framework` / `method` / `path` / `line` inputs that get persisted onto the entry YAML.
+- New artifact type **`business-rule`** + `cdr.business.compose` capability (5 kinds: `invariant` / `constraint` / `authorization` / `sla` / `compensation`). Evidence rules enforced: `kind=fact` requires `sources[]`; `kind=inference` requires `derived_from[]`; `kind=unknown` requires `reason`. Storage: `docs/as-is/business-rules/<id>.yaml`; new `business_rules[]` section in `.dapei/cognitive/index.yaml`; new sidebar in VitePress portal.
+- Schema: `.dapei/schemas/business-rule.schema.yaml` (Ajv-validated alongside the other schemas).
+- 9th Chinese router pattern: `组合业务规则` / `compose business` → `cdr.business.compose`.
+- 3 new fixture repos: `tests/fixtures/sample-spring/` (Java + `pom.xml`), `tests/fixtures/sample-nestjs/` (TS + `package.json`), `tests/fixtures/sample-fastapi/` (Python + `package.json`).
+- Test coverage grew to **235/235** (was 219):
+  - `tests/unit/cdr.test.mjs` — 52 cases (added 5 cross-framework + 1 Express-wins + 1 confirm-persists + 8 business-compose: write / 5 kinds / unknown-kind / no-sources / bad-id / list-includes-rule + 1 Chinese router)
+  - `tests/integration/cdr-e2e.test.mjs` — extended to step 7b (business-rule) and asserts portal renders 1 business-rule page
+- `docs/features/cdr-mining.md` — feature delivery doc (what landed, ADRs, verification matrix, OOO, local verify)
 
 ### Changed
-- `packages/router/src/index.ts` — extracted 5 new helpers (`extractCdrRepoName` / `EntityName` / `EntryId` / `DomainName` / `ProductName`) with case-sensitive entity stripping to prevent `\border\b` in `mall-order` from also being removed
-- `packages/router/src/index.ts` — fixed pre-existing bug: `cognitive.discover` pattern verb set tightened from `(analyze|discover|list)` to `(analyze|discover)` so `list behaviors` cleanly routes to `cognitive.artifact.list`
-- `packages/core/src/cognitive-index.ts` — index now carries `domains[]` and `capability_maps[]` entries (previously only behaviors + state_machines + unknowns)
-- `packages/core/src/capabilities/domains/cognitive.ts` — `cognitive.artifact.list` surfaces `domains` and `capability_maps` sections in the rendered summary
-- `tsconfig.json` — exclude `packages/doc-gen/templates/**` (Vue templates are runtime assets, not TS source)
-- `packages/doc-gen/package.json` — added `"type": "module"` to enable `import.meta.dirname` resolution
-
-### Fixed
-- `cdr.doc.generate` `sourcesSection` previously rendered object sources as `[object Object]`; now formats `{file:line:...}` and emits a `<CodeLink>` component for each
-- `cdr.domain.compose` previously stored behaviors in `modules[]` as `{id, summary, kind, level}` which failed `validateDomainArtifact`'s `name` requirement; now also includes `name` field
-
-### Removed
-- `packages/core/src/capabilities/domains/doc-gen.ts` — moved to `packages/doc-gen/src/doc-gen.ts` (engine no longer owns the VitePress generator)
+- `packages/core/src/evidence.ts` — `ArtifactType` union extended with `"business-rule"`; new `validateBusinessRuleArtifact` (kind enum + ID pattern + P2 evidence block rules)
+- `packages/core/src/cognitive-index.ts` — `CognitiveIndex` carries `business_rules[]`; `upsertIndexEntry` handles `"business-rule"`; `artifactRelativePath` resolves the new path
+- `packages/core/src/capabilities/domains/cdr.ts` — `cdr.index.list` now emits a `## Business Rules` section (separate from domains/behaviors/states) with count + per-row detail
+- `packages/doc-gen/src/doc-gen.ts` — adds a 6th section `business-rules/` with `index.md` + per-rule pages, with Kind / Confidence / Description / Expression / Applies To / Derived From sections + VitePress sidebar entry
+- `tests/unit/documentation-contract.test.mjs` — known-capability prefix set extended with `cdr.business`
+- `tests/unit/capability-registry.test.mjs` — `cdr.business` now passes the `domain.name` ID regex (underscore was rejected; renamed from `cdr.business_rules.compose`)
+- `.dapei/commands.yaml` — new `cdr-business-compose` entry
 
 ### Verification
-- 219/219 unit + integration + scenario tests pass
-- 16/16 smoke tests pass (engine + skill contracts + L1/L2 router coverage + L3 negative paths + L3-narrative scenarios + L4 AI compliance)
-- `tsc -p tsconfig.json` clean
-- `vitepress build` against a generated portal completes in ~1.2s, all 3 Vue components appear in the built bundle (`behavior-flow`, `state-machine`, `code-link`)
+- `npm run typecheck` — clean
+- `npm run test` — 235/235 pass
+- `bash scripts/smoke-test.sh` — 16/16 + 4 L-levels PASS
+- `vitepress build` on a generated portal (with business-rule section) — completes in ~1.3s
+
+### Backwards compat
+- The filename-based entry scan is preserved as a fallback; annotation scan only fires when the file content matches a known framework's `require` regex. Repos with no annotations (e.g., a pure-utility library) still get filename-discovered entries.
+- `cdr.doc.generate` output is backward compatible: existing portals regenerate identically; the new `business-rules/` subdir only appears when at least one rule exists.
 
 ## [2.2.0] - 2026-05-23
 

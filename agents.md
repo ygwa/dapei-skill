@@ -190,14 +190,15 @@ Prioritize in this order:
 2. P1: **Cognitive Runtime Phase 1** — behavior facts, evidence system, cognitive index. **Shipped in 2.2.0.**
 3. P1: **Cognitive Runtime Phase 2** — state transition layer, inconsistency detection.
 4. P1: **Cognitive Discovery Runtime v0.1** — `cdr.profile` / `cdr.entries.*` / `cdr.behavior.upsert` / `cdr.state.derive` / `cdr.domain.compose` / `cdr.capability.map.init` / `cdr.doc.generate` / `cdr.index.list`. **Shipped on `feature/cdr-runtime` (awaiting merge to main).**
-5. P1: repos-to-docs bootstrap with Agent-driven deep analysis.
-6. P1: stage-aware context engineering with cognitive summaries.
-7. P1: real feature planning and design generation.
-8. P1: validation, test strategy, and guardrail engine.
-9. P2: semantic clustering → domain discovery (no forced DDD).
-10. P2: worktree isolation, richer reporting, and feature closeout.
-11. P2: CodeGraph substrate integration (proposed in `docs/cdr-architecture.md`).
-12. P3: cognitive graph, dynamic context budget, external adapters.
+5. P1: **Cognitive Discovery Runtime v0.2** — annotation-aware entry detection (Spring / NestJS / FastAPI / Express) + `business-rule` artifact type (`invariant` / `constraint` / `authorization` / `sla` / `compensation`) + `cdr.business.compose` capability. **Shipped on `feature/cdr-mining` (awaiting merge to main).**
+6. P1: repos-to-docs bootstrap with Agent-driven deep analysis.
+7. P1: stage-aware context engineering with cognitive summaries.
+8. P1: real feature planning and design generation.
+9. P1: validation, test strategy, and guardrail engine.
+10. P2: semantic clustering → domain discovery (no forced DDD).
+11. P2: worktree isolation, richer reporting, and feature closeout.
+12. P2: CodeGraph substrate integration (proposed in `docs/cdr-architecture.md`).
+13. P3: cognitive graph, dynamic context budget, external adapters.
 
 ## Tone
 

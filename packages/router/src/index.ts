@@ -190,6 +190,17 @@ const routes: Route[] = [
     confidence: 0.9
   },
   {
+    pattern: /(?:组合|聚类|compose).*(?:业务规则?|business[\s_-]?rule?)\s+([a-zA-Z0-9_-]+)/i,
+    capability: "cdr.business.compose",
+    inputBuilder: (t, ctx) => ({
+      id: ctx.id || (t.match(/(?:业务规则?|business[\s_-]?rule?)\s+([a-zA-Z0-9_-]+)/i)?.[1] || ""),
+      kind: ctx.kind || "invariant",
+      description: ctx.description || ""
+    }),
+    reason: "cdr business compose intent (chinese)",
+    confidence: 0.9
+  },
+  {
     pattern: /(?:初始化|init).*功能地图|capability.*map.*for\s+([A-Za-z][A-Za-z0-9 _-]+)/i,
     capability: "cdr.capability.map.init",
     inputBuilder: (t, ctx) => ({ product: ctx.product || extractCdrProductName(t) || "" }),

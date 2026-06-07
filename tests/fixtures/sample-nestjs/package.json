@@ -1,0 +1,5 @@
+{
+  "name": "sample-nestjs",
+  "version": "0.1.0",
+  "description": "NestJS fixture for cdr.entries.prepare annotation scan"
+}

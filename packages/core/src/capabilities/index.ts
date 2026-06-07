@@ -19,7 +19,8 @@ import {
   cdrCapabilityMapInit,
   cdrIndexList,
   cdrBehaviorUpsert,
-  cdrStateDerive
+  cdrStateDerive,
+  cdrBusinessCompose
 } from "./domains/cdr.ts";
 import { docGenerate } from "../../../doc-gen/src/doc-gen.ts";
 import { memoryAppend } from "./domains/memory.ts";
@@ -70,6 +71,7 @@ export const capabilitySpecs: AnyCap[] = [
   cdrIndexList,
   cdrBehaviorUpsert,
   cdrStateDerive,
+  cdrBusinessCompose,
   // Documentation generation
   docGenerate
 ];

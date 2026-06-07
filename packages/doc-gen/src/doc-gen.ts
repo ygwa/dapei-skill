@@ -508,6 +508,72 @@ title: "${repo}"
   return md;
 }
 
+function generateBusinessRuleIndex(rules: ParsedDoc[]): string {
+  let md = `---
+title: Business Rules
+---
+
+# Business Rules — Invariants, Constraints, Authorization, SLA, Compensation
+
+`;
+  if (rules.length === 0) {
+    md += "*No business rule documents found.*\n";
+    return md;
+  }
+  md += "| Rule | Kind | Confidence | Description |\n";
+  md += "|------|------|------------|-------------|\n";
+  for (const r of rules) {
+    const id = String(r.doc.id || basename(r.file, ".yaml"));
+    const kind = String(r.doc.kind || "—");
+    const desc = String(r.doc.description || r.doc.expr || "—");
+    md += `| [${id}](/business-rules/${safeId(id)}) | \`${kind}\` | ${confidenceBadge(r.doc)} | ${desc} |\n`;
+  }
+  return md;
+}
+
+function generateBusinessRulePage(rule: ParsedDoc, rootDir: string): string {
+  const id = String(rule.doc.id || "unknown");
+  const kind = String(rule.doc.kind || "unknown");
+  const desc = String(rule.doc.description || "");
+  const expr = String(rule.doc.expr || "");
+
+  let md = `---
+title: "${id}"
+---
+
+# Business Rule: ${id}
+
+- **Kind:** \`${kind}\`
+- **Confidence:** ${confidenceBadge(rule.doc)}
+- **Repo:** ${String(rule.doc.repo || "—")}
+`;
+  if (desc) md += `\n${desc}\n`;
+
+  if (expr) {
+    md += "\n## Expression\n\n";
+    md += "```text\n" + expr + "\n```\n";
+  }
+
+  const appliesTo = rule.doc.applies_to as unknown[] | undefined;
+  if (Array.isArray(appliesTo) && appliesTo.length > 0) {
+    md += "\n## Applies To\n\n";
+    for (const a of appliesTo) {
+      md += `- \`${String(a)}\`\n`;
+    }
+  }
+
+  const derivedFrom = rule.doc.derived_from as string[] | undefined;
+  if (Array.isArray(derivedFrom) && derivedFrom.length > 0) {
+    md += "\n## Derived From\n\n";
+    for (const d of derivedFrom) {
+      md += `- \`${String(d)}\`\n`;
+    }
+  }
+
+  md += sourcesSection(rule.doc, rootDir);
+  return md;
+}
+
 function generateVitepressConfig(
   productName: string,
   sidebarConfig: Record<string, Array<{ text: string; items?: Array<{ text: string; link: string }> }>>
@@ -524,6 +590,7 @@ export default defineConfig({
       { text: 'Domains', link: '/domains/' },
       { text: 'Behaviors', link: '/behaviors/' },
       { text: 'States', link: '/states/' },
+      { text: 'Business Rules', link: '/business-rules/' },
       { text: 'Profiles', link: '/profiles/' }
     ],
     sidebar: ${JSON.stringify(sidebarConfig, null, 6)},
@@ -600,7 +667,7 @@ export const docGenerate: AnyCap = {
     const outputDir = join(p.rootDir, outputDirRel);
 
     // Ensure output directories
-    const subDirs = ["capabilities", "domains", "behaviors", "states", "profiles", ".vitepress"];
+    const subDirs = ["capabilities", "domains", "behaviors", "states", "profiles", "business-rules", ".vitepress"];
     for (const sub of subDirs) {
       ensureDir(join(outputDir, sub));
     }
@@ -628,6 +695,7 @@ export const docGenerate: AnyCap = {
     const stateDocs = loadYamlDir(cp.stateMachineDir);
     const profileDocs = loadYamlDir(join(p.docsDir, "as-is", "profiles"));
     const entryDocs = loadYamlDir(join(p.docsDir, "as-is", "entries"));
+    const businessRuleDocs = loadYamlDir(cp.businessRulesDir);
 
     // Track page counts
     let totalPages = 0;
@@ -636,7 +704,8 @@ export const docGenerate: AnyCap = {
       domains: 0,
       behaviors: 0,
       states: 0,
-      profiles: 0
+      profiles: 0,
+      business_rules: 0
     };
 
     // Build sidebar configuration
@@ -711,6 +780,20 @@ export const docGenerate: AnyCap = {
       sections.profiles++;
     }
     sidebarConfig["/profiles/"] = [{ text: "Profiles", items: [{ text: "Overview", link: "/profiles/" }, ...profileItems] }];
+
+    // --- Business Rules ---
+    write(join(outputDir, "business-rules", "index.md"), generateBusinessRuleIndex(businessRuleDocs));
+    totalPages++;
+    const ruleItems: Array<{ text: string; link: string }> = [];
+    for (const r of businessRuleDocs) {
+      const id = String(r.doc.id || basename(r.file, ".yaml"));
+      const slug = safeId(id);
+      write(join(outputDir, "business-rules", `${slug}.md`), generateBusinessRulePage(r, p.rootDir));
+      ruleItems.push({ text: id, link: `/business-rules/${slug}` });
+      totalPages++;
+      sections.business_rules++;
+    }
+    sidebarConfig["/business-rules/"] = [{ text: "Business Rules", items: [{ text: "Overview", link: "/business-rules/" }, ...ruleItems] }];
 
     // --- Homepage ---
     write(join(outputDir, "index.md"), generateHomepage(productName, index, sections));

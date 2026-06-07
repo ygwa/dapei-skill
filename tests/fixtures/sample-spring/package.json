@@ -1,0 +1,5 @@
+{
+  "name": "sample-spring",
+  "version": "0.1.0",
+  "description": "Spring fixture for cdr.entries.prepare annotation scan"
+}
