@@ -9,12 +9,17 @@ const core = await import('../../packages/core/src/index.ts');
 
 function setupTestRepos(tmp) {
   const remote = join(tmp, 'remote.git');
-  execFileSync('git', ['init', '--bare', remote], { encoding: 'utf8' });
+  execFileSync('git', ['init', '--bare', '-b', 'main', remote], { encoding: 'utf8' });
 
   const local = join(tmp, 'local-repo');
   execFileSync('git', ['clone', remote, local], { encoding: 'utf8' });
   execFileSync('git', ['-C', local, 'config', 'user.name', 'test'], { encoding: 'utf8' });
   execFileSync('git', ['-C', local, 'config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+  // Force the default branch to 'main' on this checkout — without this, the
+  // CI Ubuntu runner's `git init --bare` (without -b) leaves the cloned
+  // repo on whatever init.defaultBranch is (typically 'master'), and the
+  // subsequent `git push -u origin main` fails.
+  execFileSync('git', ['-C', local, 'symbolic-ref', 'HEAD', 'refs/heads/main'], { encoding: 'utf8' });
 
   // Create a commit in the cloned repo (empty repo has no commits)
   writeFileSync(join(local, 'README.md'), '# test\n');
