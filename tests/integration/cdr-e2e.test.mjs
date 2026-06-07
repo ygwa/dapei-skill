@@ -156,12 +156,30 @@ test('cdr e2e: profile → entries → behavior → state → domain → capabil
     assert.equal(capMapRes.ok, true);
     assert.ok(existsSync(join(tmp, 'docs/as-is/capabilities/product-map.yaml')));
 
+    // Step 7b: cdr.business.compose — capture a couple of rules
+    const { result: ruleRes } = await core.runCapability(
+      'cdr.business.compose',
+      {
+        id: 'order-amount-positive',
+        kind: 'invariant',
+        description: 'order.amount must be > 0',
+        expr: 'order.amount > 0',
+        applies_to: ['order-create'],
+        confidence: { level: 'high', kind: 'fact' },
+        sources: [{ file: 'src/services/orderService.ts', line: 4, repo: 'sample-app' }]
+      },
+      c(tmp)
+    );
+    assert.equal(ruleRes.ok, true);
+    assert.ok(existsSync(join(tmp, 'docs/as-is/business-rules/order-amount-positive.yaml')));
+
     // Step 8: cdr.index.list — confirm the index surfaces everything we wrote
     const { result: indexRes } = await core.runCapability('cdr.index.list', {}, c(tmp));
     assert.equal(indexRes.data.behaviors.length, 2);
     assert.equal(indexRes.data.state_machines.length, 1);
     assert.equal(indexRes.data.domains.length, 1);
     assert.equal(indexRes.data.capability_maps.length, 1);
+    assert.equal(indexRes.data.business_rules.length, 1);
 
     // Step 9: cdr.doc.generate — emit the VitePress portal
     const { result: docRes } = await core.runCapability('cdr.doc.generate', {}, c(tmp));
@@ -197,14 +215,17 @@ test('cdr e2e: profile → entries → behavior → state → domain → capabil
     assert.match(config, /\/domains\//);
     assert.match(config, /\/profiles\//);
 
-    // Verify page count >= homepage + 5 section indexes + 2 behaviors + 1 state + 1 domain + 1 profile
-    assert.ok(docRes.data.pages_generated >= 11, `expected >= 11 pages, got ${docRes.data.pages_generated}`);
+    // Verify page count >= homepage + 5 section indexes + 2 behaviors + 1 state + 1 domain + 1 profile + 1 business-rule
+    assert.ok(docRes.data.pages_generated >= 12, `expected >= 12 pages, got ${docRes.data.pages_generated}`);
 
     // Verify portal section breakdown surfaced in the result
     assert.equal(docRes.data.sections.behaviors, 2);
     assert.equal(docRes.data.sections.states, 1);
     assert.equal(docRes.data.sections.domains, 1);
     assert.equal(docRes.data.sections.profiles, 1);
+    assert.equal(docRes.data.sections.business_rules, 1);
+    assert.ok(existsSync(join(portalRoot, 'business-rules/index.md')));
+    assert.ok(existsSync(join(portalRoot, 'business-rules/order-amount-positive.md')));
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

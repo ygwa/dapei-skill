@@ -5,35 +5,48 @@
 | Field | Value |
 | --- | --- |
 | Version | 1.0 |
-| Status | **Implemented v0.1** (in `feature/cdr-runtime`; CodeGraph substrate not yet wired) |
+| Status | **Implemented v0.2** (in `feature/cdr-mining`; CodeGraph substrate not yet wired) |
 | Baseline | dapei.skill v2.2.x |
-| External dependency | [lzehrung/codegraph](https://github.com/lzehrung/codegraph) ≥ v1.8 (CLI / library / optional MCP) — **not wired in v0.1** |
+| External dependency | [lzehrung/codegraph](https://github.com/lzehrung/codegraph) ≥ v1.8 (CLI / library / optional MCP) — **not wired in v0.1 / v0.2** |
 | User entry | `@dapei ...` (no new shell commands for end users) |
-| Implementation branch | `feature/cdr-runtime` |
-| Feature delivery doc | [`docs/features/cdr-runtime.md`](features/cdr-runtime.md) |
+| Implementation branches | `feature/cdr-runtime` (v0.1), `feature/cdr-mining` (v0.2) |
+| Feature delivery docs | [`docs/features/cdr-runtime.md`](features/cdr-runtime.md), [`docs/features/cdr-mining.md`](features/cdr-mining.md) |
 
-### v0.1 Implementation Status (shipped on `feature/cdr-runtime`)
+### v0.2 Implementation Status (shipped on `feature/cdr-mining`)
 
 | Capability | Status | Evidence |
 | --- | --- | --- |
-| `cdr.profile` | ✅ implemented | unit + integration tests in `tests/unit/cdr.test.mjs` |
-| `cdr.entries.prepare` / `confirm` | ✅ implemented | unit tests + E2E |
-| `cdr.behavior.upsert` | ✅ implemented | unit tests (fact / inference / unknown evidence rules) |
-| `cdr.state.derive` | ✅ implemented | unit tests (writes → CREATED, events → state hints) |
-| `cdr.domain.compose` | ✅ implemented | P1 rule (`derived_from` required) enforced |
-| `cdr.capability.map.init` | ✅ implemented | unit tests |
-| `cdr.index.list` | ✅ implemented | unit + E2E |
-| `cdr.doc.generate` | ✅ implemented | integration test runs real `vitepress build` (~1.2s) |
-| CodeGraph substrate | ❌ deferred to v1.0 | see "Out of scope for v0.1" below |
+| `cdr.entries.prepare` v2 (annotation-aware) | ✅ implemented | unit tests for Spring / NestJS / FastAPI / Express; class-level base path concatenation; no-paren variants (`@PostMapping`) supported |
+| `cdr.entries.confirm` v2 (echoes framework/method/path/line) | ✅ implemented | unit test persists annotation metadata |
+| `business-rule` artifact type + `cdr.business.compose` | ✅ implemented | unit tests for all 5 kinds + P2 evidence rules; index integration; VitePress portal renders a `business-rules/` section |
+| `cdr.index.list` v2 (emits `## Business Rules`) | ✅ implemented | unit test for surface; integration test for pipeline |
+| CodeGraph substrate | ❌ deferred to v1.0 | see "Out of scope" below |
 
-#### Out of scope for v0.1 (planned for the CodeGraph branch)
+### v0.1 Implementation Status (shipped on `feature/cdr-runtime`, merged into v0.2 base)
+
+| Capability | Status |
+| --- | --- |
+| `cdr.profile` | ✅ |
+| `cdr.entries.prepare` (filename-only baseline) | ✅ |
+| `cdr.entries.confirm` | ✅ |
+| `cdr.behavior.upsert` | ✅ |
+| `cdr.state.derive` | ✅ |
+| `cdr.domain.compose` (P1 `derived_from` required) | ✅ |
+| `cdr.capability.map.init` | ✅ |
+| `cdr.index.list` v1 | ✅ |
+| `cdr.doc.generate` (VitePress portal with 3 Vue 3 components) | ✅ |
+
+#### Out of scope (planned for the CodeGraph branch / v1.0)
 
 - CodeGraph CLI / library invocation in `cdr.profile` and `cdr.entries.prepare` (currently uses heuristic regex + tree)
 - Cross-repo dependency graph for `cdr.domain.compose`
-- Live call-graph evidence in `sources[]`
+- Live call-graph evidence in `sources[]` (currently Agent-supplied `symbol_handle` strings)
 - MCP adapter for in-editor navigation
+- `cdr.state.derive` v2 — resolve `from: "[*]"` via real control-flow analysis (currently only writes/events heuristics)
+- `SourceRef.commit_sha` field for cross-branch fact pinning
+- Auto-extraction of `business-rule` artifacts (currently Agent-supplied; CodeGraph + LLM miner planned for a future iteration)
 
-These are tracked in [`docs/features/cdr-runtime.md`](features/cdr-runtime.md) under "Out of scope / future work".
+These are tracked in [`docs/features/cdr-mining.md`](features/cdr-mining.md) under "Out of scope / future work".
 
 ---
 

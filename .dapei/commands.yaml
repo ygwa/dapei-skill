@@ -379,7 +379,29 @@ commands:
       - render-l2-domain-pages
       - render-l3-behavior-and-state-pages
       - render-profile-pages
+      - render-business-rules-pages
       - emit-vitepress-config
     outputs:
       - .dapei/docs-portal/
+
+  - name: cdr-business-compose
+    cli: "@dapei compose business <id>"
+    purpose: validate a business-rule YAML (invariant | constraint | authorization | sla | compensation) and write docs/as-is/business-rules/<id>.yaml with evidence-block + cognitive index update
+    inputs:
+      - id
+      - kind
+      - description
+      - expr
+      - applies_to
+      - repo
+      - confidence
+      - sources
+    workflow:
+      - validate-evidence-block
+      - validate-business-rule-schema
+      - write-business-rule-yaml
+      - update-cognitive-index
+    outputs:
+      - docs/as-is/business-rules/<id>.yaml
+      - .dapei/cognitive/index.yaml
 

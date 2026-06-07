@@ -1,0 +1,57 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: dapei business-rule artifact v1
+description: One named business rule — an invariant, constraint, authorization, SLA, or compensation pattern that the system must respect.
+type: object
+required:
+  - id
+  - kind
+  - confidence
+properties:
+  id:
+    type: string
+    pattern: "^[a-z0-9-]+$"
+  kind:
+    type: string
+    enum: [invariant, constraint, authorization, sla, compensation]
+  description:
+    type: string
+  expr:
+    type: string
+  applies_to:
+    type: array
+    items:
+      type: string
+  confidence:
+    type: object
+    required: [level, kind]
+    properties:
+      level:
+        type: string
+        enum: [high, medium, low]
+      kind:
+        type: string
+        enum: [fact, inference, unknown]
+      evidence_type:
+        type: string
+  sources:
+    type: array
+    items:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+        line:
+          type: number
+        symbol_handle:
+          type: string
+        repo:
+          type: string
+  derived_from:
+    type: array
+    items:
+      type: string
+  reason:
+    type: string
+  investigation_hint:
+    type: string

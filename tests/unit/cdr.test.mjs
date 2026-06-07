@@ -32,6 +32,16 @@ async function workspaceWithSampleRepo() {
 
 const ctx = (tmp) => ({ rootDir: tmp, now: new Date() });
 
+const FIXTURE_ROOT = join(__dirname, '..', 'fixtures');
+
+async function workspaceWithFixture(fixtureName, repoName) {
+  const tmp = await freshWorkspace();
+  const repoDest = join(tmp, 'repos', repoName);
+  mkdirSync(repoDest, { recursive: true });
+  cpSync(join(FIXTURE_ROOT, fixtureName), repoDest, { recursive: true });
+  return tmp;
+}
+
 // ---------------------------------------------------------------------------
 // 1. cdr.profile
 // ---------------------------------------------------------------------------
@@ -69,6 +79,117 @@ test('cdr.profile: rejects missing repo on disk', async () => {
 // ---------------------------------------------------------------------------
 // 2. cdr.entries.prepare / confirm
 // ---------------------------------------------------------------------------
+
+test('cdr.entries.prepare v2: detects Spring @GetMapping / @PostMapping / @DeleteMapping', async () => {
+  const tmp = await workspaceWithFixture('sample-spring', 'spring-app');
+  try {
+    const { result } = await core.runCapability('cdr.entries.prepare', { repo: 'spring-app' }, ctx(tmp));
+    assert.equal(result.ok, true);
+    const entries = result.data.entries;
+    const controller = entries.find((e) => String(e.anchor).includes('OrderController.java'));
+    assert.ok(controller, 'OrderController.java must be detected');
+    assert.equal(controller.framework, 'spring');
+    assert.equal(controller.discovered_by, 'platform-annotation');
+    const ids = entries.map((e) => e.id);
+    // 3 routes from the controller: GET /{id}, POST /, DELETE /{id}
+    // (plus the class-level @RequestMapping /api/v1/orders as a base path candidate)
+    assert.ok(ids.some((id) => id.includes('get-')), 'must detect a GET entry');
+    assert.ok(ids.some((id) => id.includes('post-')), 'must detect a POST entry');
+    assert.ok(ids.some((id) => id.includes('delete-')), 'must detect a DELETE entry');
+    const getEntry = entries.find((e) => e.method === 'GET');
+    assert.ok(getEntry, 'must have a GET entry');
+    assert.ok(typeof getEntry.line === 'number' && getEntry.line > 0, 'line number must be present');
+    assert.match(getEntry.path, /^\/api\/v1\/orders/);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('cdr.entries.prepare v2: detects NestJS @Controller + @Get/@Post/@Put/@Delete', async () => {
+  const tmp = await workspaceWithFixture('sample-nestjs', 'nest-app');
+  try {
+    const { result } = await core.runCapability('cdr.entries.prepare', { repo: 'nest-app' }, ctx(tmp));
+    assert.equal(result.ok, true);
+    const entries = result.data.entries;
+    const ctrl = entries.find((e) => String(e.anchor).includes('user.controller.ts'));
+    assert.ok(ctrl, 'user.controller.ts must be detected');
+    assert.equal(ctrl.framework, 'nestjs');
+    const methods = new Set(entries.filter((e) => e.framework === 'nestjs').map((e) => e.method));
+    assert.ok(methods.has('GET'), 'must have GET');
+    assert.ok(methods.has('POST'), 'must have POST');
+    assert.ok(methods.has('PUT'), 'must have PUT');
+    assert.ok(methods.has('DELETE'), 'must have DELETE');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('cdr.entries.prepare v2: detects FastAPI @app.get/post and @router.get/delete', async () => {
+  const tmp = await workspaceWithFixture('sample-fastapi', 'fastapi-app');
+  try {
+    const { result } = await core.runCapability('cdr.entries.prepare', { repo: 'fastapi-app' }, ctx(tmp));
+    assert.equal(result.ok, true);
+    const entries = result.data.entries;
+    const fw = entries.filter((e) => e.framework === 'fastapi');
+    assert.ok(fw.length >= 4, `expected >= 4 fastapi entries, got ${fw.length}`);
+    const paths = fw.map((e) => `${e.method}:${e.path}`).sort();
+    assert.ok(paths.some((p) => p === 'GET:/health'));
+    assert.ok(paths.some((p) => p === 'POST:/items'));
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('cdr.entries.prepare v2: annotation result wins over filename hit (same file)', async () => {
+  // sample-node-repo/src/routes/orders.ts has a Router export but no Express app.get calls —
+  // so it should be detected via filename only (no annotation hits). Use a different file pattern.
+  const tmp = await workspaceWithSampleRepo();
+  try {
+    // Add an Express file with both a "controller" basename AND app.get calls
+    const exprPath = join(tmp, 'repos', 'sample-app', 'src', 'routes', 'paymentController.ts');
+    writeFileSync(
+      exprPath,
+      `import { Router } from "express";\nconst router = Router();\nrouter.get("/payments/:id", (req, res) => res.json({})); \nrouter.post("/payments", (req, res) => res.json({}));\nexport default router;\n`
+    );
+    const { result } = await core.runCapability('cdr.entries.prepare', { repo: 'sample-app' }, ctx(tmp));
+    const entries = result.data.entries;
+    const expr = entries.filter((e) => String(e.anchor).includes('paymentController'));
+    assert.ok(expr.length >= 2, `expected >= 2 express entries, got ${expr.length}`);
+    assert.ok(expr.every((e) => e.discovered_by === 'platform-annotation'), 'filename hit must be replaced by annotation');
+    assert.equal(expr[0].framework, 'express');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('cdr.entries.confirm: persists framework/method/path/line from annotation scan', async () => {
+  const tmp = await workspaceWithFixture('sample-spring', 'spring-app');
+  try {
+    const { result: prepRes } = await core.runCapability('cdr.entries.prepare', { repo: 'spring-app' }, ctx(tmp));
+    const target = prepRes.data.entries.find((e) => e.method === 'GET' && e.framework === 'spring');
+    assert.ok(target, 'must have a GET entry to confirm');
+    const { result } = await core.runCapability(
+      'cdr.entries.confirm',
+      {
+        repo: 'spring-app',
+        entry_id: target.id,
+        summary: 'fetch order by id',
+        framework: target.framework,
+        method: target.method,
+        path: target.path,
+        line: target.line
+      },
+      ctx(tmp)
+    );
+    assert.equal(result.ok, true);
+    assert.equal(result.data.framework, 'spring');
+    assert.equal(result.data.method, 'GET');
+    assert.ok(result.data.path.startsWith('/api/v1/orders'));
+    assert.equal(typeof result.data.line, 'number');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
 
 test('cdr.entries.prepare: scans for entry patterns', async () => {
   const tmp = await workspaceWithSampleRepo();
@@ -435,6 +556,146 @@ test('cdr.doc.generate: emits VitePress scaffold and homepage even with no asset
 });
 
 // ---------------------------------------------------------------------------
+// 8b. cdr.business.compose (P4.2)
+// ---------------------------------------------------------------------------
+
+test('cdr.business.compose: writes invariant rule + updates index', async () => {
+  const tmp = await freshWorkspace();
+  try {
+    const { result } = await core.runCapability(
+      'cdr.business.compose',
+      {
+        id: 'order-amount-positive',
+        kind: 'invariant',
+        description: 'order.amount must be > 0',
+        expr: 'order.amount > 0',
+        applies_to: ['order-create'],
+        repo: 'sample-app',
+        confidence: { level: 'high', kind: 'fact' },
+        sources: [{ file: 'src/services/orderService.ts', line: 12, repo: 'sample-app' }]
+      },
+      ctx(tmp)
+    );
+    assert.equal(result.ok, true);
+    assert.equal(result.data.kind, 'invariant');
+    assert.equal(result.data.evidence_kind, 'fact');
+    assert.ok(existsSync(join(tmp, 'docs/as-is/business-rules/order-amount-positive.yaml')));
+    assert.ok(existsSync(join(tmp, '.dapei/cognitive/index.yaml')));
+
+    const { result: listRes } = await core.runCapability('cdr.index.list', {}, ctx(tmp));
+    assert.equal(listRes.data.business_rules.length, 1);
+    assert.equal(listRes.data.business_rules[0].id, 'order-amount-positive');
+    assert.equal(listRes.data.business_rules[0].kind, 'invariant');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+for (const kind of ['invariant', 'constraint', 'authorization', 'sla', 'compensation']) {
+  test(`cdr.business.compose: accepts kind=${kind}`, async () => {
+    const tmp = await freshWorkspace();
+    try {
+      const { result } = await core.runCapability(
+        'cdr.business.compose',
+        {
+          id: `rule-${kind}`,
+          kind,
+          description: `${kind} rule`,
+          confidence: { level: 'high', kind: 'fact' },
+          sources: [{ file: `src/${kind}.ts`, line: 1 }]
+        },
+        ctx(tmp)
+      );
+      assert.equal(result.ok, true, `kind=${kind} should be accepted`);
+      assert.equal(result.data.kind, kind);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+}
+
+test('cdr.business.compose: rejects unknown kind', async () => {
+  const tmp = await freshWorkspace();
+  try {
+    await assert.rejects(
+      () => core.runCapability(
+        'cdr.business.compose',
+        {
+          id: 'bad-rule',
+          kind: 'best-practice',
+          confidence: { level: 'low', kind: 'inference' },
+          derived_from: ['order-create']
+        },
+        ctx(tmp)
+      ),
+      /field 'kind' must be one of/
+    );
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('cdr.business.compose: rejects fact without sources (P3 rule)', async () => {
+  const tmp = await freshWorkspace();
+  try {
+    await assert.rejects(
+      () => core.runCapability(
+        'cdr.business.compose',
+        {
+          id: 'no-evidence',
+          kind: 'constraint',
+          confidence: { level: 'high', kind: 'fact' }
+        },
+        ctx(tmp)
+      ),
+      /kind=fact requires sources/
+    );
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('cdr.business.compose: rejects invalid id pattern', async () => {
+  const tmp = await freshWorkspace();
+  try {
+    await assert.rejects(
+      () => core.runCapability(
+        'cdr.business.compose',
+        {
+          id: 'Invalid Id With Spaces',
+          kind: 'invariant',
+          confidence: { level: 'low', kind: 'inference' },
+          derived_from: ['order-create']
+        },
+        ctx(tmp)
+      ),
+      /id must match/
+    );
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('cdr.index.list: separates business_rules from other sections', async () => {
+  const tmp = await freshWorkspace();
+  try {
+    await core.runCapability('cdr.business.compose', {
+      id: 'amount-positive', kind: 'invariant', description: 'x',
+      confidence: { level: 'high', kind: 'fact' },
+      sources: [{ file: 'src/x.ts' }]
+    }, ctx(tmp));
+    const { result } = await core.runCapability('cdr.index.list', {}, ctx(tmp));
+    assert.equal(result.data.business_rules.length, 1);
+    assert.equal(result.data.behaviors.length, 0);
+    assert.equal(result.data.state_machines.length, 0);
+    assert.match(result.data.text, /## Business Rules/);
+    assert.match(result.data.text, /amount-positive/);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 9. Router: cdr.* intents route to the correct capability
 // ---------------------------------------------------------------------------
 
@@ -550,4 +811,10 @@ test('router: 中文 生成文档门户 → cdr.doc.generate', () => {
 test('router: 中文 列出资产 → cdr.index.list', () => {
   const r = router.routeIntent('列出资产');
   assert.equal(r.capability, 'cdr.index.list');
+});
+
+test('router: 中文 组合业务规则 order-amount-positive → cdr.business.compose', () => {
+  const r = router.routeIntent('组合业务规则 order-amount-positive');
+  assert.equal(r.capability, 'cdr.business.compose');
+  assert.equal(r.input.id, 'order-amount-positive');
 });

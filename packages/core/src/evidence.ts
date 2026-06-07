@@ -2,7 +2,8 @@ import { CapabilityError } from "./types.ts";
 
 export type EvidenceKind = "fact" | "inference" | "unknown";
 export type ConfidenceLevel = "high" | "medium" | "low";
-export type ArtifactType = "behavior" | "state-machine" | "domain" | "capability-map";
+export type ArtifactType = "behavior" | "state-machine" | "domain" | "capability-map" | "business-rule";
+export type BusinessRuleKind = "invariant" | "constraint" | "authorization" | "sla" | "compensation";
 
 export interface SourceRef {
   file: string;
@@ -30,6 +31,7 @@ const ENTRY_TYPES = new Set(["api", "mq", "cron", "rpc", "cache", "search", "oth
 const WRITE_OPS = new Set(["insert", "update", "delete", "upsert", "read"]);
 const LEVELS = new Set(["high", "medium", "low"]);
 const KINDS = new Set(["fact", "inference", "unknown"]);
+const BUSINESS_RULE_KINDS = new Set(["invariant", "constraint", "authorization", "sla", "compensation"]);
 
 function asObject(v: unknown, path: string): Record<string, unknown> {
   if (!v || typeof v !== "object" || Array.isArray(v)) {
@@ -262,11 +264,58 @@ export function validateCapabilityMapArtifact(doc: Record<string, unknown>): str
   return errors;
 }
 
+export function validateBusinessRuleArtifact(doc: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+  const id = optionalString(doc.id);
+  if (!id) errors.push("business-rule: missing id");
+  else if (!ID_PATTERN.test(id)) errors.push("business-rule: id must match ^[a-z0-9-]+$");
+
+  const kind = optionalString(doc.kind);
+  if (!kind) {
+    errors.push("business-rule: missing kind");
+  } else if (!BUSINESS_RULE_KINDS.has(kind)) {
+    errors.push(`business-rule: kind must be one of ${[...BUSINESS_RULE_KINDS].join("|")}`);
+  }
+
+  if (doc.applies_to !== undefined && !Array.isArray(doc.applies_to)) {
+    errors.push("business-rule: applies_to must be an array");
+  }
+
+  if (doc.expr !== undefined && typeof doc.expr !== "string") {
+    errors.push("business-rule: expr must be a string");
+  }
+
+  if (doc.description !== undefined && typeof doc.description !== "string") {
+    errors.push("business-rule: description must be a string");
+  }
+
+  try {
+    const confidence = parseConfidence(doc.confidence);
+    const sources = parseSources(doc.sources, "sources");
+    const derived_from = Array.isArray(doc.derived_from)
+      ? doc.derived_from.map((x) => String(x))
+      : [];
+    const reason = optionalString(doc.reason);
+    errors.push(
+      ...validateEvidenceFields(
+        { confidence, sources, derived_from, reason, investigation_hint: optionalString(doc.investigation_hint) },
+        `business-rule:${id || "?"}`
+      )
+    );
+  } catch (e: any) {
+    if (e instanceof CapabilityError) errors.push(e.message);
+    else errors.push("business-rule: invalid confidence block");
+  }
+
+  return errors;
+}
+
 export function validateArtifact(type: ArtifactType, doc: Record<string, unknown>): string[] {
   if (type === "behavior") return validateBehaviorArtifact(doc);
   if (type === "state-machine") return validateStateMachineArtifact(doc);
   if (type === "domain") return validateDomainArtifact(doc);
   if (type === "capability-map") return validateCapabilityMapArtifact(doc);
+  if (type === "business-rule") return validateBusinessRuleArtifact(doc);
   return [`unknown artifact type: ${type}`];
 }
 

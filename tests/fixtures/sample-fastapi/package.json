@@ -1,0 +1,5 @@
+{
+  "name": "sample-fastapi",
+  "version": "0.1.0",
+  "description": "FastAPI fixture for cdr.entries.prepare annotation scan"
+}

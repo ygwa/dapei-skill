@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
@@ -55,6 +55,175 @@ const ENTRY_PATTERNS: Array<{ regex: RegExp; type: "api" | "mq" | "cron" | "othe
   { regex: /scheduler/i, type: "cron" },
   { regex: /job/i, type: "cron" },
 ];
+
+const FILE_CONTENT_SCAN_BYTES = 200_000;
+
+interface AnnotationMatch {
+  framework: string;
+  type: "api";
+  method?: string;
+  path: string;
+  line: number;
+}
+
+const CLASS_LEVEL_PATTERNS: Array<{
+  framework: string;
+  fileExt: string[];
+  regex: RegExp;
+  pathGroup: number;
+}> = [
+  {
+    framework: "spring",
+    fileExt: [".java"],
+    regex: /@RequestMapping\s*\(\s*(?:value\s*=\s*)?["']([^"']+)["']/g,
+    pathGroup: 1
+  },
+  {
+    framework: "nestjs",
+    fileExt: [".ts", ".js"],
+    regex: /@Controller\s*\(\s*["']([^"']+)["']/g,
+    pathGroup: 1
+  }
+];
+
+const ANNOTATION_PATTERNS: Array<{
+  framework: string;
+  fileExt: string[];
+  matches: Array<{ regex: RegExp; method?: string; require: RegExp; pathGroup: number; methodGroup?: number }>;
+}> = [
+  {
+    framework: "spring",
+    fileExt: [".java"],
+    matches: [
+      {
+        // Method annotation — path in parens is optional (empty/missing → use class-level).
+        regex: /@(Get|Post|Put|Delete|Patch)Mapping\s*(?:\(\s*["']?([^"']*)["']?\s*\))?/g,
+        methodGroup: 1,
+        pathGroup: 2,
+        require: /@(RestController|Controller)\b/
+      },
+      {
+        regex: /@RequestMapping\s*\(\s*(?:value\s*=\s*)?["']([^"']+)["']/g,
+        pathGroup: 1,
+        require: /@(RestController|Controller)\b/
+      }
+    ]
+  },
+  {
+    framework: "nestjs",
+    fileExt: [".ts", ".js"],
+    matches: [
+      {
+        // Method decorator — path in parens is optional.
+        regex: /@(Get|Post|Put|Delete|Patch)\s*(?:\(\s*["']?([^"']*)["']?\s*\))?/g,
+        methodGroup: 1,
+        pathGroup: 2,
+        require: /@Controller\b/
+      },
+      {
+        regex: /@Controller\s*\(\s*["']([^"']+)["']/g,
+        pathGroup: 1,
+        require: /@Controller\s*\(/
+      }
+    ]
+  },
+  {
+    framework: "fastapi",
+    fileExt: [".py"],
+    matches: [
+      {
+        regex: /@(app|router)\.(get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']/g,
+        methodGroup: 2,
+        pathGroup: 3,
+        require: /@\s*(?:FastAPI|APIRouter|router|app)/
+      }
+    ]
+  },
+  {
+    framework: "express",
+    fileExt: [".ts", ".js"],
+    matches: [
+      {
+        regex: /(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']/g,
+        methodGroup: 1,
+        pathGroup: 2,
+        require: /\b(?:express\s*\(\s*)?Router\s*\(\s*\)/
+      }
+    ]
+  }
+];
+
+function safeStat(filePath: string): number | null {
+  try {
+    return statSync(filePath).size;
+  } catch {
+    return null;
+  }
+}
+
+function lineOfOffset(content: string, offset: number): number {
+  let line = 1;
+  for (let i = 0; i < offset && i < content.length; i++) {
+    if (content[i] === "\n") line++;
+  }
+  return line;
+}
+
+function joinUrlPath(base: string | undefined, suffix: string): string {
+  if (!base) return suffix;
+  if (!suffix) return base;
+  const b = base.replace(/\/+$/, "");
+  const s = suffix.startsWith("/") ? suffix : "/" + suffix;
+  return b + s;
+}
+
+function extractClassLevelPath(filePath: string, content: string): string | undefined {
+  const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
+  for (const fw of CLASS_LEVEL_PATTERNS) {
+    if (!fw.fileExt.includes(ext)) continue;
+    fw.regex.lastIndex = 0;
+    const m = fw.regex.exec(content);
+    if (m) {
+      const p = (m[fw.pathGroup] || "").trim();
+      if (p) return p.replace(/\/+$/, "");
+    }
+  }
+  return undefined;
+}
+
+function scanFileForAnnotations(filePath: string, content: string): AnnotationMatch[] {
+  const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
+  const classLevel = extractClassLevelPath(filePath, content);
+  const out: AnnotationMatch[] = [];
+  for (const framework of ANNOTATION_PATTERNS) {
+    if (!framework.fileExt.includes(ext)) continue;
+    if (!framework.matches.some((m) => m.require.test(content))) continue;
+    for (const pat of framework.matches) {
+      // Skip the class-level @RequestMapping / @Controller pattern here — it's
+      // already consumed by extractClassLevelPath.
+      if (pat.pathGroup === 1 && pat.methodGroup === undefined && pat.regex.source.includes("RequestMapping")) continue;
+      if (pat.pathGroup === 1 && pat.methodGroup === undefined && pat.regex.source.includes("Controller")) continue;
+      pat.regex.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = pat.regex.exec(content)) !== null) {
+        const rawPath = (m[pat.pathGroup] || "").trim();
+        const method = pat.methodGroup ? (m[pat.methodGroup] || "").toUpperCase() : undefined;
+        if (!method) continue;
+        const finalPath = joinUrlPath(classLevel, rawPath);
+        if (!finalPath) continue;
+        out.push({
+          framework: framework.framework,
+          type: "api",
+          method,
+          path: finalPath,
+          line: lineOfOffset(content, m.index)
+        });
+        if (m.index === pat.regex.lastIndex) pat.regex.lastIndex++;
+      }
+    }
+  }
+  return out;
+}
 
 function toKebab(name: string): string {
   return name
@@ -192,7 +361,8 @@ export const cdrEntriesPrepare: AnyCap = {
     const allFiles = listFilesRecursively(repoPath, codeExts, 500);
 
     const candidates: Array<Record<string, YamlValue>> = [];
-    const seenIds = new Set<string>();
+    const seenFilenameIds = new Set<string>();
+    const seenAnnotationKeys = new Set<string>();
 
     for (const filePath of allFiles) {
       const relFile = relative(repoPath, filePath);
@@ -201,8 +371,8 @@ export const cdrEntriesPrepare: AnyCap = {
       for (const pattern of ENTRY_PATTERNS) {
         if (pattern.regex.test(fileName)) {
           const id = toKebab(fileName);
-          if (seenIds.has(id)) break; // avoid duplicates from multiple pattern matches
-          seenIds.add(id);
+          if (seenFilenameIds.has(id)) break;
+          seenFilenameIds.add(id);
 
           candidates.push({
             id,
@@ -211,8 +381,52 @@ export const cdrEntriesPrepare: AnyCap = {
             anchor: relFile,
             discovered_by: "platform"
           });
-          break; // first matching pattern wins
+          break;
         }
+      }
+    }
+
+    for (const filePath of allFiles) {
+      const relFile = relative(repoPath, filePath);
+      const stat = safeStat(filePath);
+      if (stat === null || stat > FILE_CONTENT_SCAN_BYTES) continue;
+
+      let content: string;
+      try {
+        content = read(filePath);
+      } catch {
+        continue;
+      }
+
+      const matches = scanFileForAnnotations(filePath, content);
+      if (matches.length === 0) continue;
+
+      // Annotation results are strictly more informative than a filename hit
+      // (specific method+path vs. a whole file) — drop the latter when the
+      // former is present.
+      const filtered = candidates.filter((c) => c.anchor !== relFile);
+      candidates.length = 0;
+      candidates.push(...filtered);
+
+      const fileBase = toKebab(relFile.split("/").pop() || relFile);
+      for (const m of matches) {
+        const dedupKey = `${relFile}|${m.method || ""}|${m.path}`;
+        if (seenAnnotationKeys.has(dedupKey)) continue;
+        seenAnnotationKeys.add(dedupKey);
+
+        const id = `${fileBase}-${(m.method || "ANY").toLowerCase()}-${toKebab(m.path)}`;
+        const entry: Record<string, YamlValue> = {
+          id,
+          type: m.type,
+          status: "candidate",
+          anchor: relFile,
+          line: m.line,
+          path: m.path,
+          framework: m.framework,
+          discovered_by: "platform-annotation"
+        };
+        if (m.method) entry.method = m.method;
+        candidates.push(entry);
       }
     }
 
@@ -255,7 +469,11 @@ export const cdrEntriesConfirm: AnyCap = {
       repo: { type: "string", minLength: 1 },
       entry_id: { type: "string", minLength: 1 },
       summary: { type: "string", minLength: 1 },
-      priority: { type: "string" }
+      priority: { type: "string" },
+      framework: { type: "string" },
+      method: { type: "string" },
+      path: { type: "string" },
+      line: { type: "number" }
     },
     additionalProperties: false
   },
@@ -264,6 +482,10 @@ export const cdrEntriesConfirm: AnyCap = {
     const repo = String(input.repo);
     const entryId = String(input.entry_id);
     const summary = String(input.summary);
+    const framework = input.framework ? String(input.framework) : undefined;
+    const method = input.method ? String(input.method) : undefined;
+    const path = input.path ? String(input.path) : undefined;
+    const line = typeof input.line === "number" ? input.line : undefined;
     const priority = input.priority ? String(input.priority) : undefined;
 
     const outDir = entriesDir(ctx.rootDir);
@@ -287,6 +509,10 @@ export const cdrEntriesConfirm: AnyCap = {
           e.status = "confirmed";
           e.summary = summary;
           if (priority) e.priority = priority;
+          if (framework) e.framework = framework;
+          if (method) e.method = method;
+          if (path) e.path = path;
+          if (line !== undefined) e.line = line;
           found = true;
           break;
         }
@@ -306,7 +532,11 @@ export const cdrEntriesConfirm: AnyCap = {
         entry_id: entryId,
         status: "confirmed",
         summary,
-        priority: priority || null
+        priority: priority || null,
+        framework: framework || null,
+        method: method || null,
+        path: path || null,
+        line: line ?? null
       },
       sideEffects: [`entry confirmed: ${entryId}`],
       reportFragments: [`confirmed entry ${entryId} in ${repo}`]
@@ -421,6 +651,72 @@ export const cdrDomainCompose: AnyCap = {
       },
       sideEffects: [`domain composed: ${relative(ctx.rootDir, outFile)}`],
       reportFragments: [`composed domain '${domainName}' from ${behaviorIds.length} behavior(s)`]
+    };
+  }
+};
+
+// ---------------------------------------------------------------------------
+// 4b. cdr.business.compose
+// ---------------------------------------------------------------------------
+
+export const cdrBusinessCompose: AnyCap = {
+  id: "cdr.business.compose",
+  version: "1.0.0",
+  inputSchema: {
+    required: ["id", "kind", "confidence"],
+    properties: {
+      id: { type: "string", minLength: 1 },
+      kind: { type: "string", enum: ["invariant", "constraint", "authorization", "sla", "compensation"] },
+      description: { type: "string" },
+      expr: { type: "string" },
+      applies_to: { type: "array" },
+      repo: { type: "string" },
+      confidence: { type: "object" },
+      sources: { type: "array" },
+      derived_from: { type: "array" },
+      reason: { type: "string" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    const id = String(input.id);
+    const kind = String(input.kind);
+    const doc: Record<string, YamlValue> = { id, kind };
+    if (input.description) doc.description = String(input.description);
+    if (input.expr) doc.expr = String(input.expr);
+    if (Array.isArray(input.applies_to)) doc.applies_to = input.applies_to.map((x: unknown) => String(x)) as unknown as YamlValue;
+    if (input.repo) doc.repo = String(input.repo);
+    if (Array.isArray(input.sources)) doc.sources = input.sources as unknown as YamlValue;
+    if (Array.isArray(input.derived_from)) doc.derived_from = input.derived_from.map((x: unknown) => String(x)) as unknown as YamlValue;
+    if (input.reason) doc.reason = String(input.reason);
+    doc.confidence = input.confidence as YamlValue;
+
+    const errors = validateArtifact("business-rule", doc as Record<string, unknown>);
+    if (errors.length) {
+      throw new CapabilityError("INVALID_ARTIFACT", errors.join("; "));
+    }
+
+    const cp = cognitivePaths(ctx.rootDir);
+    ensureDir(cp.businessRulesDir);
+    const relPath = artifactRelativePath("business-rule", doc as Record<string, unknown>);
+    const absPath = join(ctx.rootDir, relPath);
+    const content = stringifyYamlDocument(doc);
+    write(absPath, content.endsWith("\n") ? content : `${content}\n`);
+
+    const index = loadCognitiveIndex(ctx.rootDir);
+    upsertIndexEntry(index, "business-rule", relPath, doc as Record<string, unknown>);
+    saveCognitiveIndex(ctx.rootDir, index);
+
+    return {
+      ok: true,
+      data: {
+        id,
+        kind,
+        path: relPath,
+        evidence_kind: (input.confidence as Record<string, unknown>).kind
+      },
+      sideEffects: ["business rule upserted", "index updated"],
+      reportFragments: [`upserted business rule ${id} (${kind})`]
     };
   }
 };
@@ -568,6 +864,13 @@ export const cdrIndexList: AnyCap = {
       }
     }
 
+    // Filter business rules (in-memory, not filesystem-scanned — index is authoritative)
+    const businessRules = (index.business_rules || []).filter((b) => {
+      if (repoFilter && b.repo !== repoFilter) return false;
+      if (kindFilter && b.evidence_kind !== kindFilter) return false;
+      return true;
+    });
+
     const unknowns = index.unknowns;
 
     const lines = [
@@ -578,6 +881,7 @@ export const cdrIndexList: AnyCap = {
       `- State Machines: ${stateMachines.length}`,
       `- Domains: ${domains.length}`,
       `- Capability Maps: ${capMaps.length}`,
+      `- Business Rules: ${businessRules.length}`,
       `- Unknowns: ${unknowns.length}`,
       ``,
       `## Behaviors`,
@@ -600,6 +904,11 @@ export const cdrIndexList: AnyCap = {
         ? capMaps.map((c) => `- ${c.product} → ${c.path}`)
         : ["- none"]),
       ``,
+      `## Business Rules`,
+      ...(businessRules.length
+        ? businessRules.map((r) => `- ${r.id} [${r.kind}] [${r.evidence_kind}/${r.evidence_level}] ${r.path}${r.repo ? ` (${r.repo})` : ""}`)
+        : ["- none"]),
+      ``,
       `## Unknowns`,
       ...(unknowns.length
         ? unknowns.map((u) => `- ${u.id}: ${u.reason}`)
@@ -614,6 +923,7 @@ export const cdrIndexList: AnyCap = {
         state_machines: stateMachines,
         domains,
         capability_maps: capMaps,
+        business_rules: businessRules,
         unknowns,
         updated_at: index.updated_at
       },
