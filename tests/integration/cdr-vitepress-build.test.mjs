@@ -63,13 +63,14 @@ test('cdr e2e: vitepress build produces static HTML with all sections', async ()
     assert.ok(existsSync(join(dist, 'states/order.html')));
 
     // Vue components must be referenced in the built JS bundles
-    const jsFiles = readdirSync(join(dist, 'assets')).filter((f) => f.endsWith('.js'));
-    const allJs = jsFiles.map((f) => readFileSync(join(dist, 'assets', f), 'utf8')).join('\n');
-    assert.match(allJs, /behavior-flow/, 'BehaviorFlow component must appear in built bundle');
-    assert.match(allJs, /state-machine/, 'StateMachine component must appear in built bundle');
-    assert.match(allJs, /code-link/, 'CodeLink component must appear in built bundle');
+    const assetFiles = readdirSync(join(dist, 'assets')).filter((f) => /\.(js|css)$/.test(f));
+    const allAssets = assetFiles.map((f) => readFileSync(join(dist, 'assets', f), 'utf8')).join('\n');
+    assert.match(allAssets, /BehaviorFlow/, 'BehaviorFlow component must appear in built bundle');
+    assert.match(allAssets, /StateMachine/, 'StateMachine component must appear in built bundle');
+    assert.match(allAssets, /CodeLink/, 'CodeLink component must appear in built bundle');
 
     // The behavior page bundle must contain the embedded step data
+    const jsFiles = assetFiles.filter((f) => f.endsWith('.js'));
     const orderBundle = jsFiles
       .map((f) => ({ f, content: readFileSync(join(dist, 'assets', f), 'utf8') }))
       .find((x) => x.f.includes('behaviors_order-create.md'))?.content || '';
