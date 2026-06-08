@@ -221,6 +221,35 @@ const routes: Route[] = [
     reason: "cdr index list intent (chinese)",
     confidence: 0.85
   },
+  // === CDR v0.5 — cross-repo business rules ===
+  {
+    pattern: /^(?=.*\b(?:cross[_-]?repo|cross[_-]?repository)\b)(?=.*\b(?:link|rules?|ruleset|view|map)\b).*/i,
+    capability: "cdr.business.crosslink",
+    inputBuilder: (t, ctx) => ({ min_confidence: ctx.min_confidence || "" }),
+    reason: "cdr business cross-link intent",
+    confidence: 0.9
+  },
+  {
+    pattern: /(?:建立|生成|build|cluster|汇总|推导)\s*(?:跨[_-]?仓库?|跨[_-]?服务?|cross[_-]?repo|cross[_-]?repository)\s*(?:业务规则|关系|rules?|ruleset|view|map)?/i,
+    capability: "cdr.business.crosslink",
+    inputBuilder: (t, ctx) => ({ min_confidence: ctx.min_confidence || "" }),
+    reason: "cdr business cross-link intent (chinese)",
+    confidence: 0.88
+  },
+  {
+    pattern: /^(?=.*\b(?:cross[_-]?repo|cross[_-]?repository)\b)(?=.*\b(?:portal|docs|documentation|render)\b).*/i,
+    capability: "cdr.crossrepo.doc.generate",
+    inputBuilder: (t, ctx) => ({ output_dir: ctx.output_dir || ".dapei/docs-portal" }),
+    reason: "cdr cross_repo doc generate intent",
+    confidence: 0.9
+  },
+  {
+    pattern: /(?:生成|渲染|render|build)\s*(?:跨[_-]?仓库?|跨[_-]?服务?|cross[_-]?repo|cross[_-]?repository)\s*(?:门户|视图|portal|view|page)/i,
+    capability: "cdr.crossrepo.doc.generate",
+    inputBuilder: (t, ctx) => ({ output_dir: ctx.output_dir || ".dapei/docs-portal" }),
+    reason: "cdr cross_repo doc generate intent (chinese)",
+    confidence: 0.88
+  },
   {
     pattern: /^(?=.*\brepos?\b)(?=.*\banalyze\b).*/i,
     capability: "repos.analyze",

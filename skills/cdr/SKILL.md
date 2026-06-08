@@ -177,6 +177,42 @@ L3 流程层 — 行为链路 + 状态机 + 业务规则 (Behavior + State + Rul
 
 **产出**：`docs/as-is/capabilities/product-map.yaml`
 
+### Phase 5.5 — Cross-repo Business Rules（v0.5 跨仓库业务规则）
+
+```
+@dapei build cross-repo rules
+@dapei build cross-repo portal
+```
+
+**目标**：把"一个仓库做完某动作，另一个仓库在什么业务语义下做什么动作"沉淀为**业务规则**——不是图，是**规则**。引擎读所有 `business-rule` 的 `applies_to[]`，按 `(id, repo)` 复合键反查 `index.behaviors[]`，输出 `docs/as-is/cross-repo/cross-links.yaml`，分组渲染到 portal `/cross-repo/`。
+
+**问自己**（AI 主动识别）：
+
+| 跨仓库关系类型 | 业务语义 | 写哪种 kind？ |
+|---|---|---|
+| A 服务的 HTTP 调用到达 B 服务 | 同步集成 | `kind: authorization`（谁可以调）或 `kind: sla`（超时约束） |
+| A 服务 publish 事件 → B 服务 MQ consumer 触发 | 异步补偿 | `kind: compensation`（"如果 A 失败要 rollback 什么"） |
+| A 服务 publish 事件 → B 服务要在 N 秒内消费 | 时延约束 | `kind: sla`（明确写 "must be captured within 30s"） |
+| A 服务和 B 服务共享同一行 DB 记录 | 一致性 | `kind: invariant`（"X 字段两边必须一致"） |
+| A 服务状态机触发 B 服务状态机 | 状态推进 | `kind: sla`（"A 切到 PENDING_PAYMENT 后 B 必须 30s 内切到 PAID"） |
+
+**每识别出一条跨仓库关系，就调** `cdr.business.compose` 写一条规则：
+
+- `applies_to: [behavior_id_in_repo_a, behavior_id_in_repo_b, ...]` —— 把两边的 behavior id 都填进去
+- `kind` 按上表选
+- `confidence.kind = fact` 时必须带 `sources[]`（指向被识别为订阅者的代码，例如 `subscriber.handle(event)` 的文件行号）
+
+**对引擎的要求**：
+
+引擎做的是**只读计算**——不写 behavior / 不写 business-rule。AI 端必须**主动**调 `cdr.business.compose` 把跨仓库关系**先**沉淀成业务规则，然后 `cdr.business.crosslink` 才能算出来。**这是 v0.5 的本质：业务规则是 AI 端的责任，跨仓库视图是引擎端的呈现。**
+
+**`@dapei build cross-repo rules` 调用的能力**：`cdr.business.crosslink`
+**`@dapei build cross-repo portal` 调用的能力**：`cdr.crossrepo.doc.generate`
+
+**产物**：
+- `docs/as-is/cross-repo/cross-links.yaml`（引擎计算结果，分组 by kind）
+- `.dapei/docs-portal/cross-repo/`（portal 渲染，按 kind 分组页面 + Mermaid 关系图）
+
 ### Phase 6 — Documentation Portal（文档门户）
 
 ```

@@ -300,7 +300,13 @@ export const cognitiveStateSuggest: AnyCap = {
     const derivedFrom: string[] = [];
 
     for (const bid of behaviorIds) {
-      const behaviorPath = join(ctx.rootDir, "docs/as-is/behavior", `${bid}.yaml`);
+      // v0.4 — resolve via the index's canonical path; fall back to the
+      // legacy flat path for pre-v0.4 artifacts that the index has not
+      // recorded yet.
+      const indexEntry = index.behaviors.find((b) => b.id === bid);
+      const behaviorPath = indexEntry
+        ? join(ctx.rootDir, indexEntry.path)
+        : join(ctx.rootDir, "docs/as-is/behavior", `${bid}.yaml`);
       if (!existsSync(behaviorPath)) continue;
       const doc = parseYamlDocument(read(behaviorPath)) as Record<string, unknown>;
       const id = String(doc.id || "");

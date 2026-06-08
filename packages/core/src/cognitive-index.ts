@@ -5,7 +5,19 @@ import { parseYamlDocument, stringifyYamlDocument } from "./yaml-doc.ts";
 import type { ArtifactType } from "./evidence.ts";
 import { parseConfidence } from "./evidence.ts";
 
-export interface IndexBehaviorEntry {
+/**
+ * v0.4 — `stale` and `stale_reason` are reserved for `cdr.stale.scan` (planned
+ * but not yet implemented). Adding the fields now keeps the index schema
+ * stable across the next PR that lands `cdr.stale.scan`.
+ */
+export interface StaleFields {
+  stale?: boolean;
+  stale_reason?: string;
+  stale_at?: string;
+  stale_base?: string;
+}
+
+export interface IndexBehaviorEntry extends StaleFields {
   id: string;
   path: string;
   repo?: string;
@@ -13,7 +25,7 @@ export interface IndexBehaviorEntry {
   level: string;
 }
 
-export interface IndexStateMachineEntry {
+export interface IndexStateMachineEntry extends StaleFields {
   entity: string;
   path: string;
   repo?: string;
@@ -21,20 +33,20 @@ export interface IndexStateMachineEntry {
   level: string;
 }
 
-export interface IndexDomainEntry {
+export interface IndexDomainEntry extends StaleFields {
   domain: string;
   path: string;
   repo?: string;
   derived_from: string[];
 }
 
-export interface IndexCapabilityMapEntry {
+export interface IndexCapabilityMapEntry extends StaleFields {
   product: string;
   path: string;
   capability_count: number;
 }
 
-export interface IndexBusinessRuleEntry {
+export interface IndexBusinessRuleEntry extends StaleFields {
   id: string;
   kind: string;
   path: string;
@@ -71,6 +83,45 @@ export function cognitivePaths(rootDir: string) {
   };
 }
 
+/**
+ * v0.4 — per-repo namespace for `behavior` / `state-machine` / `business-rule`.
+ * The path resolves to `docs/as-is/<section>/<repo>/<id>.yaml` when `repo`
+ * is provided. Capabilities/domains stay global (single source of truth per
+ * product / domain). Profiles/entries keep their existing per-repo layout.
+ *
+ * Existing flat files (`docs/as-is/behavior/<id>.yaml` written by pre-v0.4
+ * capability calls) are still readable; `loadCognitiveIndex` does not enforce
+ * the new path layout. New writes always go through this function.
+ */
+export function artifactRelativePath(type: ArtifactType, doc: Record<string, unknown>): string {
+  const repo = typeof doc.repo === "string" && doc.repo.trim() ? doc.repo.trim() : undefined;
+  if (type === "behavior") {
+    const id = String(doc.id || "unknown");
+    return repo
+      ? `docs/as-is/behavior/${repo}/${id}.yaml`
+      : `docs/as-is/behavior/${id}.yaml`;
+  }
+  if (type === "domain") {
+    const domain = String(doc.domain || "unknown").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+    return repo
+      ? `docs/as-is/domains/${repo}/${domain}.yaml`
+      : `docs/as-is/domains/${domain}.yaml`;
+  }
+  if (type === "capability-map") {
+    return `docs/as-is/capabilities/product-map.yaml`;
+  }
+  if (type === "business-rule") {
+    const id = String(doc.id || "unknown").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+    return repo
+      ? `docs/as-is/business-rules/${repo}/${id}.yaml`
+      : `docs/as-is/business-rules/${id}.yaml`;
+  }
+  const entity = String(doc.entity || "unknown").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+  return repo
+    ? `docs/as-is/state-machines/${repo}/${entity}.yaml`
+    : `docs/as-is/state-machines/${entity}.yaml`;
+}
+
 export function loadCognitiveIndex(rootDir: string): CognitiveIndex {
   const { indexFile } = cognitivePaths(rootDir);
   if (!existsSync(indexFile)) {
@@ -104,26 +155,6 @@ export function saveCognitiveIndex(rootDir: string, index: CognitiveIndex): void
   write(indexFile, stringifyYamlDocument(index as unknown as Record<string, import("./yaml-doc.ts").YamlValue>));
 }
 
-export function artifactRelativePath(type: ArtifactType, doc: Record<string, unknown>): string {
-  if (type === "behavior") {
-    const id = String(doc.id || "unknown");
-    return `docs/as-is/behavior/${id}.yaml`;
-  }
-  if (type === "domain") {
-    const domain = String(doc.domain || "unknown").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
-    return `docs/as-is/domains/${domain}.yaml`;
-  }
-  if (type === "capability-map") {
-    return `docs/as-is/capabilities/product-map.yaml`;
-  }
-  if (type === "business-rule") {
-    const id = String(doc.id || "unknown").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
-    return `docs/as-is/business-rules/${id}.yaml`;
-  }
-  const entity = String(doc.entity || "unknown").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
-  return `docs/as-is/state-machines/${entity}.yaml`;
-}
-
 export function upsertIndexEntry(
   index: CognitiveIndex,
   type: ArtifactType,
@@ -135,7 +166,11 @@ export function upsertIndexEntry(
 
   if (type === "behavior") {
     const id = String(doc.id);
-    index.behaviors = index.behaviors.filter((b) => b.id !== id);
+    // v0.4 — per-repo dedup: the same behavior id from two different repos
+    // is two distinct index entries. We key on (id, repo); behavior without
+    // a repo (legacy) is treated as the global namespace and still de-duped
+    // by id alone.
+    index.behaviors = index.behaviors.filter((b) => !(b.id === id && (b.repo || "") === (repo || "")));
     index.behaviors.push({ id, path: relPath, repo, kind: confidence.kind, level: confidence.level });
     if (confidence.kind === "unknown" && doc.reason) {
       index.unknowns = index.unknowns.filter((u) => u.id !== id);
@@ -148,7 +183,8 @@ export function upsertIndexEntry(
     }
   } else if (type === "state-machine") {
     const entity = String(doc.entity);
-    index.state_machines = index.state_machines.filter((s) => s.entity !== entity);
+    // v0.4 — same per-repo dedup rule for state machines.
+    index.state_machines = index.state_machines.filter((s) => !(s.entity === entity && (s.repo || "") === (repo || "")));
     index.state_machines.push({ entity, path: relPath, repo, kind: confidence.kind, level: confidence.level });
     if (confidence.kind === "unknown" && doc.reason) {
       index.unknowns = index.unknowns.filter((u) => u.id !== entity);
@@ -161,7 +197,10 @@ export function upsertIndexEntry(
     }
   } else if (type === "domain") {
     const domain = String(doc.domain);
-    index.domains = index.domains.filter((d) => d.domain !== domain);
+    // v0.4 — domain: same id across repos is now a single domain if no repo,
+    // two domains if they differ by repo. Legacy global domains still
+    // dedupe on id alone.
+    index.domains = index.domains.filter((d) => !(d.domain === domain && (d.repo || "") === (repo || "")));
     const derived_from = Array.isArray(doc.derived_from)
       ? doc.derived_from.map((x: unknown) => String(x))
       : [];
@@ -174,7 +213,8 @@ export function upsertIndexEntry(
   } else if (type === "business-rule") {
     const id = String(doc.id);
     const kind = optionalString(doc.kind) || "unknown";
-    index.business_rules = index.business_rules.filter((b) => b.id !== id);
+    // v0.4 — per-repo dedup for business rules.
+    index.business_rules = index.business_rules.filter((b) => !(b.id === id && (b.repo || "") === (repo || "")));
     index.business_rules.push({
       id,
       kind,
