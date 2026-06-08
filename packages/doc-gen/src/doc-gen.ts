@@ -15,6 +15,13 @@ export type AnyCap = CapabilitySpec<any, any>;
 interface ParsedDoc {
   file: string;
   doc: Record<string, unknown>;
+  /**
+   * v0.4 — namespace inferred from the file's parent directory when the
+   * artifact lives under `<section>/<repo>/<id>.yaml`. Empty for global
+   * sections (capabilities, profiles) where the file is `<id>.yaml` directly
+   * under the section root, and for legacy flat files.
+   */
+  repo?: string;
 }
 
 function confidenceBadge(doc: Record<string, unknown>): string {
@@ -41,7 +48,10 @@ function loadYamlDir(dirPath: string): ParsedDoc[] {
     try {
       const content = read(f);
       const doc = parseYamlDocument(content);
-      results.push({ file: f, doc: doc as Record<string, unknown> });
+      const rel = relative(dirPath, f);
+      const segments = rel.split("/");
+      const repo = segments.length >= 2 ? segments[0] : undefined;
+      results.push({ file: f, doc: doc as Record<string, unknown>, repo });
     } catch {
       // skip unparseable files gracefully
     }
@@ -732,8 +742,15 @@ export const docGenerate: AnyCap = {
     for (const d of domainDocs) {
       const name = String(d.doc.name || d.doc.domain || basename(d.file, ".yaml"));
       const slug = safeId(name);
-      write(join(outputDir, "domains", `${slug}.md`), generateDomainPage(d, p.rootDir));
-      domainItems.push({ text: name, link: `/domains/${slug}` });
+      // v0.4 — per-repo namespace: pages live at /domains/<repo>/<slug>
+      // when the source file is under <repo>/ subdir. Legacy global files
+      // (no repo in path) keep the flat /domains/<slug> URL.
+      const urlPath = d.repo ? `/domains/${safeId(d.repo)}/${slug}` : `/domains/${slug}`;
+      const pagePath = d.repo
+        ? join(outputDir, "domains", safeId(d.repo), `${slug}.md`)
+        : join(outputDir, "domains", `${slug}.md`);
+      write(pagePath, generateDomainPage(d, p.rootDir));
+      domainItems.push({ text: d.repo ? `${name} (${d.repo})` : name, link: urlPath });
       totalPages++;
       sections.domains++;
     }
@@ -746,8 +763,12 @@ export const docGenerate: AnyCap = {
     for (const b of behaviorDocs) {
       const id = String(b.doc.id || basename(b.file, ".yaml"));
       const slug = safeId(id);
-      write(join(outputDir, "behaviors", `${slug}.md`), generateBehaviorPage(b, p.rootDir));
-      behaviorItems.push({ text: id, link: `/behaviors/${slug}` });
+      const urlPath = b.repo ? `/behaviors/${safeId(b.repo)}/${slug}` : `/behaviors/${slug}`;
+      const pagePath = b.repo
+        ? join(outputDir, "behaviors", safeId(b.repo), `${slug}.md`)
+        : join(outputDir, "behaviors", `${slug}.md`);
+      write(pagePath, generateBehaviorPage(b, p.rootDir));
+      behaviorItems.push({ text: b.repo ? `${id} (${b.repo})` : id, link: urlPath });
       totalPages++;
       sections.behaviors++;
     }
@@ -760,8 +781,12 @@ export const docGenerate: AnyCap = {
     for (const s of stateDocs) {
       const entity = String(s.doc.entity || basename(s.file, ".yaml"));
       const slug = safeId(entity);
-      write(join(outputDir, "states", `${slug}.md`), generateStatePage(s, p.rootDir));
-      stateItems.push({ text: entity, link: `/states/${slug}` });
+      const urlPath = s.repo ? `/states/${safeId(s.repo)}/${slug}` : `/states/${slug}`;
+      const pagePath = s.repo
+        ? join(outputDir, "states", safeId(s.repo), `${slug}.md`)
+        : join(outputDir, "states", `${slug}.md`);
+      write(pagePath, generateStatePage(s, p.rootDir));
+      stateItems.push({ text: s.repo ? `${entity} (${s.repo})` : entity, link: urlPath });
       totalPages++;
       sections.states++;
     }
@@ -788,8 +813,12 @@ export const docGenerate: AnyCap = {
     for (const r of businessRuleDocs) {
       const id = String(r.doc.id || basename(r.file, ".yaml"));
       const slug = safeId(id);
-      write(join(outputDir, "business-rules", `${slug}.md`), generateBusinessRulePage(r, p.rootDir));
-      ruleItems.push({ text: id, link: `/business-rules/${slug}` });
+      const urlPath = r.repo ? `/business-rules/${safeId(r.repo)}/${slug}` : `/business-rules/${slug}`;
+      const pagePath = r.repo
+        ? join(outputDir, "business-rules", safeId(r.repo), `${slug}.md`)
+        : join(outputDir, "business-rules", `${slug}.md`);
+      write(pagePath, generateBusinessRulePage(r, p.rootDir));
+      ruleItems.push({ text: r.repo ? `${id} (${r.repo})` : id, link: urlPath });
       totalPages++;
       sections.business_rules++;
     }

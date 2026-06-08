@@ -17,9 +17,23 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
+- **CDR v0.4 — Multi-repo merge** (on `feature/cdr-v0.4-multi-repo-merge`)
+- Per-repo namespace for `behavior` / `state-machine` / `domain` / `business-rule` artifacts. New writes go to `docs/as-is/<section>/<repo>/<id>.yaml`. Two repos can now both produce an `order-create` behavior without overwriting each other.
+- `StaleFields` (`stale` / `stale_reason` / `stale_at` / `stale_base`) reserved on every cognitive index entry. Implementation of `cdr.stale.scan` lands in a follow-up PR.
+- Two new fixtures: `tests/fixtures/mall-order` and `tests/fixtures/mall-payment` (sibling services sharing an `Order` entity).
+- `tests/integration/cdr-v0.4-multi-repo.test.mjs`: cross-repo behavior / state / domain / business-rule merge plus a backward-compat fallback for legacy flat-file reads.
+
 ### Changed
+- `packages/core/src/cognitive-index.ts` — `artifactRelativePath` produces per-repo paths when `repo` is set; `upsertIndexEntry` dedupes on `(id, repo)` for per-repo entry types.
+- `packages/core/src/capabilities/domains/cdr.ts` — `cdr.state.derive` resolves behavior paths via the cognitive index (legacy fallback retained). `cdr.domain.compose` writes through `artifactRelativePath` instead of hand-rolling the path.
+- `packages/core/src/capabilities/domains/cognitive.ts` — `cognitive.state.suggest` resolves behavior paths via the index with the same legacy fallback.
+- `packages/doc-gen/src/doc-gen.ts` — `ParsedDoc` carries an inferred `repo` field; per-repo portal pages land at `behaviors/<repo>/<id>.md` etc.; sidebar items carry `(repo)` annotations when the source is namespaced.
+- Existing test assertions updated from the legacy flat paths to the per-repo layout. `scripts/smoke-test.sh` test 9 expects `docs/as-is/behavior/sample-app/order-create.yaml`.
+
 ### Fixed
-### Removed
+- Cross-repo workspaces no longer silently overwrite a behavior / state-machine / domain / business-rule written by an earlier repo. (Pre-v0.4 the global `id`-only dedup in the cognitive index dropped earlier entries.)
+
+## [3.0.0] - 2026-06-08
 
 ## [3.0.0] - 2026-06-08
 
