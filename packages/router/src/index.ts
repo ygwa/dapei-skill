@@ -225,22 +225,14 @@ const routes: Route[] = [
   {
     pattern: /^(?=.*\b(?:cross[_-]?repo|cross[_-]?repository)\b)(?=.*\b(?:link|rules?|ruleset|view|map)\b).*/i,
     capability: "cdr.business.crosslink",
-    inputBuilder: (t, ctx) => ({
-      min_confidence: ctx.min_confidence || "",
-      kinds: Array.isArray(ctx.kinds) ? ctx.kinds : [],
-      include_intra_repo: ctx.include_intra_repo === true
-    }),
+    inputBuilder: (t, ctx) => ({ min_confidence: ctx.min_confidence || "" }),
     reason: "cdr business cross-link intent",
     confidence: 0.9
   },
   {
     pattern: /(?:建立|生成|build|cluster|汇总|推导)\s*(?:跨[_-]?仓库?|跨[_-]?服务?|cross[_-]?repo|cross[_-]?repository)\s*(?:业务规则|关系|rules?|ruleset|view|map)?/i,
     capability: "cdr.business.crosslink",
-    inputBuilder: (t, ctx) => ({
-      min_confidence: ctx.min_confidence || "",
-      kinds: Array.isArray(ctx.kinds) ? ctx.kinds : [],
-      include_intra_repo: ctx.include_intra_repo === true
-    }),
+    inputBuilder: (t, ctx) => ({ min_confidence: ctx.min_confidence || "" }),
     reason: "cdr business cross-link intent (chinese)",
     confidence: 0.88
   },

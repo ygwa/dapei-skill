@@ -17,6 +17,15 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
+- **CDR v0.5 — Cross-repo business rules** (on `feature/cdr-v0.5-cross-repo-rules`)
+- `cdr.business.crosslink` — read-only computation that walks every business-rule artifact, resolves `applies_to[]` against the cognitive index, groups by `kind`, and emits a cross-repo view at `docs/as-is/cross-repo/cross-links.yaml`. Empty workspace is a legitimate state and produces an empty view rather than an error.
+- `cdr.crossrepo.doc.generate` — renders the cross-link view to a VitePress section at `<output>/cross-repo/` with an index page, per-rule pages, and Mermaid diagrams. Does not touch the existing `cdr.doc.generate` capability.
+- Two new router intent groups (English + Chinese): `build cross-repo rules` → `cdr.business.crosslink`; `build cross-repo portal` → `cdr.crossrepo.doc.generate`.
+- `skills/cdr/SKILL.md` Phase 5.5: the cross-repo rules workflow. AI is taught to recognise five recurring cross-repo relationship patterns (sync call, async compensation, SLA, shared-DB invariant, cross-service state machine) and write the appropriate business rule for each.
+- `tests/unit/cdr-crosslink.test.mjs` (9 cases) and `tests/integration/cdr-v0.5-cross-repo.test.mjs` (end-to-end against the v0.4 mall-order + mall-payment fixtures).
+- Capability ids use no underscores (`cdr.business.crosslink`, `cdr.crossrepo.doc.generate`) to satisfy the existing `domain.name` ID regex, matching the v0.2 precedent for `cdr.business.compose`.
+
+### Changed
 - **CDR v0.4 — Multi-repo merge** (on `feature/cdr-v0.4-multi-repo-merge`)
 - Per-repo namespace for `behavior` / `state-machine` / `domain` / `business-rule` artifacts. New writes go to `docs/as-is/<section>/<repo>/<id>.yaml`. Two repos can now both produce an `order-create` behavior without overwriting each other.
 - `StaleFields` (`stale` / `stale_reason` / `stale_at` / `stale_base`) reserved on every cognitive index entry. Implementation of `cdr.stale.scan` lands in a follow-up PR.
