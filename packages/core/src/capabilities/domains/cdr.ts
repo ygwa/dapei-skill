@@ -1255,7 +1255,7 @@ interface CrossLinkRule {
 }
 
 export const cdrBusinessCrossLink: AnyCap = {
-  id: "cdr.business.cross_link",
+  id: "cdr.business.crosslink",
   version: "1.0.0",
   inputSchema: {
     properties: {
@@ -1282,10 +1282,41 @@ export const cdrBusinessCrossLink: AnyCap = {
     const includeIntraRepo = input.include_intra_repo === true;
 
     if (!existsSync(cp.businessRulesDir)) {
-      throw new CapabilityError(
-        "FILE_MISSING",
-        `business-rules directory not found: ${relative(ctx.rootDir, cp.businessRulesDir)}`
-      );
+      // No business rules yet — emit an empty cross-link view so the
+      // caller still has a well-formed file to render. An empty workspace
+      // is a legitimate state, not an error.
+      const emptyOutDir = join(cp.docsDir, "as-is", "cross-repo");
+      ensureDir(emptyOutDir);
+      const emptyOutFile = join(emptyOutDir, "cross-links.yaml");
+      const emptyDoc: Record<string, YamlValue> = {
+        generated_at: ctx.now.toISOString(),
+        product: cp.workspaceName,
+        total_rules: 0,
+        cross_repo_rules: 0,
+        intra_repo_rules: 0,
+        groups: [] as unknown as YamlValue,
+        filter: {
+          min_confidence: minConfidence,
+          kinds: [...allowedKinds],
+          include_intra_repo: includeIntraRepo
+        }
+      };
+      const emptyContent = stringifyYamlDocument(emptyDoc);
+      write(emptyOutFile, emptyContent.endsWith("\n") ? emptyContent : `${emptyContent}\n`);
+      return {
+        ok: true,
+        data: {
+          path: relative(ctx.rootDir, emptyOutFile),
+          total_rules: 0,
+          cross_repo_rules: 0,
+          intra_repo_rules: 0,
+          by_kind: {},
+          rules: [],
+          skipped: []
+        },
+        sideEffects: [`cross-link view written: ${relative(ctx.rootDir, emptyOutFile)}`],
+        reportFragments: ["no business rules indexed yet — emitted empty cross-link view"]
+      };
     }
 
     const ruleFiles = listFilesRecursively(cp.businessRulesDir, [".yaml", ".yml"], 200);
@@ -1484,7 +1515,7 @@ function crossLinkRuleToMermaidSubgraph(rule: CrossLinkRule): string[] {
 }
 
 export const cdrCrossRepoDocGenerate: AnyCap = {
-  id: "cdr.cross_repo.doc.generate",
+  id: "cdr.crossrepo.doc.generate",
   version: "1.0.0",
   inputSchema: {
     properties: {
