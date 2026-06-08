@@ -23,7 +23,7 @@ test('cognitive.artifact.upsert writes behavior and updates index', async () => 
 
     assert.equal(result.ok, true);
     assert.equal(result.data.id, 'order-create');
-    assert.ok(existsSync(join(tmp, 'docs/as-is/behavior/order-create.yaml')));
+    assert.ok(existsSync(join(tmp, 'docs/as-is/behavior/sample-app/order-create.yaml')));
     assert.ok(existsSync(join(tmp, '.dapei/cognitive/index.yaml')));
 
     const { result: listResult } = await core.runCapability('cognitive.artifact.list', {}, { rootDir: tmp, now: new Date() });
