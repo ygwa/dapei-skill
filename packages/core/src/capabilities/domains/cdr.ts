@@ -696,9 +696,8 @@ export const cdrDomainCompose: AnyCap = {
       throw new CapabilityError("INVALID_ARTIFACT", errors.join("; "));
     }
 
-    const outDir = cp.domainDir;
-    ensureDir(outDir);
-    const outFile = join(outDir, `${domainSlug}.yaml`);
+    const relPath = artifactRelativePath("domain", domainDoc as Record<string, unknown>);
+    const outFile = join(ctx.rootDir, relPath);
     write(outFile, stringifyYamlDocument(domainDoc));
 
     return {
@@ -1133,13 +1132,21 @@ export const cdrStateDerive: AnyCap = {
     }
 
     const cp = cognitivePaths(ctx.rootDir);
+    const index = loadCognitiveIndex(ctx.rootDir);
     const allStates = new Set<string>();
     const allTransitions: Array<Record<string, YamlValue>> = [];
     const derivedFrom: string[] = [];
     const missingBehaviors: string[] = [];
 
     for (const bid of behaviorIds) {
-      const behaviorPath = join(cp.behaviorDir, `${bid}.yaml`);
+      // v0.4 — look up the canonical path via the cognitive index so we can
+      // resolve per-repo behavior files (`docs/as-is/behavior/<repo>/<id>.yaml`)
+      // without guessing. Falls back to the flat legacy path for pre-v0.4
+      // artifacts only when the index does not know about the id.
+      const indexEntry = index.behaviors.find((b) => b.id === bid);
+      const behaviorPath = indexEntry
+        ? join(ctx.rootDir, indexEntry.path)
+        : join(cp.behaviorDir, `${bid}.yaml`);
       if (!existsSync(behaviorPath)) {
         missingBehaviors.push(bid);
         continue;
@@ -1190,7 +1197,6 @@ export const cdrStateDerive: AnyCap = {
     const absPath = join(ctx.rootDir, relPath);
     write(absPath, stringifyYamlDocument(draft));
 
-    const index = loadCognitiveIndex(ctx.rootDir);
     upsertIndexEntry(index, "state-machine", relPath, draft as Record<string, unknown>);
     saveCognitiveIndex(ctx.rootDir, index);
 
