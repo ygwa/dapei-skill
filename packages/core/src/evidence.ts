@@ -123,7 +123,45 @@ export function validateBehaviorArtifact(doc: Record<string, unknown>): string[]
   }
 
   if (doc.events !== undefined && !Array.isArray(doc.events)) errors.push("behavior: events must be an array");
-  if (doc.calls !== undefined && !Array.isArray(doc.calls)) errors.push("behavior: calls must be an array");
+  if (doc.calls !== undefined && !Array.isArray(doc.calls)) {
+    errors.push("behavior: calls must be an array");
+  } else if (Array.isArray(doc.calls)) {
+    // v0.6 — calls[] accepts a mix of legacy strings and structured objects.
+    // Structured objects must carry `target` (the callee name) and may carry
+    // `protocol` (call transport), `evidence` (a single SourceRef pointing
+    // at the call site in code), and `target_repo` (the repo that owns the
+    // callee, when the AI can name it). Strings are accepted verbatim so
+    // pre-v0.6 fixtures keep working.
+    const CALL_PROTOCOLS = new Set(["http", "grpc", "mq", "event", "rpc", "other"]);
+    for (const [i, raw] of (doc.calls as unknown[]).entries()) {
+      if (typeof raw === "string") continue;
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        errors.push(`behavior: calls[${i}] must be a string or an object`);
+        continue;
+      }
+      const co = raw as Record<string, unknown>;
+      if (!optionalString(co.target)) {
+        errors.push(`behavior: calls[${i}].target is required for structured calls`);
+      }
+      const proto = optionalString(co.protocol);
+      if (proto && !CALL_PROTOCOLS.has(proto)) {
+        errors.push(`behavior: calls[${i}].protocol must be one of ${[...CALL_PROTOCOLS].join("|")}`);
+      }
+      // evidence is optional in v0.6 (the AI may not have located the
+      // call site yet) but when present it must be a single SourceRef
+      // object — not an array, since one call has one call site.
+      if (co.evidence !== undefined) {
+        if (!co.evidence || typeof co.evidence !== "object" || Array.isArray(co.evidence)) {
+          errors.push(`behavior: calls[${i}].evidence must be a single SourceRef object`);
+        } else {
+          const ev = co.evidence as Record<string, unknown>;
+          if (!optionalString(ev.file)) {
+            errors.push(`behavior: calls[${i}].evidence.file is required`);
+          }
+        }
+      }
+    }
+  }
   if (doc.risks !== undefined && !Array.isArray(doc.risks)) errors.push("behavior: risks must be an array");
 
   try {

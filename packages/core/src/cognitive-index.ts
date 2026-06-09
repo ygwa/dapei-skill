@@ -23,6 +23,13 @@ export interface IndexBehaviorEntry extends StaleFields {
   repo?: string;
   kind: string;
   level: string;
+  /**
+   * v0.6 — set of repo names this behavior calls into, derived from
+   * structured `calls[]` entries that carry an explicit `target_repo`.
+   * Strings and object calls without `target_repo` do not contribute.
+   * Optional; pre-v0.6 index entries that lack the field keep working.
+   */
+  target_repos?: string[];
 }
 
 export interface IndexStateMachineEntry extends StaleFields {
@@ -171,7 +178,24 @@ export function upsertIndexEntry(
     // a repo (legacy) is treated as the global namespace and still de-duped
     // by id alone.
     index.behaviors = index.behaviors.filter((b) => !(b.id === id && (b.repo || "") === (repo || "")));
-    index.behaviors.push({ id, path: relPath, repo, kind: confidence.kind, level: confidence.level });
+    // v0.6 — extract target_repos from structured calls[]. Only object
+    // calls with an explicit `target_repo` field contribute. We do not
+    // attempt to infer target_repo from a free-form target string.
+    let targetRepos: string[] | undefined;
+    if (Array.isArray(doc.calls)) {
+      const set = new Set<string>();
+      for (const c of doc.calls as unknown[]) {
+        if (c && typeof c === "object" && !Array.isArray(c)) {
+          const co = c as Record<string, unknown>;
+          const tr = typeof co.target_repo === "string" ? co.target_repo.trim() : "";
+          if (tr) set.add(tr);
+        }
+      }
+      if (set.size > 0) targetRepos = [...set].sort();
+    }
+    const entry: IndexBehaviorEntry = { id, path: relPath, repo, kind: confidence.kind, level: confidence.level };
+    if (targetRepos) entry.target_repos = targetRepos;
+    index.behaviors.push(entry);
     if (confidence.kind === "unknown" && doc.reason) {
       index.unknowns = index.unknowns.filter((u) => u.id !== id);
       index.unknowns.push({

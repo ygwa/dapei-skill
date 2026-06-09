@@ -361,17 +361,53 @@ title: "${id}"
     }
   }
 
-  // Calls
+  // Calls — v0.6 supports a mix of legacy strings and structured objects.
   const calls = behavior.doc.calls as unknown[] | undefined;
+  const crossServiceCalls: Array<{ target: string; protocol: string; targetRepo: string; evidenceFile: string; evidenceLine: number | null; evidenceRepo: string | null }> = [];
   if (Array.isArray(calls) && calls.length > 0) {
     md += "\n## Calls\n\n";
     for (const c of calls) {
       if (typeof c === "string") {
         md += `- \`${c}\`\n`;
-      } else {
-        const co = c as Record<string, unknown>;
-        md += `- **${String(co.target || co.service || "?")}** — ${String(co.method || co.action || "")}\n`;
+        continue;
       }
+      if (!c || typeof c !== "object" || Array.isArray(c)) continue;
+      const co = c as Record<string, unknown>;
+      const target = String(co.target || co.service || "?");
+      const protocol = typeof co.protocol === "string" ? co.protocol : "";
+      const targetRepo = typeof co.target_repo === "string" ? co.target_repo : "";
+      const ev = co.evidence && typeof co.evidence === "object" ? co.evidence as Record<string, unknown> : null;
+      const evFile = ev ? String(ev.file || "") : "";
+      const evLine = ev && typeof ev.line === "number" ? ev.line : null;
+      const evRepo = ev ? (typeof ev.repo === "string" ? ev.repo : null) : null;
+      const method = typeof co.method === "string" ? ` (${co.method})` : "";
+
+      md += `- **${target}**${method}`;
+      if (protocol) md += ` \`[${protocol}]\``;
+      md += "\n";
+      if (evFile) {
+        const evJson = JSON.stringify({ file: evFile, line: evLine, repo: evRepo }).replace(/'/g, "&#39;");
+        md += `  - evidence: <CodeLink :source='${evJson}' />\n`;
+      }
+      if (targetRepo) {
+        crossServiceCalls.push({ target, protocol, targetRepo, evidenceFile: evFile, evidenceLine: evLine, evidenceRepo: evRepo });
+      }
+    }
+  }
+
+  // v0.6 — cross-service calls grouped by target repo
+  if (crossServiceCalls.length > 0) {
+    md += "\n## Cross-service calls\n\n";
+    md += "This behavior calls into the following repos:\n\n";
+    md += "| Target | Protocol | Target repo | Evidence |\n";
+    md += "|--------|----------|-------------|----------|\n";
+    for (const c of crossServiceCalls) {
+      const evCell = c.evidenceFile
+        ? c.evidenceLine
+          ? `\`${c.evidenceFile}:${c.evidenceLine}\``
+          : `\`${c.evidenceFile}\``
+        : "—";
+      md += `| \`${c.target}\` | ${c.protocol || "—"} | \`${c.targetRepo}\` | ${evCell} |\n`;
     }
   }
 

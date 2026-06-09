@@ -1026,8 +1026,15 @@ export const cdrBehaviorUpsert: AnyCap = {
     if (Array.isArray(input.steps)) doc.steps = input.steps as unknown as YamlValue;
     if (Array.isArray(input.writes)) doc.writes = input.writes as unknown as YamlValue;
     if (Array.isArray(input.events)) doc.events = input.events.map((x: unknown) => String(x)) as unknown as YamlValue;
-    if (Array.isArray(input.calls)) doc.calls = input.calls.map((x: unknown) => String(x)) as unknown as YamlValue;
     if (Array.isArray(input.risks)) doc.risks = input.risks.map((x: unknown) => String(x)) as unknown as YamlValue;
+    // v0.6 — calls[] now accepts a mix of strings and structured objects.
+    // The previous v0.5 behaviour stringified every entry, which silently
+    // turned any object call into the literal string "[object Object]".
+    // Preserve structure so doc-gen can render the rich form, and so
+    // cognitive-index can extract target_repos from explicit hints.
+    if (Array.isArray(input.calls)) {
+      doc.calls = input.calls as unknown as YamlValue;
+    }
     if (Array.isArray(input.sources)) doc.sources = input.sources as unknown as YamlValue;
     if (Array.isArray(input.derived_from)) doc.derived_from = input.derived_from.map((x: unknown) => String(x)) as unknown as YamlValue;
     if (input.reason) doc.reason = String(input.reason);
