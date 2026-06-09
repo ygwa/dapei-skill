@@ -14,6 +14,7 @@ import {
 import { parseYamlDocument, stringifyYamlDocument, type YamlValue } from "../../yaml-doc.ts";
 import { requireFields, detectRepoLanguage, detectTestCommands, parseReposYamlNames } from "../shared.ts";
 import { ensureDir, read, write, runSafe, workspacePaths, listFilesRecursively } from "../../../../runtime-adapters/src/system.ts";
+import { CodeGraphAdapter } from "../../../../runtime-adapters/src/codegraph.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
 
@@ -208,16 +209,59 @@ export const cdrProfile: AnyCap = {
     const directoryTree = repoDirectoryTree(repoPath, p.rootDir);
     const testCommands = detectTestCommands(repoPath);
 
+    // v0.7 — try CodeGraph first; degrade gracefully. The doctor probe
+    // happens once per process; the profile output always records the
+    // state so consumers can tell native from fallback.
+    let codegraphBlock: Record<string, YamlValue> = {};
+    let reportNote = "";
+    try {
+      const adapter = new CodeGraphAdapter(ctx.rootDir);
+      const doc = adapter.fullDoctor();
+      if (doc.available) {
+        const orient = adapter.orient(repoPath, {});
+        codegraphBlock = {
+          available: true,
+          version: doc.version || null,
+          backend: orient.backend,
+          indexed_at: orient.indexed_at,
+          files_total: orient.files_total ?? orient.files.length,
+          apisurface_count: orient.apisurface_count ?? null
+        };
+        reportNote = `codegraph: ${doc.version || "unknown"} (${orient.files.length} files via native backend)`;
+      } else {
+        codegraphBlock = {
+          available: false,
+          version: null,
+          backend: "fallback",
+          reason: doc.reason || "codegraph CLI not in PATH"
+        };
+        reportNote = "codegraph: fallback (tree walk + manifest)";
+        adapter.markUnavailable();
+      }
+    } catch {
+      // Adapter construction must never block a profile write. The
+      // doctor failure is a degraded-data signal, not a hard error.
+      codegraphBlock = { available: false, backend: "fallback", reason: "adapter init failed" };
+      reportNote = "codegraph: fallback (adapter init failed)";
+    }
+
     // v0.3: removed `frameworks` field. The engine no longer prescribes which
     // frameworks a repo uses — the AI reads manifest_files + directory_tree
     // and decides. See cdr-architecture.md "AI as scanner" principle.
+    // v0.7: the `codegraph` field re-introduces structured metadata about
+    // what the platform actually inspected, but it is metadata about the
+    // substrate, not a claim about the repo's framework. The dangling
+    // `data.codegraph.files_total` reference in
+    // runtime/templates/docs/scripts/build-cognitive-pages.ts is finally
+    // populated.
     const profileData: Record<string, YamlValue> = {
       repo,
       generated_at: ctx.now.toISOString(),
       language,
       manifest_files: manifestFiles,
       directory_tree: directoryTree,
-      test_commands: testCommands
+      test_commands: testCommands,
+      codegraph: codegraphBlock
     };
 
     const outDir = profilesDir(ctx.rootDir);
@@ -232,10 +276,11 @@ export const cdrProfile: AnyCap = {
         path: relative(p.rootDir, outFile),
         language,
         manifest_files: manifestFiles,
-        test_commands: testCommands
+        test_commands: testCommands,
+        codegraph: codegraphBlock
       },
       sideEffects: [`profile written: ${relative(p.rootDir, outFile)}`],
-      reportFragments: [`generated profile for ${repo}`]
+      reportFragments: [`generated profile for ${repo}`, reportNote]
     };
   }
 };
