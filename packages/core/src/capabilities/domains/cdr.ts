@@ -1960,6 +1960,7 @@ export const cdrStaleScan: AnyCap = {
           head,
           backend: backendUsed,
           changed_files: 0,
+          marked: 0,
           stale: [] as Array<{ id: string; entity: string; reason: string; reason_paths: string[] }>
         },
         sideEffects: ["no changes detected; nothing to mark stale"],

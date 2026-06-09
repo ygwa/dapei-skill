@@ -17,6 +17,15 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
+- **CDR v0.7 — CodeGraph integration** (on `feature/cdr-v0.7-codegraph`)
+- `packages/runtime-adapters/src/codegraph.ts` ships a `CodeGraphAdapter` class wrapping the [lzehrung/codegraph] CLI. Three operations: `orient` (code file listing), `refs` (call-graph neighbourhood), `impact` (blast radius between two refs). A one-shot `which codegraph` probe at construction; an optional `DAPEI_CODEGRAPH_BIN` env var lets tests inject a fake. When the probe fails, the adapter marks the workspace with `.dapei/graph/.no-codegraph`.
+- `cdr.profile` populates a new `codegraph` block (available / version / backend / files_total / apisurface_count / reason). The dangling `data.codegraph.files_total` reference in `runtime/templates/docs/scripts/build-cognitive-pages.ts` is finally wired.
+- `cdr.entries.candidate` tries `codegraph orient` first; on success returns `backend='native'` and per-file `apisurface_hint`. On failure falls back to the v0.3 tree walk with `backend='fallback'`.
+- `cdr.behavior.upsert` cross-checks every structured call with an `evidence` SourceRef against the call graph (`adapter.refs`). Strict rejection when the CLI is present; graceful skip when missing.
+- New `cdr.stale.scan` capability: walks every behavior / state-machine / business-rule in the cognitive index, reads each YAML off disk, and marks entries whose `sources[]` intersect a `codegraph impact` change set with `stale=true / stale_reason / stale_at / stale_base`. Pre-v0.7 assets keep working; `stale` fields are purely additive.
+- `tests/fixtures/fake-codegraph/codegraph` is a shell-script test double for the real codegraph CLI. `PATH` is prepended with this directory per-test so the adapter picks it up. Used by 9 new unit tests.
+
+### Changed
 - **CDR v0.6 — Structured calls** (on `feature/cdr-v0.6-structured-calls`)
 - `behavior.calls[]` schema evolution: accepts a mix of legacy strings and structured objects `{ target, protocol?, target_repo?, evidence? }`. Per-entry validation in `evidence.ts`.
 - `IndexBehaviorEntry.target_repos` optional field. `upsertIndexEntry` extracts `target_repo` from structured calls. Pre-v0.6 index entries keep loading without the field.
