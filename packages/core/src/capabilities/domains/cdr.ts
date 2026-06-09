@@ -1078,6 +1078,83 @@ export const cdrIndexList: AnyCap = {
 // 10. cdr.behavior.upsert
 // ---------------------------------------------------------------------------
 
+/**
+ * v0.7 — for each structured call that carries an `evidence` SourceRef
+ * pointing at a call site, ask the CodeGraph adapter whether the
+ * call site actually references the named `target`. Returns an
+ * array of error strings (empty when everything checks out).
+ *
+ * The adapter is reused across calls in the same `cdr.behavior.upsert`
+ * invocation so we only pay the doctor probe cost once. When the
+ * CLI is not present, this function returns an empty array and
+ * the upsert proceeds; the user has accepted the absence.
+ */
+function validateStructuredCallsAgainstCodeGraph(
+  ctx: { rootDir: string },
+  doc: Record<string, unknown>
+): string[] {
+  const calls = Array.isArray(doc.calls) ? doc.calls : [];
+  if (calls.length === 0) return [];
+
+  // Pre-filter to structured calls with both an evidence and a target.
+  // Legacy string calls and structured calls without evidence are out
+  // of scope for this check (the engine does not know where the call
+  // happens, so it cannot ask CodeGraph).
+  const checkable: Array<{ idx: number; target: string; file: string; line: number | undefined; repo: string | undefined }> = [];
+  for (const [i, raw] of calls.entries()) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const co = raw as Record<string, unknown>;
+    const target = typeof co.target === "string" ? co.target : "";
+    const ev = co.evidence && typeof co.evidence === "object" && !Array.isArray(co.evidence) ? co.evidence as Record<string, unknown> : null;
+    if (!target || !ev) continue;
+    const file = typeof ev.file === "string" ? ev.file : "";
+    const line = typeof ev.line === "number" ? ev.line : undefined;
+    const repo = typeof doc.repo === "string" ? doc.repo : undefined;
+    if (!file) continue;
+    checkable.push({ idx: i, target, file, line, repo });
+  }
+  if (checkable.length === 0) return [];
+
+  let adapter: CodeGraphAdapter | null = null;
+  try {
+    adapter = new CodeGraphAdapter(ctx.rootDir);
+    if (!adapter.isAvailable()) return [];
+  } catch {
+    return [];
+  }
+
+  const errors: string[] = [];
+  for (const c of checkable) {
+    const repoPath = c.repo ? join(workspacePaths(ctx.rootDir).reposDir, c.repo) : "";
+    if (!repoPath || !existsSync(repoPath)) continue;
+    const refs = adapter.refs(repoPath, { file: c.file, line: c.line });
+    if (!refs.available) continue;
+    const found = refs.callees.some((cal) => matchesTargetName(cal.name, c.target));
+    if (!found) {
+      errors.push(
+        `calls[${c.idx}].target '${c.target}' not found in codegraph refs of ${c.file}:${c.line || 0} (callees seen: ${refs.callees.map((cal) => cal.name).join(", ") || "none"})`
+      );
+    }
+  }
+  return errors;
+}
+
+function matchesTargetName(calleeName: string, target: string): boolean {
+  if (!calleeName || !target) return false;
+  // Exact match, dot-segment match (PaymentClient === PaymentClient),
+  // or method-on-instance match (FooClient.create === FooClient).
+  if (calleeName === target) return true;
+  const targetTail = target.includes(".") ? target.split(".").pop() || target : target;
+  const calleeTail = calleeName.includes(".") ? calleeName.split(".").pop() || calleeName : calleeName;
+  if (targetTail === calleeTail) return true;
+  // topic:event form: target = 'order.events:order.created' -> look for
+  // 'order.events' or 'order.created' as a substring match.
+  if (target.includes(":") && (calleeName.includes(target.split(":")[0]) || calleeName.includes(target.split(":")[1] || ""))) {
+    return true;
+  }
+  return false;
+}
+
 export const cdrBehaviorUpsert: AnyCap = {
   id: "cdr.behavior.upsert",
   version: "1.0.0",
@@ -1126,6 +1203,19 @@ export const cdrBehaviorUpsert: AnyCap = {
     const evidenceErrors = validateEvidencePoints(ctx, doc as Record<string, unknown>);
     if (evidenceErrors.length) {
       throw new CapabilityError("INVALID_EVIDENCE", evidenceErrors.join("; "));
+    }
+
+    // v0.7 — when CodeGraph is present, cross-check structured
+    // calls[].target against the call-graph. The check is per-call:
+    // for each structured call that carries a SourceRef evidence
+    // pointing at a call site, ask the adapter whether that site
+    // actually references the named target. If CodeGraph is present
+    // and the target is NOT in the refs list, reject. If CodeGraph
+    // is missing, skip the check (graceful degradation; the user has
+    // accepted the absence by not installing the CLI).
+    const structuredCallErrors = validateStructuredCallsAgainstCodeGraph(ctx, doc);
+    if (structuredCallErrors.length) {
+      throw new CapabilityError("INVALID_EVIDENCE", structuredCallErrors.join("; "));
     }
 
     const errors = validateArtifact("behavior", doc as Record<string, unknown>);
