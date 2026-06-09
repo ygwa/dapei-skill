@@ -145,25 +145,26 @@ EOF
     ;;
   impact)
     # Compute a fake blast radius from the head ref's changed files.
-    # If the repo is a git repo and the head ref is a real commit, use
-    # git diff to derive the change set; otherwise emit a stub.
+    # If the repo is a git repo and both refs exist, use git diff
+    # to derive the change set; otherwise emit a stub. The whole
+    # output is built in Python so the JSON encoding is correct.
     repo_path="${rest[0]:-}"
     base="${rest[1]:-}"
     head="${rest[2]:-}"
-    if [[ -d "$repo_path/.git" ]] && git -C "$repo_path" rev-parse --verify --quiet "$head" >/dev/null 2>&1 && git -C "$repo_path" rev-parse --verify --quiet "$base" >/dev/null 2>&1; then
-      changed_files=$(git -C "$repo_path" diff --name-only "$base".."$head" -- 2>/dev/null | tr '\n' ',' | sed 's/,$//')
-      cat <<EOF
-{
-  "base": "$base",
-  "head": "$head",
-  "changed_files": "${changed_files}" | python3 -c 'import sys,json; sys.stdout.write(json.dumps([s for s in sys.stdin.read().strip(",").split(",") if s]))'
-}
-EOF
-    else
-      cat <<'EOF'
-{"base":"","head":"","changed_files":[]}
-EOF
-    fi
+    python3 - "$repo_path" "$base" "$head" <<'PYEOF'
+import json, subprocess, sys
+repo_path, base, head = sys.argv[1], sys.argv[2], sys.argv[3]
+out = {"base": base, "head": head, "changed_files": []}
+try:
+    files = subprocess.check_output(
+        ["git", "-C", repo_path, "diff", "--name-only", f"{base}..{head}", "--"],
+        stderr=subprocess.DEVNULL, text=True
+    ).split()
+    out["changed_files"] = files
+except Exception:
+    pass
+print(json.dumps(out))
+PYEOF
     ;;
   doctor)
     cat <<EOF
