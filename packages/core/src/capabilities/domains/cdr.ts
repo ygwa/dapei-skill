@@ -324,36 +324,68 @@ export const cdrEntriesCandidate: AnyCap = {
       ? Math.min(input.max_bytes, 2_000_000)
       : MAX_FILE_BYTES;
 
-    const allFiles = listFilesRecursively(repoPath, CODE_EXTS, maxFiles);
     const fileEntries: Array<Record<string, YamlValue>> = [];
     const skipped: Array<{ relpath: string; reason: string }> = [];
+    let backendUsed: "native" | "fallback" = "fallback";
+    let backendReason: string | undefined;
 
-    for (const filePath of allFiles) {
-      const relFile = relative(repoPath, filePath);
-      let content = "";
-      let truncated = false;
-
-      try {
-        const raw = read(filePath);
-        if (raw.length > maxBytes) {
-          content = raw.slice(0, maxBytes);
-          truncated = true;
-          skipped.push({ relpath: relFile, reason: `exceeds ${maxBytes} bytes` });
+    // v0.7 — try CodeGraph orient first. When the CLI is present the
+    // result is structurally richer (it knows about apisurface hints,
+    // test data flow, etc.). When it is not, we fall back to the v0.3
+    // tree walk — same behaviour as before, no functional regression.
+    let codegraphFiles: Array<{ relpath: string; content: string; size_bytes: number; truncated: boolean; apisurface_hint?: unknown }> = [];
+    try {
+      const adapter = new CodeGraphAdapter(ctx.rootDir);
+      const orient = adapter.orient(repoPath, { maxFiles, maxBytes });
+      if (orient.available && orient.files.length > 0) {
+        backendUsed = "native";
+        codegraphFiles = orient.files.map((f) => ({
+          relpath: f.relpath,
+          content: f.content,
+          size_bytes: f.size_bytes,
+          truncated: f.truncated,
+          apisurface_hint: f.apisurface_hint
+        }));
+      } else {
+        backendReason = orient.reason;
+        if (orient.available) {
+          // CLI present but returned no files — still the native path
+          backendUsed = "native";
         } else {
-          content = raw;
+          adapter.markUnavailable();
         }
-      } catch {
-        skipped.push({ relpath: relFile, reason: "unreadable" });
-        continue;
       }
+    } catch {
+      backendReason = "codegraph adapter init failed; falling back to tree walk";
+    }
 
-      fileEntries.push({
-        relpath: relFile,
-        language: languageHintForFile(relFile),
-        size_bytes: content.length,
-        truncated,
-        content
-      });
+    const sources: Array<{ relpath: string; content: string; size_bytes: number; truncated: boolean; apisurface_hint?: unknown }> = codegraphFiles.length > 0
+      ? codegraphFiles
+      : listFilesRecursively(repoPath, CODE_EXTS, maxFiles).map((filePath) => {
+          const relFile = relative(repoPath, filePath);
+          try {
+            const raw = read(filePath);
+            if (raw.length > maxBytes) {
+              skipped.push({ relpath: relFile, reason: `exceeds ${maxBytes} bytes` });
+              return { relpath: relFile, content: raw.slice(0, maxBytes), size_bytes: maxBytes, truncated: true };
+            }
+            return { relpath: relFile, content: raw, size_bytes: raw.length, truncated: false };
+          } catch {
+            skipped.push({ relpath: relFile, reason: "unreadable" });
+            return null;
+          }
+        }).filter((entry): entry is { relpath: string; content: string; size_bytes: number; truncated: boolean } => entry !== null);
+
+    for (const f of sources) {
+      const entry: Record<string, YamlValue> = {
+        relpath: f.relpath,
+        language: languageHintForFile(f.relpath),
+        size_bytes: f.size_bytes,
+        truncated: f.truncated,
+        content: f.content
+      };
+      if (f.apisurface_hint) entry.apisurface_hint = f.apisurface_hint as YamlValue;
+      fileEntries.push(entry);
     }
 
     return {
@@ -364,6 +396,8 @@ export const cdrEntriesCandidate: AnyCap = {
         files: fileEntries as unknown as YamlValue,
         skipped: skipped as unknown as YamlValue,
         max_bytes: maxBytes,
+        backend: backendUsed,
+        backend_reason: backendReason,
         workflow: {
           step: 1,
           phase: "candidate",
@@ -372,7 +406,10 @@ export const cdrEntriesCandidate: AnyCap = {
         }
       },
       sideEffects: [],
-      reportFragments: [`listed ${fileEntries.length} code file(s) in ${repo} for AI triage`]
+      reportFragments: [
+        `listed ${fileEntries.length} code file(s) in ${repo} for AI triage`,
+        backendUsed === "native" ? "codegraph backend: native" : "codegraph backend: fallback (tree walk)"
+      ]
     };
   }
 };
