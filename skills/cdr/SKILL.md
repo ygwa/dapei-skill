@@ -139,6 +139,33 @@ L3 流程层 — 行为链路 + 状态机 + 业务规则 (Behavior + State + Rul
 
 使用已有的 `cognitive.discover` + `cognitive.artifact.upsert` 工作流。
 
+**v0.6 — Use structured calls**
+
+`behavior.calls[]` 现在接受两种形态：
+
+```yaml
+# Legacy — 继续可用
+calls: ["PaymentClient", "InventoryService"]
+
+# Structured (v0.6 推荐) — 引擎会把 target_repo 提到 index
+calls:
+  - target: PaymentClient
+    protocol: http
+    target_repo: mall-payment
+    evidence: { file: src/paymentClient.ts, line: 12, repo: mall-order }
+  - target: order.events:order.created
+    protocol: mq
+    evidence: { file: src/events/publisher.ts, line: 3, repo: mall-order }
+```
+
+**每个调用的字段**：
+- `target`（必填）：被调的 service / topic 名
+- `protocol`（推荐）：`http | grpc | mq | event | rpc | other`
+- `target_repo`（推荐）：被调方所属的 repo 名——AI **必须显式声明**，引擎不做语义推断
+- `evidence`（推荐）：单条 SourceRef，指向**调用点**（不是定义点）
+
+**为什么需要 target_repo**：portal 渲染时，**Cross-service calls** 段只列有 `target_repo` 的调用；cognitive-index 的 `target_repos` 字段只从**显式**声明的调用中抽取。**不声明 = 引擎无信息可记录**，与 v0.5 的"AI 自由填写"行为相同。
+
 **从已确认的入口出发**，沿调用链追踪：
 1. 识别数据库写入 (`writes`)
 2. 识别事件发布 (`events`)

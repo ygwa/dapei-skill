@@ -17,6 +17,16 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
+- **CDR v0.6 — Structured calls** (on `feature/cdr-v0.6-structured-calls`)
+- `behavior.calls[]` schema evolution: accepts a mix of legacy strings and structured objects `{ target, protocol?, target_repo?, evidence? }`. Per-entry validation in `evidence.ts`.
+- `IndexBehaviorEntry.target_repos` optional field. `upsertIndexEntry` extracts `target_repo` from structured calls. Pre-v0.6 index entries keep loading without the field.
+- `cdr.doc.generate` renders structured calls with a per-entry upgrade and a new "Cross-service calls" section that lists target / protocol / target_repo / evidence.
+- `skills/cdr/SKILL.md` Phase 2 documents the structured calls form and the field semantics (target / protocol / target_repo / evidence).
+
+### Fixed
+- `cdr.behavior.upsert` previously stringified every call entry via `input.calls.map(String)`, silently turning any object call into the literal `"[object Object]"` on disk. v0.6 preserves structure. A unit test pins this down by asserting the literal `"[object Object]"` never appears in a v0.6-written behavior YAML.
+
+### Changed
 - **CDR v0.5 — Cross-repo business rules** (on `feature/cdr-v0.5-cross-repo-rules`)
 - `cdr.business.crosslink` — read-only computation that walks every business-rule artifact, resolves `applies_to[]` against the cognitive index, groups by `kind`, and emits a cross-repo view at `docs/as-is/cross-repo/cross-links.yaml`. Empty workspace is a legitimate state and produces an empty view rather than an error.
 - `cdr.crossrepo.doc.generate` — renders the cross-link view to a VitePress section at `<output>/cross-repo/` with an index page, per-rule pages, and Mermaid diagrams. Does not touch the existing `cdr.doc.generate` capability.
