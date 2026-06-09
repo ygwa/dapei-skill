@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { basename, join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
@@ -1803,6 +1804,223 @@ ${crossLinkRuleToMermaidSubgraph(r).join("\n")}
       },
       sideEffects: ["cross-repo portal section generated"],
       reportFragments: [`generated cross-repo portal section under ${relative(p.rootDir, sectionDir)}`]
+    };
+  }
+};
+
+// ---------------------------------------------------------------------------
+// 14. cdr.stale.scan — v0.7
+//
+// Watches the cognitive index for assets whose `sources[]` references
+// have moved since they were last written. Implements the v0.4
+// StaleFields reservation by populating `stale`, `stale_reason`,
+// `stale_at`, and `stale_base` on the affected index entries.
+//
+// Backend:
+//   * CodeGraph `impact` (when present) computes the transitive blast
+//     radius — the change set is whatever CodeGraph says the diff
+//     affects, not just the file names in `git diff --name-only`.
+//   * Fallback to `git diff --name-only <base>..<HEAD> -- repos/<repo>/`
+//     when CodeGraph is missing.
+//
+// The capability is read-modify-write: it loads the cognitive
+// index, updates stale fields in place, saves, and returns a
+// summary of what changed. It does NOT regenerate any artifacts.
+// ---------------------------------------------------------------------------
+
+function computeBehaviorStaleness(
+  ctx: { rootDir: string },
+  repo: string | undefined,
+  changedFiles: Set<string>
+): Array<{ id: string; entity: string; reason: string; reason_paths: string[] }> {
+  const index = loadCognitiveIndex(ctx.rootDir);
+  const out: Array<{ id: string; entity: string; reason: string; reason_paths: string[] }> = [];
+
+  const considerEntry = (id: string, repoFilter: string | undefined, sources: unknown, kind: "behavior" | "state-machine" | "business-rule") => {
+    if (repoFilter && repo && repoFilter !== repo) return;
+    if (!Array.isArray(sources)) return;
+    const pathsHit: string[] = [];
+    for (const s of sources) {
+      if (!s || typeof s !== "object") continue;
+      const so = s as Record<string, unknown>;
+      const f = typeof so.file === "string" ? so.file : "";
+      if (!f) continue;
+      // sources[].file is repo-relative; the diff paths are also
+      // repo-relative when we ran `git diff --name-only -- repos/<repo>/`.
+      if (changedFiles.has(f)) pathsHit.push(f);
+    }
+    if (pathsHit.length > 0) {
+      out.push({
+        id,
+        entity: id,
+        reason: `${kind} sources[] intersect with the diff`,
+        reason_paths: pathsHit
+      });
+    }
+  };
+
+  for (const b of index.behaviors) {
+    // Read the YAML off disk to inspect sources[] — the index only
+    // stores the path, not the full content.
+    const filePath = join(ctx.rootDir, b.path);
+    if (!existsSync(filePath)) continue;
+    let doc: Record<string, unknown>;
+    try {
+      doc = parseYamlDocument(read(filePath)) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    considerEntry(String(doc.id || b.id), b.repo, doc.sources, "behavior");
+  }
+
+  for (const sm of index.state_machines) {
+    const filePath = join(ctx.rootDir, sm.path);
+    if (!existsSync(filePath)) continue;
+    let doc: Record<string, unknown>;
+    try {
+      doc = parseYamlDocument(read(filePath)) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    considerEntry(String(doc.entity || sm.entity), sm.repo, doc.sources, "state-machine");
+  }
+
+  for (const br of index.business_rules) {
+    const filePath = join(ctx.rootDir, br.path);
+    if (!existsSync(filePath)) continue;
+    let doc: Record<string, unknown>;
+    try {
+      doc = parseYamlDocument(read(filePath)) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    considerEntry(String(doc.id || br.id), br.repo, doc.sources, "business-rule");
+  }
+
+  return out;
+}
+
+function gitDiffFileNames(repoPath: string, base: string, head: string): string[] {
+  try {
+    const out = execFileSync("git", ["diff", "--name-only", `${base}..${head}`, "--"], { cwd: repoPath, encoding: "utf8" });
+    return out.split("\n").map((s) => s.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+export const cdrStaleScan: AnyCap = {
+  id: "cdr.stale.scan",
+  version: "1.0.0",
+  inputSchema: {
+    properties: {
+      repo: { type: "string" },
+      base: { type: "string" },
+      head: { type: "string" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    const repo = typeof input.repo === "string" ? input.repo : undefined;
+    const head = typeof input.head === "string" ? input.head : "HEAD";
+    const base = typeof input.base === "string" ? input.base : "HEAD~1";
+
+    if (!repo) {
+      throw new CapabilityError("INVALID_INPUT", "cdr.stale.scan requires { repo } to scope the diff");
+    }
+    const p = workspacePaths(ctx.rootDir);
+    const repoPath = join(p.reposDir, repo);
+    if (!existsSync(repoPath)) {
+      throw new CapabilityError("REPO_MISSING", `repos/${repo} not found`);
+    }
+
+    let changedFiles: string[] = [];
+    let backendUsed: "codegraph" | "git-diff" = "git-diff";
+    try {
+      const adapter = new CodeGraphAdapter(ctx.rootDir);
+      const impact = adapter.impact(repoPath, base, head);
+      if (impact.available && impact.changed_files.length > 0) {
+        changedFiles = impact.changed_files;
+        backendUsed = "codegraph";
+      } else {
+        changedFiles = gitDiffFileNames(repoPath, base, head);
+        backendUsed = "git-diff";
+      }
+    } catch {
+      changedFiles = gitDiffFileNames(repoPath, base, head);
+      backendUsed = "git-diff";
+    }
+
+    if (changedFiles.length === 0) {
+      return {
+        ok: true,
+        data: {
+          repo,
+          base,
+          head,
+          backend: backendUsed,
+          changed_files: 0,
+          stale: [] as Array<{ id: string; entity: string; reason: string; reason_paths: string[] }>
+        },
+        sideEffects: ["no changes detected; nothing to mark stale"],
+        reportFragments: [`cdr.stale.scan: 0 changed files in ${repo} (${base}..${head})`]
+      };
+    }
+
+    const changedSet = new Set(changedFiles);
+    const candidates = computeBehaviorStaleness(ctx, repo, changedSet);
+
+    // Apply: load index, mark each candidate stale, save.
+    const index = loadCognitiveIndex(ctx.rootDir);
+    const now = new Date().toISOString();
+    let marked = 0;
+    for (const c of candidates) {
+      const sm = index.state_machines.find((s) => s.entity === c.id && (!repo || s.repo === repo));
+      if (sm) {
+        sm.stale = true;
+        sm.stale_reason = c.reason;
+        sm.stale_at = now;
+        sm.stale_base = `${base}..${head}`;
+        marked++;
+        continue;
+      }
+      const b = index.behaviors.find((x) => x.id === c.id && (!repo || x.repo === repo));
+      if (b) {
+        b.stale = true;
+        b.stale_reason = c.reason;
+        b.stale_at = now;
+        b.stale_base = `${base}..${head}`;
+        marked++;
+        continue;
+      }
+      const r = index.business_rules.find((x) => x.id === c.id && (!repo || x.repo === repo));
+      if (r) {
+        r.stale = true;
+        r.stale_reason = c.reason;
+        r.stale_at = now;
+        r.stale_base = `${base}..${head}`;
+        marked++;
+        continue;
+      }
+    }
+    saveCognitiveIndex(ctx.rootDir, index);
+
+    return {
+      ok: true,
+      data: {
+        repo,
+        base,
+        head,
+        backend: backendUsed,
+        changed_files: changedFiles.length,
+        stale: candidates,
+        marked
+      },
+      sideEffects: marked > 0 ? [`marked ${marked} cognitive asset(s) stale`] : [],
+      reportFragments: [
+        `cdr.stale.scan: ${changedFiles.length} changed file(s) in ${repo} (${base}..${head}) via ${backendUsed}`,
+        marked > 0 ? `${marked} asset(s) marked stale` : "no assets match the change set"
+      ]
     };
   }
 };
