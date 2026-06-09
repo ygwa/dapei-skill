@@ -30,6 +30,20 @@ export interface IndexBehaviorEntry extends StaleFields {
    * Optional; pre-v0.6 index entries that lack the field keep working.
    */
   target_repos?: string[];
+  /**
+   * v0.8 — event names this behavior emits (from `events[]` on the
+   * behavior YAML). The reverse-cluster pipeline uses these to find
+   * behaviors that share the same event names as cross-repo signals.
+   * Optional; pre-v0.8 entries without the field keep working.
+   */
+  events?: string[];
+  /**
+   * v0.8 — table / collection names this behavior writes (from
+   * `writes[]` on the behavior YAML). Used as a secondary
+   * reverse-cluster signal when events are missing.
+   * Optional.
+   */
+  writes?: string[];
 }
 
 export interface IndexStateMachineEntry extends StaleFields {
@@ -193,8 +207,27 @@ export function upsertIndexEntry(
       }
       if (set.size > 0) targetRepos = [...set].sort();
     }
+    // v0.8 — extract events[] and writes[] straight from the behavior doc.
+    // Both fields are simple string arrays. Sorting keeps the index diff
+    // stable across calls that pass the same content in different order.
+    let events: string[] | undefined;
+    if (Array.isArray(doc.events)) {
+      const evs = (doc.events as unknown[])
+        .map((x) => (typeof x === "string" ? x.trim() : ""))
+        .filter((x) => x.length > 0);
+      if (evs.length > 0) events = [...new Set(evs)].sort();
+    }
+    let writes: string[] | undefined;
+    if (Array.isArray(doc.writes)) {
+      const ws = (doc.writes as unknown[])
+        .map((x) => (typeof x === "string" ? x.trim() : ""))
+        .filter((x) => x.length > 0);
+      if (ws.length > 0) writes = [...new Set(ws)].sort();
+    }
     const entry: IndexBehaviorEntry = { id, path: relPath, repo, kind: confidence.kind, level: confidence.level };
     if (targetRepos) entry.target_repos = targetRepos;
+    if (events) entry.events = events;
+    if (writes) entry.writes = writes;
     index.behaviors.push(entry);
     if (confidence.kind === "unknown" && doc.reason) {
       index.unknowns = index.unknowns.filter((u) => u.id !== id);
