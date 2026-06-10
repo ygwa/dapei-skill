@@ -1,6 +1,6 @@
 import { workspaceInit, workspaceReport, workspaceStatus, workspaceValidate } from "./domains/workspace.ts";
 import { reposAdd, reposAnalyze, reposCheck, reposList, reposRemove, reposSync } from "./domains/repos.ts";
-import { featureClose, featureCreate, featureReview, featureStage, featureStatus, featureTasks } from "./domains/feature.ts";
+import { featureClose, featureCreate, featureReview, featureStage, featureStatus, featureTasks, featureAssign, featureHandoff, featureTeamStatus } from "./domains/feature.ts";
 import { contextBuild } from "./domains/context.ts";
 import { workflowRunStage, workflowStatus } from "./domains/workflow.ts";
 import { featureReport, featureGuardrail, validationDetect, validationExecute, validationReport, validationRun } from "./domains/reporting.ts";
@@ -9,7 +9,8 @@ import {
   cognitiveArtifactUpsert,
   cognitiveArtifactValidate,
   cognitiveDiscover,
-  cognitiveStateSuggest
+  cognitiveStateSuggest,
+  cognitiveExplore
 } from "./domains/cognitive.ts";
 import {
   cdrProfile,
@@ -22,7 +23,9 @@ import {
   cdrIndexList,
   cdrBehaviorUpsert,
   cdrStateDerive,
-  cdrBusinessCompose
+  cdrBusinessCompose,
+  cdrAssetStaleCheck,
+  cdrArchitectureDriftCheck
 } from "./domains/cdr.ts";
 import { docGenerate } from "../../../doc-gen/src/doc-gen.ts";
 import { memoryAppend } from "./domains/memory.ts";
@@ -57,6 +60,9 @@ export const capabilitySpecs: AnyCap[] = [
   featureTasks,
   featureReview,
   featureClose,
+  featureAssign,
+  featureHandoff,
+  featureTeamStatus,
   memoryAppend,
   auditQuery,
   cognitiveDiscover,
@@ -64,6 +70,7 @@ export const capabilitySpecs: AnyCap[] = [
   cognitiveArtifactUpsert,
   cognitiveArtifactList,
   cognitiveStateSuggest,
+  cognitiveExplore,
   // CDR capabilities
   cdrProfile,
   cdrEntriesCandidate,
@@ -76,6 +83,8 @@ export const capabilitySpecs: AnyCap[] = [
   cdrBehaviorUpsert,
   cdrStateDerive,
   cdrBusinessCompose,
+  cdrAssetStaleCheck,
+  cdrArchitectureDriftCheck,
   // Documentation generation
   docGenerate
 ];

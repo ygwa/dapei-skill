@@ -369,3 +369,147 @@ export const cognitiveStateSuggest: AnyCap = {
     };
   }
 };
+
+export const cognitiveExplore: AnyCap = {
+  id: "cognitive.explore",
+  version: "1.0.0",
+  inputSchema: {
+    properties: {
+      intent: { type: "string", minLength: 1 },
+      repo: { type: "string" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    const intentText = String(input.intent || "");
+    const repoFilter = input.repo ? String(input.repo) : undefined;
+    const p = workspacePaths(ctx.rootDir);
+    const index = loadCognitiveIndex(ctx.rootDir);
+
+    const keywords = intentText
+      .toLowerCase()
+      .split(/[^a-zA-Z0-9]+/)
+      .filter((k) => k.length > 2);
+
+    const matchedBehaviors = index.behaviors
+      .filter((b) => {
+        if (repoFilter && b.repo !== repoFilter) return false;
+        if (!keywords.length) return true;
+        return keywords.some((k) => b.id.toLowerCase().includes(k));
+      })
+      .slice(0, 10);
+
+    const matchedStateMachines = index.state_machines
+      .filter((s) => {
+        if (repoFilter && s.repo !== repoFilter) return false;
+        if (!keywords.length) return true;
+        return keywords.some((k) => s.entity.toLowerCase().includes(k));
+      })
+      .slice(0, 10);
+
+    const matchedDomains = index.domains.filter((d) => {
+      if (repoFilter && d.repo !== repoFilter) return false;
+      if (!keywords.length) return true;
+      return keywords.some((k) => d.domain.toLowerCase().includes(k));
+    }).slice(0, 5);
+
+    const matchedBusinessRules = (index.business_rules || [])
+      .filter((r) => {
+        if (repoFilter && r.repo !== repoFilter) return false;
+        if (!keywords.length) return true;
+        return keywords.some((k) => r.id.toLowerCase().includes(k));
+      })
+      .slice(0, 10);
+
+    const hasAnyAssets = matchedBehaviors.length > 0 || matchedStateMachines.length > 0 || matchedDomains.length > 0;
+
+    const reportLines: string[] = [];
+    reportLines.push(`# Exploration: ${intentText || "(general)"}`);
+    if (repoFilter) reportLines.push(`**Repo**: ${repoFilter}`);
+    reportLines.push(`**Timestamp**: ${ctx.now.toISOString()}`);
+    reportLines.push("");
+
+    if (!hasAnyAssets) {
+      reportLines.push("## No cognitive assets found");
+      reportLines.push("");
+      reportLines.push("No behaviors, state machines, or domains match your query. Suggestions:");
+      reportLines.push("- Run `@dapei repos analyze <repo>` to bootstrap repo analysis");
+      reportLines.push("- Run `@dapei discover entries for <repo>` to identify entry points");
+      reportLines.push("- Run `@dapei discover behaviors for <repo>` to document behavior chains");
+    } else {
+      if (matchedBehaviors.length > 0) {
+        reportLines.push(`## Behaviors (${matchedBehaviors.length})`);
+        for (const b of matchedBehaviors) {
+          const path = join(ctx.rootDir, b.path);
+          const summary = existsSync(path) ? extractBehaviorSummary(read(path)) : "(summary unavailable)";
+          reportLines.push(`- **[${b.id}](file:///${path})** [${b.kind}/${b.level}] ${summary}`);
+        }
+        reportLines.push("");
+      }
+
+      if (matchedStateMachines.length > 0) {
+        reportLines.push(`## State Machines (${matchedStateMachines.length})`);
+        for (const s of matchedStateMachines) {
+          reportLines.push(`- **${s.entity}** [${s.kind}/${s.level}] → ${s.path}`);
+        }
+        reportLines.push("");
+      }
+
+      if (matchedDomains.length > 0) {
+        reportLines.push(`## Domains (${matchedDomains.length})`);
+        for (const d of matchedDomains) {
+          reportLines.push(`- **${d.domain}** (derived from ${d.derived_from.length} behaviors) → ${d.path}`);
+        }
+        reportLines.push("");
+      }
+
+      if (matchedBusinessRules.length > 0) {
+        reportLines.push(`## Business Rules (${matchedBusinessRules.length})`);
+        for (const r of matchedBusinessRules) {
+          reportLines.push(`- **${r.id}** [${r.kind}] → ${r.path}`);
+        }
+        reportLines.push("");
+      }
+
+      reportLines.push("## Next Steps");
+      reportLines.push("- Ready to create a feature? Run `@dapei create feature ...`");
+      reportLines.push("- Need deeper analysis? Run `@dapei discover behaviors for <repo>`");
+      reportLines.push("- Check for stale assets? Run `@dapei check stale`");
+    }
+
+    return {
+      ok: true,
+      data: {
+        intent: intentText,
+        repo: repoFilter || null,
+        behavior_count: matchedBehaviors.length,
+        state_machine_count: matchedStateMachines.length,
+        domain_count: matchedDomains.length,
+        business_rule_count: matchedBusinessRules.length,
+        has_assets: hasAnyAssets,
+        text: reportLines.join("\n")
+      },
+      sideEffects: [],
+      reportFragments: [
+        `explored: ${matchedBehaviors.length} behaviors, ${matchedStateMachines.length} state machines, ${matchedDomains.length} domains`
+      ]
+    };
+  }
+};
+
+function extractBehaviorSummary(content: string): string {
+  try {
+    const doc = parseYamlDocument(content);
+    const summary = String(doc.summary || doc.description || "");
+    if (summary) return summary.slice(0, 120) + (summary.length > 120 ? "..." : "");
+    const entry = doc.entry as Record<string, unknown>;
+    if (entry) {
+      const type = String(entry.type || "");
+      const path = String(entry.path || entry.topic || "");
+      return `${type}: ${path}`;
+    }
+  } catch {
+    return "(parse error)";
+  }
+  return "(no summary)";
+}
