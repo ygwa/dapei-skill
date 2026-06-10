@@ -1090,3 +1090,70 @@ test('router: 中文 组合业务规则 order-amount-positive → cdr.business.c
   assert.equal(r.capability, 'cdr.business.compose');
   assert.equal(r.input.id, 'order-amount-positive');
 });
+
+// ---------------------------------------------------------------------------
+// 16. Router: cdr v0.8 reverse-cluster intents
+// ---------------------------------------------------------------------------
+
+test('router: suggest domains → cdr.domain.suggest', () => {
+  const r = router.routeIntent('suggest domains');
+  assert.equal(r.capability, 'cdr.domain.suggest');
+});
+
+test('router: cluster domains for X → cdr.domain.suggest', () => {
+  const r = router.routeIntent('cluster domains for E-Commerce Mall');
+  assert.equal(r.capability, 'cdr.domain.suggest');
+});
+
+test('router: reverse-cluster domains → cdr.domain.suggest', () => {
+  const r = router.routeIntent('reverse-cluster domains');
+  assert.equal(r.capability, 'cdr.domain.suggest');
+});
+
+test('router: 中文 推荐领域 → cdr.domain.suggest', () => {
+  const r = router.routeIntent('推荐领域');
+  assert.equal(r.capability, 'cdr.domain.suggest');
+});
+
+test('router: synth capability map for X → cdr.capability.map.synth (NOT init)', () => {
+  const r = router.routeIntent('synth capability map for E-Commerce Mall');
+  assert.equal(r.capability, 'cdr.capability.map.synth');
+  assert.equal(r.input.product, 'E-Commerce Mall');
+});
+
+test('router: synthesize capability map for X → cdr.capability.map.synth', () => {
+  const r = router.routeIntent('synthesize capability map for E-Commerce Mall');
+  assert.equal(r.capability, 'cdr.capability.map.synth');
+});
+
+test('router: build capability map for X still routes to cdr.capability.map.init', () => {
+  // "init" / "build" both go to v0.3 init. Only "synth" / "synthesize"
+  // route to v0.8 synth. This is the contract.
+  const r = router.routeIntent('build capability map for E-Commerce Mall');
+  assert.equal(r.capability, 'cdr.capability.map.init');
+});
+
+test('router: 中文 聚类功能地图 → cdr.capability.map.synth', () => {
+  const r = router.routeIntent('聚类功能地图');
+  assert.equal(r.capability, 'cdr.capability.map.synth');
+});
+
+test('router: render L1 portal → cdr.reversecluster.doc.generate', () => {
+  const r = router.routeIntent('render L1 portal');
+  assert.equal(r.capability, 'cdr.reversecluster.doc.generate');
+});
+
+test('router: generate capability map portal → cdr.reversecluster.doc.generate', () => {
+  const r = router.routeIntent('generate capability map portal');
+  assert.equal(r.capability, 'cdr.reversecluster.doc.generate');
+});
+
+test('router: 中文 渲染能力地图门户 → cdr.reversecluster.doc.generate', () => {
+  const r = router.routeIntent('渲染能力地图门户');
+  assert.equal(r.capability, 'cdr.reversecluster.doc.generate');
+});
+
+test('router: cross-repo portal stays on cdr.crossrepo.doc.generate (not L1)', () => {
+  const r = router.routeIntent('render cross-repo portal');
+  assert.equal(r.capability, 'cdr.crossrepo.doc.generate');
+});

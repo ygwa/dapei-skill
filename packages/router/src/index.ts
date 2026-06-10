@@ -111,6 +111,59 @@ const routes: Route[] = [
     reason: "cdr capability map init intent",
     confidence: 0.92
   },
+  // === CDR v0.8 — reverse-cluster to L1 ===
+  // Order matters: v0.8 patterns must precede the v0.3 init / v0.3
+  // doc.generate patterns because those are catch-alls. "synth capability
+  // map" needs to win over "init capability map", and "render L1 portal"
+  // needs to win over "generate documentation portal".
+  {
+    // "suggest domains" / "cluster domains" — verb is the cluster signal,
+    // noun (domains) is the unique key. Keeps "compose domain X" (v0.3)
+    // and "synth capability map" (this version) cleanly separate.
+    pattern: /^(?=.*\b(?:suggest|cluster|reverse[\s_-]?cluster)\b)(?=.*\b(?:domains?)\b).*/i,
+    capability: "cdr.domain.suggest",
+    inputBuilder: (t, ctx) => ({
+      repos: ctx.repos || "",
+      min_size: ctx.min_size || "",
+      max_size: ctx.max_size || "",
+      max_clusters: ctx.max_clusters || ""
+    }),
+    reason: "cdr domain suggest intent (v0.8)",
+    confidence: 0.9
+  },
+  {
+    // "synth capability map" — disambiguate from "init capability map"
+    // (v0.3, AI-authored capabilities). Synth reads clusters/domains;
+    // init takes a hand-rolled capabilities[] from the AI.
+    pattern: /^(?=.*\b(?:synth(?:esize)?)\b)(?=.*\bcapability\b)(?=.*\bmap\b).*/i,
+    capability: "cdr.capability.map.synth",
+    inputBuilder: (t, ctx) => ({
+      product: ctx.product || extractCdrProductName(t) || "",
+      use_suggested_domains: ctx.use_suggested_domains || ""
+    }),
+    reason: "cdr capability map synth intent (v0.8)",
+    confidence: 0.92
+  },
+  {
+    // "render L1 portal" / "build capability map portal" — distinct
+    // from cdr.crossrepo.doc.generate which only renders /cross-repo/.
+    // The L1 / capability-map noun is the unique key.
+    pattern: /^(?=.*\b(?:render|build|generate)\b)(?=.*\b(?:l1|capability[\s_-]?map|reverse[\s_-]?cluster)\b)(?=.*\b(?:portal|docs|documentation)\b).*/i,
+    capability: "cdr.reversecluster.doc.generate",
+    inputBuilder: (t, ctx) => ({ output_dir: ctx.output_dir || ".dapei/docs-portal" }),
+    reason: "cdr reverse_cluster doc generate intent (v0.8)",
+    confidence: 0.92
+  },
+  {
+    // v0.5 cross-repo portal must precede the v0.3 catch-all
+    // "render ... portal" → cdr.doc.generate. "render cross-repo portal"
+    // is more specific and belongs to cdr.crossrepo.doc.generate.
+    pattern: /^(?=.*\b(?:cross[_-]?repo|cross[_-]?repository)\b)(?=.*\b(?:portal|docs|documentation)\b).*/i,
+    capability: "cdr.crossrepo.doc.generate",
+    inputBuilder: (t, ctx) => ({ output_dir: ctx.output_dir || ".dapei/docs-portal" }),
+    reason: "cdr cross_repo doc generate intent (precedence over cdr.doc.generate)",
+    confidence: 0.92
+  },
   {
     // "documentation|docs|portal" noun (not just "build") avoids conflict with context.build
     pattern: /^(?=.*\b(?:generate|build|render)\b)(?=.*\b(?:documentation|docs|portal)\b).*/i,
@@ -248,6 +301,39 @@ const routes: Route[] = [
     capability: "cdr.crossrepo.doc.generate",
     inputBuilder: (t, ctx) => ({ output_dir: ctx.output_dir || ".dapei/docs-portal" }),
     reason: "cdr cross_repo doc generate intent (chinese)",
+    confidence: 0.88
+  },
+  // === CDR v0.8 — Chinese intents ===
+  // The English v0.8 patterns live earlier (before v0.3 init / doc.generate
+  // to win the precedence battle). The Chinese variants sit here as their
+  // own block because they cannot collide with English verbs/nouns.
+  {
+    pattern: /(?:推荐|聚类|建议|reverse[\s_-]?cluster|suggest).*(?:领域|domain)/i,
+    capability: "cdr.domain.suggest",
+    inputBuilder: (t, ctx) => ({
+      repos: ctx.repos || "",
+      min_size: ctx.min_size || "",
+      max_size: ctx.max_size || "",
+      max_clusters: ctx.max_clusters || ""
+    }),
+    reason: "cdr domain suggest intent (chinese)",
+    confidence: 0.88
+  },
+  {
+    pattern: /(?:聚类|生成|推导|合成).*(?:功能|能力|capability)\s*(?:地图|map|全景)/i,
+    capability: "cdr.capability.map.synth",
+    inputBuilder: (t, ctx) => ({
+      product: ctx.product || extractCdrProductName(t) || "",
+      use_suggested_domains: ctx.use_suggested_domains || ""
+    }),
+    reason: "cdr capability map synth intent (chinese)",
+    confidence: 0.88
+  },
+  {
+    pattern: /(?:渲染|生成|build|render).*(?:L1|能力地图|功能全景|capability[\s_-]?map)/i,
+    capability: "cdr.reversecluster.doc.generate",
+    inputBuilder: (t, ctx) => ({ output_dir: ctx.output_dir || ".dapei/docs-portal" }),
+    reason: "cdr reverse_cluster doc generate intent (chinese)",
     confidence: 0.88
   },
   {
