@@ -338,3 +338,190 @@ export const featureClose: AnyCap = {
     return { ok: true, data: { feature }, sideEffects: ["archive docs", "worktree remove"], reportFragments: ["feature closed"] };
   }
 };
+
+function parseFeatureYaml(content: string): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const line of content.split("\n")) {
+    const m = line.match(/^(\s*)([a-z_]+):\s*(.*)$/);
+    if (m) {
+      const key = m[2].trim();
+      const val = m[3].trim().replace(/^["']|["']$/g, "");
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
+function updateFeatureYamlField(yamlContent: string, field: string, value: string): string {
+  const lines = yamlContent.split("\n");
+  let found = false;
+  const updated = lines.map((line) => {
+    const m = line.match(/^(\s*)(owner|assignees|last-review-at):\s*(.*)$/);
+    if (m && m[2] === field) {
+      found = true;
+      return line.replace(/^(\s*)owner:\s*.*$/m, `$1owner: "${value}"`);
+    }
+    return line;
+  });
+  if (!found) {
+    const insertLine = `  owner: "${value}"`;
+    const idx = updated.findIndex((l) => l.includes("repos:"));
+    if (idx >= 0) {
+      updated.splice(idx, 0, insertLine);
+    }
+  }
+  return updated.join("\n");
+}
+
+export const featureAssign: AnyCap = {
+  id: "feature.assign",
+  version: "1.0.0",
+  inputSchema: {
+    required: ["feature", "owner"],
+    properties: {
+      feature: { type: "string", minLength: 1 },
+      owner: { type: "string", minLength: 1 },
+      assignees: { type: "string" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    requireFields(input, ["feature", "owner"]);
+    const feature = String(input.feature);
+    const owner = String(input.owner);
+    const assigneesCsv = input.assignees ? String(input.assignees) : "";
+    const p = workspacePaths(ctx.rootDir);
+    const featureDir = join(p.featuresDir, feature);
+    const featureYaml = join(featureDir, "feature.yaml");
+    if (!existsSync(featureYaml)) throw new CapabilityError("FEATURE_MISSING", `feature.yaml not found for ${feature}`);
+
+    let yamlContent = read(featureYaml);
+    yamlContent = updateFeatureYamlField(yamlContent, "owner", owner);
+
+    if (assigneesCsv) {
+      const assignees = assigneesCsv.split(",").map((x) => x.trim()).filter(Boolean);
+      if (yamlContent.includes("assignees:")) {
+        yamlContent = yamlContent.replace(/assignees:\s*\n/, `assignees: [${assignees.join(", ")}]\n`);
+      } else {
+        const idx = yamlContent.split("\n").findIndex((l) => l.includes("owner:"));
+        if (idx >= 0) {
+          yamlContent = yamlContent.split("\n").splice(idx + 1, 0, `  assignees: [${assignees.join(", ")}]`).join("\n");
+        }
+      }
+    }
+
+    write(featureYaml, yamlContent);
+    return {
+      ok: true,
+      data: { feature, owner, assignees: assigneesCsv || "" },
+      sideEffects: ["feature.yaml updated"],
+      reportFragments: [`${feature} assigned to ${owner}`]
+    };
+  }
+};
+
+export const featureHandoff: AnyCap = {
+  id: "feature.handoff",
+  version: "1.0.0",
+  inputSchema: {
+    required: ["feature", "to"],
+    properties: {
+      feature: { type: "string", minLength: 1 },
+      to: { type: "string", minLength: 1 },
+      note: { type: "string" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    requireFields(input, ["feature", "to"]);
+    const feature = String(input.feature);
+    const to = String(input.to);
+    const note = input.note ? String(input.note) : "";
+    const p = workspacePaths(ctx.rootDir);
+    const featureDir = join(p.featuresDir, feature);
+    const featureYaml = join(featureDir, "feature.yaml");
+    if (!existsSync(featureYaml)) throw new CapabilityError("FEATURE_MISSING", `feature.yaml not found for ${feature}`);
+
+    const yamlContent = read(featureYaml);
+    const parsed = parseFeatureYaml(yamlContent);
+    const from = String(parsed.owner || "unknown");
+    const progressFile = join(featureDir, "reports", "feature-progress.md");
+    const stage = existsSync(progressFile) ? (read(progressFile).match(/## Stage: (\S+)/)?.[1] || "unknown") : "unknown";
+
+    const handoffNote = [
+      `# Handoff: ${feature}`,
+      `**From**: ${from}`,
+      `**To**: ${to}`,
+      `**Date**: ${ctx.now.toISOString()}`,
+      `**Current Stage**: ${stage}`,
+      ``,
+      `## Context Summary`,
+      note || "(no context note provided — AI should generate from feature docs)",
+      ``,
+      `## Open Items`,
+      `- Memory: see memory/decision-log.md and memory/risk.md`,
+      `- Current State: see docs/01-current-state.md`,
+      `- Latest Progress: see reports/daily-report.md`
+    ].join("\n");
+
+    write(join(featureDir, "context", "handoff.md"), handoffNote);
+
+    let updatedYaml = updateFeatureYamlField(yamlContent, "owner", to);
+    write(featureYaml, updatedYaml);
+
+    return {
+      ok: true,
+      data: { feature, from, to, handoff_note: "context/handoff.md" },
+      sideEffects: ["handoff note created", "owner updated"],
+      reportFragments: [`${feature} handed off from ${from} to ${to}`]
+    };
+  }
+};
+
+export const featureTeamStatus: AnyCap = {
+  id: "feature.team-status",
+  version: "1.0.0",
+  inputSchema: {},
+  async execute(ctx) {
+    const p = workspacePaths(ctx.rootDir);
+    if (!existsSync(p.featuresDir)) return { ok: true, data: { text: "No features found." }, sideEffects: [], reportFragments: [] };
+
+    const features = readdirSync(p.featuresDir).filter((x: string) => existsSync(join(p.featuresDir, x, "feature.yaml")));
+    const rows: Array<{ name: string; owner: string; stage: string; status: string }> = [];
+
+    for (const f of features) {
+      const yamlPath = join(p.featuresDir, f, "feature.yaml");
+      const yamlContent = read(yamlPath);
+      const parsed = parseFeatureYaml(yamlContent);
+      const progressPath = join(p.featuresDir, f, "reports", "feature-progress.md");
+      const stage = existsSync(progressPath) ? (read(progressPath).match(/## Stage: (\S+)/)?.[1] || "unknown") : "unknown";
+      rows.push({
+        name: f,
+        owner: String(parsed.owner || "unassigned"),
+        stage,
+        status: String(parsed.status || "active")
+      });
+    }
+
+    const byOwner: Record<string, typeof rows> = {};
+    for (const row of rows) {
+      if (!byOwner[row.owner]) byOwner[row.owner] = [];
+      byOwner[row.owner].push(row);
+    }
+
+    const lines: string[] = ["# Team Status"];
+    for (const [owner, feats] of Object.entries(byOwner)) {
+      lines.push(`\n## ${owner} (${feats.length})`);
+      for (const feat of feats) {
+        lines.push(`- **${feat.name}** [${feat.stage}] ${feat.status !== "active" ? `(${feat.status})` : ""}`);
+      }
+    }
+
+    return {
+      ok: true,
+      data: { text: lines.join("\n"), features: rows },
+      sideEffects: [],
+      reportFragments: [`team status: ${rows.length} features across ${Object.keys(byOwner).length} owners`]
+    };
+  }
+};

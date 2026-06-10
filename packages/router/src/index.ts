@@ -325,6 +325,91 @@ const routes: Route[] = [
     inputBuilder: () => ({}),
     reason: "status intent",
     confidence: 0.7
+  },
+  {
+    pattern: /^(?=.*\b(?:stale|过时|过期|失效|文档过时|asset.*stale|stale.*check)\b).*/i,
+    capability: "cdr.asset.stale-check",
+    inputBuilder: (t, ctx) => ({ repo: ctx.repo || extractCdrRepoName(t) || "" }),
+    reason: "stale asset check intent",
+    confidence: 0.92
+  },
+  {
+    pattern: /^(?=.*\b(?:assign|指派|分配)\b)(?=.*\bfeature\b).*/i,
+    capability: "feature.assign",
+    inputBuilder: (t, ctx) => ({
+      feature: ctx.feature || extractFeatureName(t),
+      owner: ctx.owner || extractAssignee(t) || "",
+      assignees: ctx.assignees || ""
+    }),
+    reason: "feature assign intent",
+    confidence: 0.92
+  },
+  {
+    pattern: /^(?=.*\b(?:handoff|转交|交接)\b).*/i,
+    capability: "feature.handoff",
+    inputBuilder: (t, ctx) => ({
+      feature: ctx.feature || extractFeatureName(t),
+      to: ctx.to || extractAssignee(t) || "",
+      note: ctx.note || ""
+    }),
+    reason: "feature handoff intent",
+    confidence: 0.92
+  },
+  {
+    pattern: /^(?=.*\b(?:team|team.*status|who.*working|团队|谁在做什么|团队状态)\b).*/i,
+    capability: "feature.team-status",
+    inputBuilder: () => ({}),
+    reason: "team status intent",
+    confidence: 0.93
+  },
+  {
+    pattern: /^(?=.*\b(?:explore|explore.*repo|了解|看看|帮我看看|了解一下)\b).*/i,
+    capability: "cognitive.explore",
+    inputBuilder: (t, ctx) => ({
+      intent: t,
+      repo: ctx.repo || extractCdrRepoName(t) || extractRepoFromBehavior(t) || ""
+    }),
+    reason: "exploration mode intent",
+    confidence: 0.88
+  },
+  {
+    pattern: /^(?=.*\b(?:drift|漂移|architecture.*drift|drift.*check)\b).*/i,
+    capability: "cdr.architecture-drift-check",
+    inputBuilder: (t, ctx) => ({
+      feature: ctx.feature || extractFeatureName(t),
+      repo: ctx.repo || extractCdrRepoName(t) || ""
+    }),
+    reason: "architecture drift check intent",
+    confidence: 0.92
+  },
+  {
+    pattern: /(?:stale|过时|哪些.*过时|哪些.*变化)/i,
+    capability: "cdr.asset.stale-check",
+    inputBuilder: (t, ctx) => ({ repo: ctx.repo || extractCdrRepoName(t) || "" }),
+    reason: "stale check intent (chinese)",
+    confidence: 0.9
+  },
+  {
+    pattern: /(?:指派|分配).*(?:给|to)\s+(\S+)/i,
+    capability: "feature.assign",
+    inputBuilder: (t, ctx) => ({
+      feature: ctx.feature || extractFeatureName(t),
+      owner: ctx.owner || (t.match(/(?:指派|分配).*(?:给|to)\s+(\S+)/i)?.[1] || ""),
+      assignees: ctx.assignees || ""
+    }),
+    reason: "feature assign intent (chinese)",
+    confidence: 0.9
+  },
+  {
+    pattern: /(?:转交|交接).*(?:给|to)\s+(\S+)/i,
+    capability: "feature.handoff",
+    inputBuilder: (t, ctx) => ({
+      feature: ctx.feature || extractFeatureName(t),
+      to: ctx.to || (t.match(/(?:转交|交接).*(?:给|to)\s+(\S+)/i)?.[1] || ""),
+      note: ctx.note || ""
+    }),
+    reason: "feature handoff intent (chinese)",
+    confidence: 0.9
   }
 ];
 
@@ -499,6 +584,18 @@ function extractCdrDescription(t: string): string {
   for (const p of patterns) {
     const m = t.match(p);
     if (m && m[1]) return m[1].trim();
+  }
+  return "";
+}
+
+function extractAssignee(t: string): string {
+  const patterns = [
+    /(?:assign|指派|分配|handoff|转交|交接)\s+(?:feature\s+)?(?:to\s+|给\s+)?(\S+)/i,
+    /(?:to\s+|给\s+)([a-zA-Z0-9_-]+)/i
+  ];
+  for (const p of patterns) {
+    const m = t.match(p);
+    if (m && m[1] && m[1].toLowerCase() !== "feature") return m[1];
   }
   return "";
 }
