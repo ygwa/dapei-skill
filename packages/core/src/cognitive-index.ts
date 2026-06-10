@@ -219,8 +219,20 @@ export function upsertIndexEntry(
     }
     let writes: string[] | undefined;
     if (Array.isArray(doc.writes)) {
+      // writes[] entries are { table?, target?, ... } — we project to the
+      // resource name (table or target) because that is the field
+      // reverse-cluster uses to match behaviors that touch the same store.
       const ws = (doc.writes as unknown[])
-        .map((x) => (typeof x === "string" ? x.trim() : ""))
+        .map((x) => {
+          if (typeof x === "string") return x.trim();
+          if (x && typeof x === "object") {
+            const o = x as Record<string, unknown>;
+            const t = typeof o.table === "string" ? o.table.trim() : "";
+            const g = typeof o.target === "string" ? o.target.trim() : "";
+            return t || g;
+          }
+          return "";
+        })
         .filter((x) => x.length > 0);
       if (ws.length > 0) writes = [...new Set(ws)].sort();
     }

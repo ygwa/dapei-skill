@@ -2025,3 +2025,399 @@ export const cdrStaleScan: AnyCap = {
     };
   }
 };
+
+// ---------------------------------------------------------------------------
+// 15. cdr.domain.suggest — v0.8
+//
+// Read-only reverse-clustering: cluster the cognitive index's behaviors into
+// suggested domain candidates. The engine does NOT touch any domain.yaml
+// artifact — that is still the AI's job via `cdr.domain.compose`. The output
+// is a YAML report at `docs/as-is/cross-repo/domain-suggestions.yaml` for
+// the AI to read, edit, and turn into composed domains.
+//
+// Edge types considered (in priority order, ties broken by weight):
+//   1. shared-events    — both behaviors publish any of the same event names
+//   2. shared-writes    — both behaviors write any of the same table names
+//   3. cross-repo-calls — A.calls[].target_repo == B.repo (or vice versa)
+//   4. business-rule    — some business_rule's applies_to contains both ids
+//
+// Clusters are connected components of the resulting undirected graph. A
+// cluster must satisfy `min_size` and not exceed `max_size` to be reported.
+// Clusters over `max_size` are split per-repo to keep them scoped.
+//
+// Naming heuristic:
+//   take the most-frequent event-name subject across the cluster's
+//   behaviors (e.g., "order.created" → "order"), prefix with "Cross-Repo:"
+//   when members span more than one repo. Always emits a `_reason` line
+//   so the AI can see *why* the name was chosen.
+//
+// Capability does NOT write to the cognitive index and does NOT call
+// `cdr.domain.compose`. Pure read + one report file.
+// ---------------------------------------------------------------------------
+
+const MIN_CLUSTER_SIZE_DEFAULT = 2;
+const MAX_CLUSTER_SIZE_DEFAULT = 50;
+const MAX_CLUSTERS_DEFAULT = 8;
+
+interface BehaviorNode {
+  readonly key: string;
+  readonly id: string;
+  readonly repo: string;
+  readonly events: string[];
+  readonly writes: string[];
+  readonly targetRepos: string[];
+}
+
+interface Edge {
+  readonly a: string;
+  readonly b: string;
+  readonly type: "shared-events" | "shared-writes" | "cross-repo-calls" | "business-rule";
+  readonly weight: number;
+  readonly detail: string;
+}
+
+function behaviorNodesFromIndex(
+  index: ReturnType<typeof loadCognitiveIndex>,
+  repoFilter?: string[]
+): BehaviorNode[] {
+  const allow = repoFilter && repoFilter.length > 0 ? new Set(repoFilter) : undefined;
+  const out: BehaviorNode[] = [];
+  for (const b of index.behaviors) {
+    if (allow && (!b.repo || !allow.has(b.repo))) continue;
+    out.push({
+      key: `${b.id}@${b.repo || "unknown"}`,
+      id: b.id,
+      repo: b.repo || "unknown",
+      events: b.events || [],
+      writes: b.writes || [],
+      targetRepos: b.target_repos || []
+    });
+  }
+  return out;
+}
+
+function buildBehaviorEdges(nodes: BehaviorNode[], businessRuleEdges: Map<string, string[]>): Edge[] {
+  const edges: Edge[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i];
+      const b = nodes[j];
+      const sharedEvents = a.events.filter((e) => b.events.includes(e));
+      if (sharedEvents.length > 0) {
+        edges.push({
+          a: a.key,
+          b: b.key,
+          type: "shared-events",
+          weight: 4,
+          detail: `shared event(s): ${sharedEvents.join(", ")}`
+        });
+      }
+      const sharedWrites = a.writes.filter((w) => b.writes.includes(w));
+      if (sharedWrites.length > 0) {
+        edges.push({
+          a: a.key,
+          b: b.key,
+          type: "shared-writes",
+          weight: 3,
+          detail: `shared write target(s): ${sharedWrites.join(", ")}`
+        });
+      }
+      const aCallsBRepo = a.targetRepos.includes(b.repo);
+      const bCallsARepo = b.targetRepos.includes(a.repo);
+      if (aCallsBRepo || bCallsARepo) {
+        const direction = aCallsBRepo ? `${a.repo}→${b.repo}` : `${b.repo}→${a.repo}`;
+        edges.push({
+          a: a.key,
+          b: b.key,
+          type: "cross-repo-calls",
+          weight: 2,
+          detail: `cross-repo call: ${direction}`
+        });
+      }
+      const coAppliedRule = businessRuleEdges.get(a.key)?.includes(b.key);
+      if (coAppliedRule) {
+        edges.push({
+          a: a.key,
+          b: b.key,
+          type: "business-rule",
+          weight: 1,
+          detail: "co-applied by some business-rule applies_to"
+        });
+      }
+    }
+  }
+  return edges;
+}
+
+function connectedComponents(nodes: BehaviorNode[], edges: Edge[]): BehaviorNode[][] {
+  const parent = new Map<string, string>();
+  const find = (x: string): string => {
+    const p = parent.get(x);
+    if (!p || p === x) {
+      parent.set(x, x);
+      return x;
+    }
+    const root = find(p);
+    parent.set(x, root);
+    return root;
+  };
+  const union = (x: string, y: string): void => {
+    const rx = find(x);
+    const ry = find(y);
+    if (rx !== ry) parent.set(rx, ry);
+  };
+  for (const n of nodes) parent.set(n.key, n.key);
+  for (const e of edges) union(e.a, e.b);
+  const groups = new Map<string, BehaviorNode[]>();
+  for (const n of nodes) {
+    const root = find(n.key);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root)!.push(n);
+  }
+  return [...groups.values()];
+}
+
+function businessRuleCoApplyMap(
+  index: ReturnType<typeof loadCognitiveIndex>,
+  rootDir: string
+): Map<string, string[]> {
+  // For each business rule, collect (behavior_id, repo) pairs from
+  // applies_to. Then expand to pairwise membership so any two behaviors
+  // that appear together in any rule's applies_to are linked.
+  const out = new Map<string, Set<string>>();
+  const cp = cognitivePaths(rootDir);
+  if (!existsSync(cp.businessRulesDir)) return new Map();
+  const files = listFilesRecursively(cp.businessRulesDir, [".yaml", ".yml"], 200);
+  for (const f of files) {
+    if (basename(f).startsWith("_")) continue;
+    let doc: Record<string, unknown>;
+    try {
+      doc = parseYamlDocument(read(f)) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    const appliesTo = Array.isArray(doc.applies_to) ? doc.applies_to : [];
+    const keys: string[] = [];
+    for (const a of appliesTo) {
+      const id = String(a);
+      const matched = index.behaviors.find((b) => b.id === id);
+      const key = matched ? `${matched.id}@${matched.repo || "unknown"}` : `${id}@unknown`;
+      if (id) keys.push(key);
+    }
+    for (let i = 0; i < keys.length; i++) {
+      for (let j = i + 1; j < keys.length; j++) {
+        const a = keys[i];
+        const b = keys[j];
+        if (!out.has(a)) out.set(a, new Set());
+        if (!out.has(b)) out.set(b, new Set());
+        out.get(a)!.add(b);
+        out.get(b)!.add(a);
+      }
+    }
+  }
+  const flat = new Map<string, string[]>();
+  for (const [k, v] of out.entries()) flat.set(k, [...v]);
+  return flat;
+}
+
+function suggestClusterName(cluster: BehaviorNode[], edges: Edge[]): { name: string; reason: string } {
+  const subjects = new Map<string, number>();
+  for (const n of cluster) {
+    for (const ev of n.events) {
+      const subject = ev.split(/[.:]/)[0].trim();
+      if (!subject) continue;
+      subjects.set(subject, (subjects.get(subject) || 0) + 1);
+    }
+  }
+  let topSubject = "";
+  let topCount = 0;
+  for (const [s, c] of subjects.entries()) {
+    if (c > topCount || (c === topCount && s.localeCompare(topSubject) < 0)) {
+      topSubject = s;
+      topCount = c;
+    }
+  }
+  const repos = new Set(cluster.map((n) => n.repo));
+  const isCross = repos.size > 1;
+  const edgeKinds = new Set(edges.map((e) => e.type));
+  const reasons: string[] = [];
+  if (topSubject) reasons.push(`most-common event subject: '${topSubject}'`);
+  if (isCross) reasons.push(`spans repos: ${[...repos].sort().join(", ")}`);
+  if (edgeKinds.has("shared-events")) reasons.push("behaviors share event names");
+  if (edgeKinds.has("cross-repo-calls")) reasons.push("cross-repo calls");
+  if (edgeKinds.has("shared-writes")) reasons.push("behaviors write the same tables");
+  if (edgeKinds.has("business-rule")) reasons.push("linked by business-rule applies_to");
+
+  const prefix = isCross ? "Cross-Repo: " : "";
+  const cap = topSubject ? topSubject.charAt(0).toUpperCase() + topSubject.slice(1) : "Cluster";
+  return { name: `${prefix}${cap}`, reason: reasons.join("; ") || "no edge evidence recorded" };
+}
+
+function clusterConfidence(cluster: BehaviorNode[], edges: Edge[]): "high" | "medium" | "low" {
+  const repos = new Set(cluster.map((n) => n.repo));
+  const isCross = repos.size > 1;
+  const edgeKinds = new Set(edges.map((e) => e.type));
+  if (edgeKinds.has("shared-events") && isCross) return "high";
+  if (edgeKinds.has("shared-events") || edgeKinds.has("shared-writes")) return "medium";
+  return "low";
+}
+
+function splitClusterByRepo(cluster: BehaviorNode[]): BehaviorNode[][] {
+  const byRepo = new Map<string, BehaviorNode[]>();
+  for (const n of cluster) {
+    if (!byRepo.has(n.repo)) byRepo.set(n.repo, []);
+    byRepo.get(n.repo)!.push(n);
+  }
+  return [...byRepo.values()];
+}
+
+export const cdrDomainSuggest: AnyCap = {
+  id: "cdr.domain.suggest",
+  version: "1.0.0",
+  inputSchema: {
+    properties: {
+      repos: { type: "array" },
+      min_size: { type: "number" },
+      max_size: { type: "number" },
+      max_clusters: { type: "number" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    const index = loadCognitiveIndex(ctx.rootDir);
+    const repoFilter = Array.isArray(input.repos) ? (input.repos as unknown[]).map((r) => String(r)) : undefined;
+    const minSize = typeof input.min_size === "number" ? Number(input.min_size) : MIN_CLUSTER_SIZE_DEFAULT;
+    const maxSize = typeof input.max_size === "number" ? Number(input.max_size) : MAX_CLUSTER_SIZE_DEFAULT;
+    const maxClusters = typeof input.max_clusters === "number" ? Number(input.max_clusters) : MAX_CLUSTERS_DEFAULT;
+
+    const nodes = behaviorNodesFromIndex(index, repoFilter);
+    const coApply = businessRuleCoApplyMap(index, ctx.rootDir);
+    const edges = buildBehaviorEdges(nodes, coApply);
+    const rawClusters = connectedComponents(nodes, edges);
+
+    const filtered: BehaviorNode[][] = [];
+    const oversizedSplit: BehaviorNode[][] = [];
+    for (const c of rawClusters) {
+      if (c.length < minSize) continue;
+      if (c.length > maxSize) {
+        for (const sub of splitClusterByRepo(c)) {
+          if (sub.length >= minSize) oversizedSplit.push(sub);
+        }
+      } else {
+        filtered.push(c);
+      }
+    }
+    filtered.sort((a, b) => b.length - a.length);
+    const top = filtered.slice(0, maxClusters);
+
+    const reportClusters = top.map((cluster) => {
+      const clusterEdges = edges.filter((e) => cluster.some((n) => n.key === e.a) && cluster.some((n) => n.key === e.b));
+      const evidenceTypes = new Set(clusterEdges.map((e) => e.type));
+      const { name, reason } = suggestClusterName(cluster, clusterEdges);
+      const confidence = clusterConfidence(cluster, clusterEdges);
+      const repos = [...new Set(cluster.map((n) => n.repo))].sort();
+      const behaviorKeys = cluster.map((n) => n.key).sort();
+      const evidence: Array<{ type: string; detail: string; behaviors?: string[]; rules?: string[] }> = [];
+      if (evidenceTypes.has("shared-events")) {
+        const eventToKeys = new Map<string, string[]>();
+        for (const n of cluster) {
+          for (const ev of n.events) {
+            if (!eventToKeys.has(ev)) eventToKeys.set(ev, []);
+            eventToKeys.get(ev)!.push(n.key);
+          }
+        }
+        for (const [ev, keys] of [...eventToKeys.entries()].sort()) {
+          if (keys.length >= 2) evidence.push({ type: "shared-events", detail: ev, behaviors: keys });
+        }
+      }
+      if (evidenceTypes.has("cross-repo-calls")) {
+        for (const e of clusterEdges.filter((e) => e.type === "cross-repo-calls")) {
+          evidence.push({ type: "cross-repo-calls", detail: e.detail, behaviors: [e.a, e.b] });
+        }
+      }
+      if (evidenceTypes.has("shared-writes")) {
+        const wToKeys = new Map<string, string[]>();
+        for (const n of cluster) {
+          for (const w of n.writes) {
+            if (!wToKeys.has(w)) wToKeys.set(w, []);
+            wToKeys.get(w)!.push(n.key);
+          }
+        }
+        for (const [w, keys] of [...wToKeys.entries()].sort()) {
+          if (keys.length >= 2) evidence.push({ type: "shared-writes", detail: w, behaviors: keys });
+        }
+      }
+      if (evidenceTypes.has("business-rule")) {
+        evidence.push({ type: "business-rule", detail: "co-applied by business rules" });
+      }
+      return {
+        suggested_name: name,
+        suggested_domain_slug: toKebab(name),
+        naming_reason: reason,
+        confidence,
+        behavior_keys: behaviorKeys,
+        repos,
+        evidence,
+        size: cluster.length
+      };
+    });
+
+    const productName = readProductName(ctx.rootDir);
+
+    const outDoc: Record<string, YamlValue> = {
+      generated_at: ctx.now.toISOString(),
+      product: productName,
+      algorithm_version: "1.0.0",
+      parameters: {
+        repos: repoFilter || [],
+        min_size: minSize,
+        max_size: maxSize,
+        max_clusters: maxClusters
+      },
+      behavior_count: nodes.length,
+      edge_count: edges.length,
+      raw_cluster_count: rawClusters.length,
+      reported_cluster_count: reportClusters.length,
+      clusters: reportClusters as unknown as YamlValue,
+      note:
+        "These are SUGGESTIONS, not committed domains. To turn a cluster into a real domain, the AI reviews it, picks a stable name, and calls `cdr.domain.compose` with the cluster's behavior keys as `behaviors[]`. The suggestion file is overwritten on each `cdr.domain.suggest` call; composed domains under `docs/as-is/domains/` are never touched."
+    };
+
+    const outDir = join(ctx.rootDir, "docs", "as-is", "cross-repo");
+    ensureDir(outDir);
+    const outFile = join(outDir, "domain-suggestions.yaml");
+    const content = stringifyYamlDocument(outDoc);
+    write(outFile, content.endsWith("\n") ? content : `${content}\n`);
+
+    return {
+      ok: true,
+      data: {
+        path: relative(ctx.rootDir, outFile),
+        behavior_count: nodes.length,
+        edge_count: edges.length,
+        raw_cluster_count: rawClusters.length,
+        reported_cluster_count: reportClusters.length,
+        clusters: reportClusters
+      },
+      sideEffects: [`domain-suggestions written: ${relative(ctx.rootDir, outFile)}`],
+      reportFragments: [
+        `cdr.domain.suggest: ${reportClusters.length} cluster(s) reported from ${nodes.length} behavior(s) (${edges.length} edge(s))`,
+        `${rawClusters.length - reportClusters.length} cluster(s) dropped (below min_size or capped)`
+      ]
+    };
+  }
+};
+
+function readProductName(rootDir: string): string {
+  const wsFile = join(rootDir, ".dapei", "workspace.yaml");
+  if (existsSync(wsFile)) {
+    try {
+      const doc = parseYamlDocument(read(wsFile));
+      const ws = doc.workspace as Record<string, unknown> | undefined;
+      if (ws && typeof ws.name === "string") return String(ws.name);
+    } catch {
+      // ignore — fall back to directory name below
+    }
+  }
+  return basename(rootDir);
+}
