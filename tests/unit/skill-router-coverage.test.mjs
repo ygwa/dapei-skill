@@ -39,6 +39,7 @@ const FILE_REFERENCE_TOKENS = new Set([
   'business-context.md', 'architecture-context.md', 'repo-context.md',
   'feature-context.md', 'constraints.md', 'backlog.md', 'plan.md',
   'reports.md', 'feature-impact.md', 'order.yaml', 'order-create.yaml',
+  'domain.yaml', 'product-map.yaml', 'cross-links.yaml', 'domain-suggestions.yaml',
   'feature-lifecycle.yaml', 'naming.yaml', 'layering.yaml', 'ddd.yaml',
   '01-current-state.md', '02-gap-analysis.md', '03-business-design.md',
   '04-technical-design.md', '05-task-breakdown.md', '06-acceptance.md',
