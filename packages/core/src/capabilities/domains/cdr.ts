@@ -2605,7 +2605,7 @@ export const cdrCapabilityMapSynth: AnyCap = {
         fact_ratio: 0,
         source: "manual"
       };
-    }).filter((d) => d.name);
+    }).filter((d: ResolvedDomain) => d.name);
 
     const composed = loadComposedDomains(ctx.rootDir, cp);
     const suggested = useSuggested ? loadSuggestedDomains(ctx.rootDir, cp) : [];
