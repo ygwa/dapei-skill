@@ -43,6 +43,35 @@ export interface IndexBusinessRuleEntry {
   evidence_level: string;
 }
 
+export interface RepoSnapshot {
+  repo: string;
+  commit_hash: string;
+  committed_at: string;
+  analyzed_at: string;
+  /** Maps source file relpath → last commit hash when artifact was validated */
+  source_snapshots: Record<string, string>;
+}
+
+export interface StaleSource {
+  file: string;
+  /** Commit hash when this source was last valid in the artifact */
+  last_valid_commit: string;
+  /** Current commit hash of the file (if different) */
+  current_commit?: string;
+  reason: "file_changed" | "file_deleted" | "line_out_of_range" | "new_commits";
+}
+
+export interface StaleAsset {
+  id: string;
+  artifact_type: "behavior" | "state-machine" | "domain" | "business-rule";
+  path: string;
+  repo?: string;
+  stale_sources: StaleSource[];
+  checked_at: string;
+  /** If true, the artifact has been manually confirmed despite staleness */
+  acknowledged?: boolean;
+}
+
 export interface CognitiveIndex {
   version: string;
   updated_at: string;
@@ -52,6 +81,10 @@ export interface CognitiveIndex {
   capability_maps: IndexCapabilityMapEntry[];
   business_rules: IndexBusinessRuleEntry[];
   unknowns: Array<{ id: string; artifact_type?: string; reason: string; investigation_hint?: string }>;
+  /** Per-repo snapshots used for stale detection */
+  repo_snapshots: RepoSnapshot[];
+  /** Assets whose sources have changed since last analysis */
+  stale_assets: StaleAsset[];
 }
 
 export function cognitivePaths(rootDir: string) {
@@ -82,7 +115,9 @@ export function loadCognitiveIndex(rootDir: string): CognitiveIndex {
       domains: [],
       capability_maps: [],
       business_rules: [],
-      unknowns: []
+      unknowns: [],
+      repo_snapshots: [],
+      stale_assets: []
     };
   }
   const doc = parseYamlDocument(read(indexFile));
@@ -94,7 +129,9 @@ export function loadCognitiveIndex(rootDir: string): CognitiveIndex {
     domains: Array.isArray(doc.domains) ? (doc.domains as unknown as IndexDomainEntry[]) : [],
     capability_maps: Array.isArray(doc.capability_maps) ? (doc.capability_maps as unknown as IndexCapabilityMapEntry[]) : [],
     business_rules: Array.isArray(doc.business_rules) ? (doc.business_rules as unknown as IndexBusinessRuleEntry[]) : [],
-    unknowns: Array.isArray(doc.unknowns) ? (doc.unknowns as unknown as CognitiveIndex["unknowns"]) : []
+    unknowns: Array.isArray(doc.unknowns) ? (doc.unknowns as unknown as CognitiveIndex["unknowns"]) : [],
+    repo_snapshots: Array.isArray(doc.repo_snapshots) ? (doc.repo_snapshots as unknown as RepoSnapshot[]) : [],
+    stale_assets: Array.isArray(doc.stale_assets) ? (doc.stale_assets as unknown as StaleAsset[]) : []
   };
 }
 
@@ -190,4 +227,33 @@ export function upsertIndexEntry(
 
 function optionalString(v: unknown): string | undefined {
   return typeof v === "string" && v.trim() ? v.trim() : undefined;
+}
+
+export function getRepoSnapshot(index: CognitiveIndex, repo: string): RepoSnapshot | undefined {
+  return index.repo_snapshots.find((s) => s.repo === repo);
+}
+
+export function upsertRepoSnapshot(index: CognitiveIndex, snapshot: RepoSnapshot): CognitiveIndex {
+  index.repo_snapshots = index.repo_snapshots.filter((s) => s.repo !== snapshot.repo);
+  index.repo_snapshots.push(snapshot);
+  return index;
+}
+
+export function markAssetStale(index: CognitiveIndex, asset: StaleAsset): CognitiveIndex {
+  index.stale_assets = index.stale_assets.filter((a) => a.id !== asset.id);
+  index.stale_assets.push(asset);
+  return index;
+}
+
+export function clearAssetStale(index: CognitiveIndex, assetId: string): CognitiveIndex {
+  index.stale_assets = index.stale_assets.filter((a) => a.id !== assetId);
+  return index;
+}
+
+export function resolveArtifactType(path: string): "behavior" | "state-machine" | "domain" | "business-rule" | "capability-map" {
+  if (path.includes("/behavior/")) return "behavior";
+  if (path.includes("/state-machines/")) return "state-machine";
+  if (path.includes("/domains/")) return "domain";
+  if (path.includes("/business-rules/")) return "business-rule";
+  return "capability-map";
 }

@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
@@ -9,10 +9,17 @@ import {
   cognitivePaths,
   loadCognitiveIndex,
   saveCognitiveIndex,
-  upsertIndexEntry
+  upsertIndexEntry,
+  getRepoSnapshot,
+  upsertRepoSnapshot,
+  markAssetStale,
+  clearAssetStale,
+  type RepoSnapshot,
+  type StaleAsset,
+  type StaleSource
 } from "../../cognitive-index.ts";
 import { parseYamlDocument, stringifyYamlDocument, type YamlValue } from "../../yaml-doc.ts";
-import { requireFields, detectRepoLanguage, detectTestCommands, parseReposYamlNames } from "../shared.ts";
+import { requireFields, detectRepoLanguage, detectTestCommands, parseReposYamlNames, featureRepoNames } from "../shared.ts";
 import { ensureDir, read, write, runSafe, workspacePaths, listFilesRecursively } from "../../../../runtime-adapters/src/system.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
@@ -1208,6 +1215,336 @@ export const cdrStateDerive: AnyCap = {
       },
       sideEffects: ["state machine draft written", "index updated"],
       reportFragments: [`derived state machine for ${entity} from ${derivedFrom.length} behavior(s)`]
+    };
+  }
+};
+
+function getCurrentCommitHash(repoPath: string, rootDir: string): string {
+  const hash = runSafe("git", ["-C", repoPath, "rev-parse", "HEAD"], rootDir);
+  return hash || "";
+}
+
+function getRepoFilesChangedSince(repoPath: string, rootDir: string, sinceCommit: string): Set<string> {
+  if (!sinceCommit) return new Set();
+  const out = runSafe(
+    "git",
+    ["-C", repoPath, "diff", "--name-only", `${sinceCommit}..HEAD`],
+    rootDir
+  );
+  if (!out) return new Set();
+  return new Set(out.trim().split("\n").filter(Boolean));
+}
+
+export const cdrAssetStaleCheck: AnyCap = {
+  id: "cdr.asset.stale-check",
+  version: "1.0.0",
+  inputSchema: {
+    properties: {
+      repo: { type: "string" },
+      clear_stale: { type: "boolean" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    const p = workspacePaths(ctx.rootDir);
+    const repoFilter = input.repo ? String(input.repo) : undefined;
+    const clearStale = input.clear_stale === true;
+
+    const index = loadCognitiveIndex(ctx.rootDir);
+
+    const reposToCheck: string[] = [];
+    if (repoFilter) {
+      const repoPath = join(p.reposDir, repoFilter);
+      if (!existsSync(repoPath)) {
+        throw new CapabilityError("REPO_MISSING", `repos/${repoFilter} not found`);
+      }
+      reposToCheck.push(repoFilter);
+    } else {
+      for (const entry of readdirSync(p.reposDir)) {
+        const repoPath = join(p.reposDir, entry);
+        if (existsSync(join(repoPath, ".git"))) {
+          reposToCheck.push(entry);
+        }
+      }
+    }
+
+    const now = ctx.now.toISOString();
+    const newlyStale: StaleAsset[] = [];
+    const cleared: string[] = [];
+
+    for (const repo of reposToCheck) {
+      const repoPath = join(p.reposDir, repo);
+      const currentHash = getCurrentCommitHash(repoPath, p.rootDir);
+      if (!currentHash) continue;
+
+      const snapshot = getRepoSnapshot(index, repo);
+      const lastHash = snapshot?.commit_hash;
+
+      const newSnapshot: RepoSnapshot = {
+        repo,
+        commit_hash: currentHash,
+        committed_at: runSafe("git", ["-C", repoPath, "log", "-1", "--format=%ci", "--", "HEAD"], p.rootDir) || now,
+        analyzed_at: now,
+        source_snapshots: snapshot?.source_snapshots || {}
+      };
+
+      if (lastHash && lastHash !== currentHash) {
+        const changedFiles = getRepoFilesChangedSince(repoPath, p.rootDir, lastHash);
+        if (changedFiles.size > 0) {
+          newSnapshot.source_snapshots = { ...newSnapshot.source_snapshots };
+          for (const file of changedFiles) {
+            newSnapshot.source_snapshots[file] = currentHash;
+          }
+        }
+      }
+
+      upsertRepoSnapshot(index, newSnapshot);
+
+      const allArtifacts: Array<{ id: string; path: string; repo?: string; artifact_type: "behavior" | "state-machine" | "domain" | "business-rule" | "capability-map" }> = [];
+
+      for (const b of index.behaviors) {
+        allArtifacts.push({ id: b.id, path: b.path, repo: b.repo, artifact_type: "behavior" });
+      }
+      for (const s of index.state_machines) {
+        allArtifacts.push({ id: s.entity, path: s.path, repo: s.repo, artifact_type: "state-machine" });
+      }
+      for (const d of index.domains) {
+        allArtifacts.push({ id: d.domain, path: d.path, repo: d.repo, artifact_type: "domain" });
+      }
+      for (const r of index.business_rules) {
+        allArtifacts.push({ id: r.id, path: r.path, repo: r.repo, artifact_type: "business-rule" });
+      }
+
+      for (const artifact of allArtifacts) {
+        if (repoFilter && artifact.repo !== repoFilter) continue;
+        const absPath = join(ctx.rootDir, artifact.path);
+        if (!existsSync(absPath)) continue;
+
+        const doc = parseYamlDocument(read(absPath));
+        const sources = Array.isArray(doc.sources) ? doc.sources : [];
+        if (!sources.length) continue;
+
+        const artifactRepo = artifact.repo || (doc as Record<string, unknown>).repo as string;
+        if (artifactRepo !== repo) continue;
+
+        const staleSources: StaleSource[] = [];
+
+        for (const src of sources) {
+          if (!src || typeof src !== "object" || Array.isArray(src)) continue;
+          const s = src as Record<string, unknown>;
+          const file = typeof s.file === "string" ? s.file.trim() : "";
+          if (!file) continue;
+
+          const lastValidCommit = snapshot?.source_snapshots[file] || lastHash || "";
+          if (!lastValidCommit) continue;
+
+          const changedFiles = lastHash ? getRepoFilesChangedSince(repoPath, p.rootDir, lastValidCommit) : new Set<string>();
+          if (!changedFiles.has(file)) continue;
+
+          staleSources.push({
+            file,
+            last_valid_commit: lastValidCommit,
+            current_commit: currentHash
+          });
+        }
+
+        if (staleSources.length > 0) {
+          const staleAsset: StaleAsset = {
+            id: artifact.id,
+            artifact_type: artifact.artifact_type,
+            path: artifact.path,
+            repo,
+            stale_sources: staleSources,
+            checked_at: now
+          };
+          markAssetStale(index, staleAsset);
+          newlyStale.push(staleAsset);
+        } else if (clearStale) {
+          clearAssetStale(index, artifact.id);
+          cleared.push(artifact.id);
+        }
+      }
+    }
+
+    saveCognitiveIndex(ctx.rootDir, index);
+
+    const reportLines: string[] = [];
+    reportLines.push(`## Stale Asset Check — ${now}`);
+    reportLines.push("");
+    if (newlyStale.length === 0) {
+      reportLines.push("✅ No stale assets detected.");
+    } else {
+      reportLines.push(`⚠️  ${newlyStale.length} artifact(s) have stale sources:`);
+      for (const asset of newlyStale) {
+        reportLines.push(`\n### ${asset.id} [${asset.artifact_type}]`);
+        for (const ss of asset.stale_sources) {
+          reportLines.push(`  - ${ss.file}: changed since ${ss.last_valid_commit.slice(0, 8)}`);
+        }
+      }
+    }
+    if (cleared.length > 0) {
+      reportLines.push(`\n✅ Cleared stale flag for: ${cleared.join(", ")}`);
+    }
+
+    return {
+      ok: true,
+      data: {
+        checked_at: now,
+        repos_checked: reposToCheck,
+        stale_count: newlyStale.length,
+        stale_assets: newlyStale as unknown as YamlValue,
+        cleared_count: cleared.length,
+        cleared,
+        report: reportLines.join("\n")
+      },
+      sideEffects: newlyStale.length > 0 ? ["index updated with stale assets"] : cleared.length > 0 ? ["stale flags cleared"] : [],
+      reportFragments: [
+        `${newlyStale.length} stale asset(s) detected${cleared.length > 0 ? `, ${cleared.length} cleared` : ""}`
+      ]
+    };
+  }
+};
+
+export const cdrArchitectureDriftCheck: AnyCap = {
+  id: "cdr.architecture-drift-check",
+  version: "1.0.0",
+  inputSchema: {
+    properties: {
+      feature: { type: "string" },
+      repo: { type: "string" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    const p = workspacePaths(ctx.rootDir);
+    const featureFilter = input.feature ? String(input.feature) : undefined;
+    const repoFilter = input.repo ? String(input.repo) : undefined;
+
+    const index = loadCognitiveIndex(ctx.rootDir);
+    const now = ctx.now.toISOString();
+    const driftItems: Array<{
+      id: string;
+      artifact_type: string;
+      repo: string;
+      path: string;
+      drift_type: string;
+      detail: string;
+    }> = [];
+
+    const reposToCheck: string[] = [];
+    if (repoFilter) {
+      reposToCheck.push(repoFilter);
+    } else if (featureFilter) {
+      const featureDir = join(p.featuresDir, featureFilter);
+      const featureYaml = join(featureDir, "feature.yaml");
+      if (existsSync(featureYaml)) {
+        for (const repo of featureRepoNames(read(featureYaml))) {
+          reposToCheck.push(repo);
+        }
+      }
+    } else {
+      for (const entry of readdirSync(p.reposDir)) {
+        const repoPath = join(p.reposDir, entry);
+        if (existsSync(join(repoPath, ".git"))) {
+          reposToCheck.push(entry);
+        }
+      }
+    }
+
+    for (const repo of reposToCheck) {
+      const repoPath = join(p.reposDir, repo);
+      if (!existsSync(join(repoPath, ".git"))) continue;
+
+      const currentHash = getCurrentCommitHash(repoPath, p.rootDir);
+      if (!currentHash) continue;
+
+      const repoBehaviors = index.behaviors.filter((b) => b.repo === repo);
+      const repoStateMachines = index.state_machines.filter((s) => s.repo === repo);
+
+      for (const b of repoBehaviors) {
+        const absPath = join(ctx.rootDir, b.path);
+        if (!existsSync(absPath)) {
+          driftItems.push({
+            id: b.id,
+            artifact_type: "behavior",
+            repo,
+            path: b.path,
+            drift_type: "file_missing",
+            detail: "artifact references a file that no longer exists"
+          });
+          continue;
+        }
+
+        const doc = parseYamlDocument(read(absPath));
+        const sources = Array.isArray(doc.sources) ? doc.sources : [];
+        for (const src of sources) {
+          if (!src || typeof src !== "object" || Array.isArray(src)) continue;
+          const s = src as Record<string, unknown>;
+          const file = typeof s.file === "string" ? s.file.trim() : "";
+          if (!file) continue;
+
+          const absSrcFile = join(ctx.rootDir, "repos", repo, file);
+          if (!existsSync(absSrcFile)) {
+            driftItems.push({
+              id: b.id,
+              artifact_type: "behavior",
+              repo,
+              path: b.path,
+              drift_type: "source_file_deleted",
+              detail: `source file ${file} was deleted`
+            });
+          }
+        }
+      }
+
+      for (const s of repoStateMachines) {
+        const absPath = join(ctx.rootDir, s.path);
+        if (!existsSync(absPath)) {
+          driftItems.push({
+            id: s.entity,
+            artifact_type: "state-machine",
+            repo,
+            path: s.path,
+            drift_type: "file_missing",
+            detail: "artifact file no longer exists"
+          });
+        }
+      }
+    }
+
+    const reportLines: string[] = [];
+    reportLines.push(`## Architecture Drift Check — ${now}`);
+    reportLines.push("");
+
+    if (driftItems.length === 0) {
+      reportLines.push("✅ No architecture drift detected.");
+      reportLines.push("");
+      reportLines.push("All behavior and state machine artifacts are consistent with current code.");
+    } else {
+      reportLines.push(`⚠️  ${driftItems.length} drift item(s) detected:`);
+      for (const item of driftItems) {
+        reportLines.push(`\n### ${item.id} [${item.artifact_type}] (${item.repo})`);
+        reportLines.push(`  - **Type**: ${item.drift_type}`);
+        reportLines.push(`  - **Detail**: ${item.detail}`);
+        reportLines.push(`  - **Path**: ${item.path}`);
+      }
+      reportLines.push("");
+      reportLines.push("**Recommendation**: Run `@dapei discover behaviors for <repo>` to re-analyze drifted areas.");
+    }
+
+    return {
+      ok: true,
+      data: {
+        checked_at: now,
+        repos_checked: reposToCheck,
+        drift_count: driftItems.length,
+        drift_items: driftItems as unknown as YamlValue,
+        report: reportLines.join("\n")
+      },
+      sideEffects: [],
+      reportFragments: [
+        `${driftItems.length} drift item(s) detected across ${reposToCheck.length} repo(s)`
+      ]
     };
   }
 };
