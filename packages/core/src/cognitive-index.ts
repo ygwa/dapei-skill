@@ -182,7 +182,13 @@ export function upsertIndexEntry(
   relPath: string,
   doc: Record<string, unknown>
 ): CognitiveIndex {
-  const confidence = parseConfidence(doc.confidence);
+  // v0.8 — capability-map artifacts do not carry a confidence block
+  // (their validity is decided by the engine from product+capabilities),
+  // so skip parseConfidence for that type. All other artifact types
+  // (behavior, state-machine, domain, business-rule) still require it.
+  const confidence = type === "capability-map"
+    ? { level: "unknown" as const, kind: "unknown" as const }
+    : parseConfidence(doc.confidence);
   const repo = doc.repo ? String(doc.repo) : undefined;
 
   if (type === "behavior") {

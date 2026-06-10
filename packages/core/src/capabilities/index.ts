@@ -26,7 +26,8 @@ import {
   cdrBusinessCrossLink,
   cdrCrossRepoDocGenerate,
   cdrStaleScan,
-  cdrDomainSuggest
+  cdrDomainSuggest,
+  cdrCapabilityMapSynth
 } from "./domains/cdr.ts";
 import { docGenerate } from "../../../doc-gen/src/doc-gen.ts";
 import { memoryAppend } from "./domains/memory.ts";
@@ -84,6 +85,7 @@ export const capabilitySpecs: AnyCap[] = [
   cdrCrossRepoDocGenerate,
   cdrStaleScan,
   cdrDomainSuggest,
+  cdrCapabilityMapSynth,
   // Documentation generation
   docGenerate
 ];

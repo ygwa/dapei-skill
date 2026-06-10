@@ -695,7 +695,8 @@ export const cdrDomainCompose: AnyCap = {
       description: { type: "string", minLength: 1 },
       behaviors: { type: "array" },
       repo: { type: "string" },
-      sources: { type: "array" }
+      sources: { type: "array" },
+      confidence: { type: "object" }
     },
     additionalProperties: false
   },
@@ -758,11 +759,13 @@ export const cdrDomainCompose: AnyCap = {
       generated_at: ctx.now.toISOString(),
       modules: matchedBehaviors as unknown as YamlValue,
       derived_from: behaviorIds,
-      confidence: {
-        level: "medium",
-        kind: "inference",
-        evidence_type: "composed_from_behaviors"
-      }
+      confidence: input.confidence && typeof input.confidence === "object"
+        ? (input.confidence as YamlValue)
+        : {
+            level: "medium",
+            kind: "inference",
+            evidence_type: "composed_from_behaviors"
+          } as YamlValue
     };
     if (repo) domainDoc.repo = repo;
     if (Array.isArray(input.sources)) domainDoc.sources = input.sources as unknown as YamlValue;
@@ -2421,3 +2424,356 @@ function readProductName(rootDir: string): string {
   }
   return basename(rootDir);
 }
+
+// ---------------------------------------------------------------------------
+// 16. cdr.capability.map.synth — v0.8
+//
+// Engine-driven clustering of *domains* into a capability map. Distinct
+// from v0.3 `cdr.capability.map.init` (which is a thin pass-through of
+// capabilities the AI hands it). The synth variant:
+//
+//   1. collects domains from one of three sources, in priority order:
+//      a) input.manual_domains[]  (the AI pre-staged a curated list)
+//      b) docs/as-is/domains/**/*.yaml (composed via cdr.domain.compose)
+//      c) docs/as-is/cross-repo/domain-suggestions.yaml (from
+//         cdr.domain.suggest) — only when use_suggested_domains=true
+//   2. for each domain, resolves its derived_from[] behaviors back to
+//      the cognitive index to compute spans_repos[], behavior_count,
+//      and the fact_ratio (fraction of behaviors with kind=fact).
+//   3. emits docs/as-is/capabilities/product-map.yaml — the same file
+//      cdr.capability.map.init writes, but with each capability
+//      carrying the engine-computed spans_repos and fact_ratio so the
+//      AI has objective metrics to grade its L1 hypothesis on.
+//
+// If the AI passes both manual_domains[] and the workspace has composed
+// domains, the manual list wins for those domain names. Conflicting
+// entries on either side are kept, never silently merged.
+//
+// Output schema is a strict superset of the v0.3 schema. Existing
+// capability-map consumers (doc-gen, cdr.doc.generate) keep working
+// because the v0.3 fields are unchanged.
+// ---------------------------------------------------------------------------
+
+interface ResolvedDomain {
+  readonly name: string;
+  readonly description: string;
+  readonly behavior_ids: string[];
+  readonly repos: string[];
+  readonly behavior_count: number;
+  readonly fact_ratio: number;
+  readonly source: "manual" | "composed" | "suggested";
+}
+
+function resolveBehaviorRepos(
+  index: ReturnType<typeof loadCognitiveIndex>,
+  behaviorIds: string[]
+): { repos: string[]; behaviorCount: number; factRatio: number } {
+  const repos = new Set<string>();
+  let fact = 0;
+  let total = 0;
+  for (const id of behaviorIds) {
+    const matched = index.behaviors.find((b) => b.id === id);
+    if (!matched) continue;
+    if (matched.repo) repos.add(matched.repo);
+    total++;
+    if (matched.kind === "fact") fact++;
+  }
+  const factRatio = total > 0 ? fact / total : 0;
+  return { repos: [...repos].sort(), behaviorCount: total, factRatio };
+}
+
+function loadComposedDomains(
+  ctxRootDir: string,
+  cp: ReturnType<typeof cognitivePaths>
+): ResolvedDomain[] {
+  if (!existsSync(cp.domainDir)) return [];
+  const out: ResolvedDomain[] = [];
+  const files = listFilesRecursively(cp.domainDir, [".yaml", ".yml"], 200);
+  for (const f of files) {
+    if (basename(f).startsWith("_")) continue;
+    let doc: Record<string, unknown>;
+    try {
+      doc = parseYamlDocument(read(f)) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    // v0.8 — domain YAML carries `domain` (kebab slug, used for the
+    // filesystem name) and `name` (the human label). When looking up
+    // a domain from a capability's domains[] list, the AI writes the
+    // human label ("Order"), not the slug. Prefer `name` so the
+    // back-fill metrics step actually finds the composed domain.
+    const name = String(doc.name || doc.domain || basename(f, ".yaml"));
+    if (!name) continue;
+    const behaviorIds = Array.isArray(doc.derived_from)
+      ? (doc.derived_from as unknown[]).map((x) => String(x))
+      : [];
+    out.push({
+      name,
+      description: String(doc.description || ""),
+      behavior_ids: behaviorIds,
+      repos: [],
+      behavior_count: behaviorIds.length,
+      fact_ratio: 0,
+      source: "composed"
+    });
+  }
+  return out;
+}
+
+function loadSuggestedDomains(
+  ctxRootDir: string,
+  cp: ReturnType<typeof cognitivePaths>
+): ResolvedDomain[] {
+  const file = join(cp.docsDir, "as-is", "cross-repo", "domain-suggestions.yaml");
+  if (!existsSync(file)) return [];
+  let doc: Record<string, unknown>;
+  try {
+    doc = parseYamlDocument(read(file)) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+  const clusters = Array.isArray(doc.clusters) ? doc.clusters : [];
+  const out: ResolvedDomain[] = [];
+  for (const c of clusters) {
+    const co = c as Record<string, unknown>;
+    const keys = Array.isArray(co.behavior_keys) ? (co.behavior_keys as unknown[]).map((x) => String(x)) : [];
+    out.push({
+      name: String(co.suggested_name || co.suggested_domain_slug || "Cluster"),
+      description: `Suggested from cluster: ${String(co.naming_reason || "(no reason recorded)")}`,
+      behavior_ids: keys,
+      repos: Array.isArray(co.repos) ? (co.repos as unknown[]).map((x) => String(x)) : [],
+      behavior_count: keys.length,
+      fact_ratio: 0,
+      source: "suggested"
+    });
+  }
+  return out;
+}
+
+function mergeDomainSources(
+  manual: ResolvedDomain[],
+  composed: ResolvedDomain[],
+  suggested: ResolvedDomain[]
+): ResolvedDomain[] {
+  const byName = new Map<string, ResolvedDomain>();
+  for (const d of manual) byName.set(d.name, d);
+  for (const d of composed) if (!byName.has(d.name)) byName.set(d.name, d);
+  for (const d of suggested) if (!byName.has(d.name)) byName.set(d.name, d);
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function validateCapabilityId(id: string): { ok: boolean; error?: string } {
+  if (!/^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/i.test(id)) {
+    return { ok: false, error: `capability id '${id}' must be lowercase, multi-segment (e.g., 'core.checkout'), no underscores` };
+  }
+  return { ok: true };
+}
+
+export const cdrCapabilityMapSynth: AnyCap = {
+  id: "cdr.capability.map.synth",
+  version: "1.0.0",
+  inputSchema: {
+    required: ["product"],
+    properties: {
+      product: { type: "string", minLength: 1 },
+      capabilities: { type: "array" },
+      manual_domains: { type: "array" },
+      use_suggested_domains: { type: "boolean" },
+      include_cross_repo_rules: { type: "boolean" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    const product = String(input.product);
+    const manualCapabilities = Array.isArray(input.capabilities) ? input.capabilities : [];
+    const manualDomains = Array.isArray(input.manual_domains) ? input.manual_domains : [];
+    const useSuggested = input.use_suggested_domains === true;
+
+    const cp = cognitivePaths(ctx.rootDir);
+    const index = loadCognitiveIndex(ctx.rootDir);
+
+    const manualDomainEntries: ResolvedDomain[] = manualDomains.map((raw: unknown) => {
+      const m = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+      return {
+        name: String(m.name || m.domain || ""),
+        description: String(m.description || ""),
+        behavior_ids: Array.isArray(m.behavior_ids)
+          ? (m.behavior_ids as unknown[]).map((x) => String(x))
+          : [],
+        repos: [],
+        behavior_count: 0,
+        fact_ratio: 0,
+        source: "manual"
+      };
+    }).filter((d) => d.name);
+
+    const composed = loadComposedDomains(ctx.rootDir, cp);
+    const suggested = useSuggested ? loadSuggestedDomains(ctx.rootDir, cp) : [];
+    const domains = mergeDomainSources(manualDomainEntries, composed, suggested);
+
+    const domainByName = new Map<string, ResolvedDomain>();
+    for (const d of domains) {
+      const stats = resolveBehaviorRepos(index, d.behavior_ids);
+      domainByName.set(d.name, {
+        ...d,
+        repos: stats.repos,
+        behavior_count: stats.behaviorCount,
+        fact_ratio: stats.factRatio
+      });
+    }
+
+    const capabilities: Array<Record<string, YamlValue>> = [];
+    const errors: string[] = [];
+
+    if (manualCapabilities.length === 0) {
+      // Synthesize one capability per domain. The id follows the
+      // `<surface>.<noun>` convention used elsewhere (matches the v0.5
+      // regex: lowercase, multi-segment, no underscores).
+      for (const d of domainByName.values()) {
+        const id = `domain.${toKebab(d.name)}`;
+        capabilities.push({
+          id,
+          name: d.name,
+          description: d.description || `Capability synthesized from domain '${d.name}'`,
+          domains: [d.name] as unknown as YamlValue,
+          spans_repos: d.repos as unknown as YamlValue,
+          behavior_count: d.behavior_count,
+          fact_ratio: Number(d.fact_ratio.toFixed(2)),
+          source: d.source
+        });
+      }
+    } else {
+      // AI handed us curated capabilities. We validate each id and
+      // back-fill spans_repos / behavior_count / fact_ratio by
+      // unioning the metrics across the capability's named domains.
+      for (const raw of manualCapabilities) {
+        const cap = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+        const id = String(cap.id || "");
+        const idCheck = validateCapabilityId(id);
+        if (!idCheck.ok) {
+          errors.push(idCheck.error || `invalid capability id: ${id}`);
+          continue;
+        }
+        const domainNames = Array.isArray(cap.domains)
+          ? (cap.domains as unknown[]).map((x) => String(x))
+          : [];
+        const matchedDomains = domainNames
+          .map((n) => domainByName.get(n))
+          .filter((d): d is ResolvedDomain => !!d);
+        const repos = new Set<string>();
+        let totalBehaviors = 0;
+        let factCount = 0;
+        const behaviorSet = new Set<string>();
+        for (const d of matchedDomains) {
+          for (const r of d.repos) repos.add(r);
+          for (const b of d.behavior_ids) {
+            if (!behaviorSet.has(b)) {
+              behaviorSet.add(b);
+              const m = index.behaviors.find((bb) => bb.id === b);
+              if (m) {
+                totalBehaviors++;
+                if (m.kind === "fact") factCount++;
+              }
+            }
+          }
+        }
+        const factRatio = totalBehaviors > 0 ? factCount / totalBehaviors : 0;
+        capabilities.push({
+          id,
+          name: String(cap.name || id),
+          description: String(cap.description || ""),
+          domains: domainNames as unknown as YamlValue,
+          spans_repos: [...repos].sort() as unknown as YamlValue,
+          behavior_count: totalBehaviors,
+          fact_ratio: Number(factRatio.toFixed(2)),
+          source: "manual"
+        });
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new CapabilityError("INVALID_INPUT", errors.join("; "));
+    }
+
+    const outDir = capabilitiesDir(ctx.rootDir);
+    ensureDir(outDir);
+    const outFile = join(outDir, "product-map.yaml");
+
+    // v0.8 — empty workspace is a legitimate state (no domains yet, AI
+    // hasn't composed anything). Write the header so the AI can see the
+    // product name and "no domains yet" status, but skip the strict
+    // artifact validator which requires a non-empty capabilities[]. The
+    // shape on disk is a deliberate superset that the doc-gen portal
+    // can render as "L1 not yet synthesized".
+    if (capabilities.length === 0) {
+      const emptyDoc: Record<string, YamlValue> = {
+        product,
+        generated_at: ctx.now.toISOString(),
+        synthesized_by: "cdr.capability.map.synth@1.0.0",
+        status: "empty",
+        message: "no domains composed yet — run cdr.domain.compose (or cdr.domain.suggest) before cdr.capability.map.synth",
+        capabilities: [] as unknown as YamlValue
+      };
+      write(outFile, stringifyYamlDocument(emptyDoc));
+      return {
+        ok: true,
+        data: {
+          product,
+          path: relative(ctx.rootDir, outFile),
+          capability_count: 0,
+          domain_count: domainByName.size,
+          domain_sources: {
+            manual: manualDomainEntries.length,
+            composed: composed.length,
+            suggested: suggested.length
+          },
+          capabilities: []
+        },
+        sideEffects: [`empty capability map written: ${relative(ctx.rootDir, outFile)}`],
+        reportFragments: [
+          `cdr.capability.map.synth: 0 capability(s) — no domains available for '${product}'`,
+          "run cdr.domain.compose or cdr.domain.suggest to seed domains first"
+        ]
+      };
+    }
+
+    const mapDoc: Record<string, YamlValue> = {
+      product,
+      generated_at: ctx.now.toISOString(),
+      synthesized_by: "cdr.capability.map.synth@1.0.0",
+      capabilities: capabilities as unknown as YamlValue
+    };
+
+    const validationErrors = validateArtifact("capability-map", mapDoc as Record<string, unknown>);
+    if (validationErrors.length) {
+      throw new CapabilityError("INVALID_ARTIFACT", validationErrors.join("; "));
+    }
+
+    write(outFile, stringifyYamlDocument(mapDoc));
+
+    const updatedIndex = loadCognitiveIndex(ctx.rootDir);
+    upsertIndexEntry(updatedIndex, "capability-map", relative(ctx.rootDir, outFile), mapDoc as Record<string, unknown>);
+    saveCognitiveIndex(ctx.rootDir, index);
+
+    return {
+      ok: true,
+      data: {
+        product,
+        path: relative(ctx.rootDir, outFile),
+        capability_count: capabilities.length,
+        domain_count: domainByName.size,
+        domain_sources: {
+          manual: manualDomainEntries.length,
+          composed: composed.length,
+          suggested: suggested.length
+        },
+        capabilities
+      },
+      sideEffects: [`capability map synthesized: ${relative(ctx.rootDir, outFile)}`],
+      reportFragments: [
+        `cdr.capability.map.synth: ${capabilities.length} capability(s) from ${domainByName.size} domain(s) for '${product}'`,
+        `domain sources — manual: ${manualDomainEntries.length}, composed: ${composed.length}, suggested: ${suggested.length}`
+      ]
+    };
+  }
+};
