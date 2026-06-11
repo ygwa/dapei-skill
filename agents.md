@@ -4,6 +4,9 @@ This repository builds `dapei.skill`, an AI Native Engineering Context OS.
 
 The most important rule: **users should experience dapei through AI conversation and loaded skills, not by learning the internal shell scripts.**
 
+> **For AI agents working on this repo's source code**, start with [`CLAUDE.md`](./CLAUDE.md).
+> This `agents.md` is the runtime contract — the rules an AI follows when *running* dapei against a user's workspace.
+
 ## Product Boundary
 
 `dapei` has two layers:
