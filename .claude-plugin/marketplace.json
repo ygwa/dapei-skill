@@ -1,0 +1,21 @@
+{
+  "name": "dapei-skill",
+  "version": "3.0.0",
+  "description": "AI Native Engineering Context OS — workspace, feature lifecycle, cognitive discovery, and code-to-knowledge extraction.",
+  "homepage": "https://github.com/ygwa/dapei-skill",
+  "license": "MIT",
+  "author": {
+    "name": "ygwa",
+    "url": "https://github.com/ygwa"
+  },
+  "category": "engineering",
+  "plugins": [
+    { "name": "dapei-workspace",  "source": "./skills/workspace",  "category": "engineering" },
+    { "name": "dapei-repos",      "source": "./skills/repos",      "category": "engineering" },
+    { "name": "dapei-feature",    "source": "./skills/feature",    "category": "engineering" },
+    { "name": "dapei-workflow",   "source": "./skills/workflow",   "category": "engineering" },
+    { "name": "dapei-validation", "source": "./skills/validation", "category": "engineering" },
+    { "name": "dapei-cognitive",  "source": "./skills/cognitive",  "category": "engineering" },
+    { "name": "dapei-cdr",        "source": "./skills/cdr",        "category": "engineering" }
+  ]
+}

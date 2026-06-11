@@ -1,0 +1,8 @@
+{
+  "name": "dapei-workflow",
+  "version": "3.0.0",
+  "description": "Drive the 8-stage feature DAG and build per-stage context bundles.",
+  "author": { "name": "ygwa", "url": "https://github.com/ygwa" },
+  "keywords": ["dapei", "workflow", "stage", "context"],
+  "license": "MIT"
+}

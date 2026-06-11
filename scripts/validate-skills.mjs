@@ -123,6 +123,32 @@ export function validateSkillsDir(skillsDir, opts = {}) {
         }
       }
     }
+
+    // Plugin manifest validation
+    const manifestFile = join(skillDir, ".claude-plugin", "plugin.json");
+    if (existsSync(manifestFile)) {
+      let manifest;
+      try {
+        manifest = JSON.parse(readFileSync(manifestFile, "utf8"));
+      } catch (err) {
+        errors.push({ path: manifestFile, message: `invalid JSON: ${err.message}` });
+        continue;
+      }
+      for (const required of ["name", "version", "description"]) {
+        if (!manifest[required]) {
+          errors.push({ path: manifestFile, message: `manifest missing required field: ${required}` });
+        }
+      }
+      if (manifest.name && manifest.name !== fields?.name) {
+        errors.push({
+          path: manifestFile,
+          message: `manifest 'name: ${manifest.name}' must match SKILL.md frontmatter 'name: ${fields?.name}'`
+        });
+      }
+      if (manifest.version && !/^\d+\.\d+\.\d+/.test(manifest.version)) {
+        warnings.push({ path: manifestFile, message: `version '${manifest.version}' is not strict semver` });
+      }
+    }
   }
 
   return { errors, warnings, info };

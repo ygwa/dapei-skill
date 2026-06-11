@@ -98,3 +98,39 @@ test("validator: errors when a referenced capability id does not exist", () => {
     cleanup();
   }
 });
+
+test("validator: validates plugin.json manifest when present", () => {
+  const { dir, cleanup } = setup();
+  try {
+    const skillDir = join(dir, "with-manifest");
+    mkdirSync(join(skillDir, ".claude-plugin"), { recursive: true });
+    writeFileSync(join(skillDir, "SKILL.md"), "---\nname: with-manifest\ndescription: x. Use when y.\n---\n# X body has at least fifty words to satisfy the validator. Add more lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore.");
+    writeFileSync(join(skillDir, ".claude-plugin/plugin.json"), JSON.stringify({
+      name: "with-manifest",
+      version: "1.2.3",
+      description: "Test manifest"
+    }));
+    const result = validateSkillsDir(dir);
+    assert.equal(result.errors.length, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test("validator: errors when plugin.json name does not match skill", () => {
+  const { dir, cleanup } = setup();
+  try {
+    const skillDir = join(dir, "mismatch");
+    mkdirSync(join(skillDir, ".claude-plugin"), { recursive: true });
+    writeFileSync(join(skillDir, "SKILL.md"), "---\nname: mismatch\ndescription: x. Use when y.\n---\n# X body has at least fifty words to satisfy the validator. Add more lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore.");
+    writeFileSync(join(skillDir, ".claude-plugin/plugin.json"), JSON.stringify({
+      name: "wrong-name",
+      version: "1.0.0",
+      description: "x"
+    }));
+    const result = validateSkillsDir(dir);
+    assert.ok(result.errors.some(e => e.path.endsWith("plugin.json") && /name.*match/i.test(e.message)));
+  } finally {
+    cleanup();
+  }
+});

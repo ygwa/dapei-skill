@@ -1,0 +1,8 @@
+{
+  "name": "dapei-validation",
+  "version": "3.0.0",
+  "description": "Discover, execute, and report on tests for a repo or feature (lint, type-check, unit, e2e).",
+  "author": { "name": "ygwa", "url": "https://github.com/ygwa" },
+  "keywords": ["dapei", "validation", "tests", "ci"],
+  "license": "MIT"
+}

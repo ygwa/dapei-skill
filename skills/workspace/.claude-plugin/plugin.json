@@ -1,0 +1,8 @@
+{
+  "name": "dapei-workspace",
+  "version": "3.0.0",
+  "description": "Initialize, validate, and inspect a dapei workspace (repos/, features/, docs/, .dapei/).",
+  "author": { "name": "ygwa", "url": "https://github.com/ygwa" },
+  "keywords": ["dapei", "workspace", "scaffold", "init"],
+  "license": "MIT"
+}
