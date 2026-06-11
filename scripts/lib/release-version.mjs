@@ -3,7 +3,7 @@
 //
 // Single source of truth for reading/writing version across the dapei-skill repo.
 //
-// Version sources (14):
+// Version sources (15):
 //   - package.json (root)
 //   - engine/package.json
 //   - packages/core/package.json
@@ -19,8 +19,8 @@
 //   - skills/cognitive/.claude-plugin/plugin.json
 //   - skills/cdr/.claude-plugin/plugin.json
 //
-// Subcommand `check`  : assert all 14 sources currently agree; exit 0 / 1.
-// Subcommand `set`    : write `NEW_VERSION` into all 14 sources; update CHANGELOG.
+// Subcommand `check`  : assert all 15 sources currently agree; exit 0 / 1.
+// Subcommand `set`    : write `NEW_VERSION` into all 15 sources; update CHANGELOG.
 //
 // Exit codes:
 //   0  ok
@@ -39,6 +39,7 @@ export const VERSION_SOURCES = [
   { key: "root", file: "package.json", kind: "json" },
   { key: "engine", file: "engine/package.json", kind: "json" },
   { key: "packages/core", file: "packages/core/package.json", kind: "json" },
+  { key: "packages/cdr", file: "packages/cdr/package.json", kind: "json" },
   { key: "packages/router", file: "packages/router/package.json", kind: "json" },
   { key: "packages/runtime-adapters", file: "packages/runtime-adapters/package.json", kind: "json" },
   { key: "SKILL.md", file: "SKILL.md", kind: "skill-md" },

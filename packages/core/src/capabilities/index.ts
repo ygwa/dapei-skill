@@ -26,7 +26,7 @@ import {
   cdrBusinessCompose,
   cdrAssetStaleCheck,
   cdrArchitectureDriftCheck
-} from "./domains/cdr.ts";
+} from "../../../cdr/src/capabilities.ts";
 import { docGenerate } from "../../../doc-gen/src/doc-gen.ts";
 import { memoryAppend } from "./domains/memory.ts";
 import { auditQuery } from "./domains/audit.ts";

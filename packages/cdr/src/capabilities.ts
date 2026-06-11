@@ -1,9 +1,9 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
-import type { CapabilitySpec } from "../../types.ts";
-import { CapabilityError } from "../../types.ts";
-import { assertValidArtifact, validateArtifact, parseConfidence, type SourceRef } from "../../evidence.ts";
-import type { ArtifactType } from "../../evidence.ts";
+import type { CapabilitySpec } from "../../core/src/types.ts";
+import { CapabilityError } from "../../core/src/types.ts";
+import { assertValidArtifact, validateArtifact, parseConfidence, type SourceRef } from "../../core/src/evidence.ts";
+import type { ArtifactType } from "../../core/src/evidence.ts";
 import {
   artifactRelativePath,
   cognitivePaths,
@@ -17,10 +17,10 @@ import {
   type RepoSnapshot,
   type StaleAsset,
   type StaleSource
-} from "../../cognitive-index.ts";
-import { parseYamlDocument, stringifyYamlDocument, type YamlValue } from "../../yaml-doc.ts";
-import { requireFields, detectRepoLanguage, detectTestCommands, parseReposYamlNames, featureRepoNames } from "../shared.ts";
-import { ensureDir, read, write, runSafe, workspacePaths, listFilesRecursively } from "../../../../runtime-adapters/src/system.ts";
+} from "../../core/src/cognitive-index.ts";
+import { parseYamlDocument, stringifyYamlDocument, type YamlValue } from "../../core/src/yaml-doc.ts";
+import { requireFields, detectRepoLanguage, detectTestCommands, parseReposYamlNames, featureRepoNames } from "../../core/src/capabilities/shared.ts";
+import { ensureDir, read, write, runSafe, workspacePaths, listFilesRecursively } from "../../runtime-adapters/src/system.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
 
@@ -1128,7 +1128,7 @@ export const cdrStateDerive: AnyCap = {
     additionalProperties: false
   },
   async execute(ctx, input) {
-    requireFields(input as Record<string, import("../../types.ts").Json>, ["entity", "behaviors"]);
+    requireFields(input as Record<string, import("../../core/src/types.ts").Json>, ["entity", "behaviors"]);
     const entity = String(input.entity);
     const behaviorIds: string[] = Array.isArray(input.behaviors)
       ? input.behaviors.map((b: unknown) => String(b))

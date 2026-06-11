@@ -3,6 +3,9 @@
   "version": "3.0.0",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "@dapei/cdr": "workspace:*"
+  },
   "exports": {
     "./index": "./src/index.ts",
     "./types": "./src/types.ts",

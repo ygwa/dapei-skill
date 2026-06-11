@@ -1,0 +1,10 @@
+{
+  "name": "@dapei/cdr",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./capabilities": "./src/capabilities.ts",
+    "./index": "./src/index.ts"
+  }
+}
