@@ -1,6 +1,6 @@
 ---
 description: Manage a dapei feature — create a new one with mapped repos, or close an existing one and backfill durable knowledge to workspace docs/.
-argument-hint: "<[create|close]> <feature-name> [--repos <csv>] [--objective '<text>'] [--owner <user>]"
+argument-hint: "[create|close] <feature-name> [--repos <csv>] [--objective '<text>'] [--owner <user>]"
 ---
 
 # /feature -- Manage a dapei feature
