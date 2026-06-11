@@ -1,3 +1,8 @@
+---
+name: dapei-repos
+description: Manage the repo registry — add/sync/list/check/analyze/remove repos under a dapei workspace. Use when adding a repo to the workspace, syncing repo state, listing managed repos, or analyzing a repo for technical inventory.
+---
+
 # dapei.repos skill
 
 负责 repos 的 add/sync/list/analyze 生命周期管理。

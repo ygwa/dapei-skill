@@ -1,3 +1,8 @@
+---
+name: dapei-workspace
+description: Initialize, validate, and inspect a dapei workspace (root-level repos/, features/, docs/, .dapei/). Use when initializing a new dapei workspace, validating the workspace contract, or reviewing the workspace overview.
+---
+
 # dapei.workspace skill
 
 负责 workspace 初始化与结构校验。

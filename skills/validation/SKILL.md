@@ -1,3 +1,8 @@
+---
+name: dapei-validation
+description: Discover, execute, and report on tests for a repo or feature (lint, type-check, unit, e2e). Use when running validation for a feature, detecting test commands in a repo, or generating a validation report.
+---
+
 # dapei.validation skill
 
 负责测试命令发现、执行与 validation 报告生成。
