@@ -17,8 +17,25 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
+- `scripts/validate-skills.mjs` — zero-dep Node validator for SKILL.md frontmatter, plugin manifests, and command files (inspired by pm-skills' `validate_plugins.py`)
+- `CLAUDE.md` — single source of truth for AI agents contributing to this repo (companion to `agents.md` runtime contract)
+- `.claude-plugin/marketplace.json` + per-skill `.claude-plugin/plugin.json` for 7 skills — enables Claude Code / Cowork / Codex CLI marketplace install
+- `commands/` directory with 5 high-frequency workflow commands: `cdr-bootstrap`, `feature-create`, `feature-close`, `workspace-init`, `drift-check`
+- `@dapei/cdr` package extracted from `@dapei/core` — CDR capabilities now have their own evolution cadence
+- 5 ADRs in `docs/decisions/` (modular monorepo, evidence-first, AI-as-scanner, two-dimension boundary, deterministic engine)
+- `npm run validate:skills` script wired into `npm run verify`
+
 ### Changed
+- `skills/workspace/SKILL.md`, `skills/repos/SKILL.md`, `skills/validation/SKILL.md` — added YAML frontmatter (name + Use-when description)
+- `skills/cdr/SKILL.md`, root `SKILL.md` — normalized description to "Use when X, Y, or Z." pattern
+- `agents.md` — links to `CLAUDE.md` at top; remains the runtime operating contract
+- `scripts/lib/release-version.mjs` — version sync list extended from 6 → 15 sources (added 8 plugin manifests + `packages/cdr/package.json`)
+- `docs/release-process.md` — documents plans→ADR promotion workflow
+- `scripts/validate-skills.mjs` — extended to scan `packages/cdr/src/` for capability IDs (T6 follow-up)
+
 ### Fixed
+- Validator warning regression: `loadCapabilityIds` now discovers capabilities in the new `@dapei/cdr` package (warnings back to baseline 4 after the T6 move)
+
 ### Removed
 
 ## [3.0.0] - 2026-06-08
