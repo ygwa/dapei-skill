@@ -1,8 +1,16 @@
 {
   "name": "dapei-repos",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Manage the repo registry — add/sync/list/check/analyze/remove repos under a dapei workspace.",
-  "author": { "name": "ygwa", "url": "https://github.com/ygwa" },
-  "keywords": ["dapei", "repos", "git", "registry"],
+  "author": {
+    "name": "ygwa",
+    "url": "https://github.com/ygwa"
+  },
+  "keywords": [
+    "dapei",
+    "repos",
+    "git",
+    "registry"
+  ],
   "license": "MIT"
 }

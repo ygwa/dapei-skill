@@ -1,8 +1,16 @@
 {
   "name": "dapei-cognitive",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Engineering Cognitive Runtime — orient, strategize, list candidates, deep-dive, report.",
-  "author": { "name": "ygwa", "url": "https://github.com/ygwa" },
-  "keywords": ["dapei", "cognitive", "behavior", "discover"],
+  "author": {
+    "name": "ygwa",
+    "url": "https://github.com/ygwa"
+  },
+  "keywords": [
+    "dapei",
+    "cognitive",
+    "behavior",
+    "discover"
+  ],
   "license": "MIT"
 }

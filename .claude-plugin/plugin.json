@@ -1,9 +1,18 @@
 {
   "name": "dapei-skill",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Meta plugin for the dapei-skill marketplace. Installs the router skill plus all dapei-* skills.",
-  "author": { "name": "ygwa", "url": "https://github.com/ygwa" },
-  "keywords": ["ai", "engineering", "context-os", "cognitive-runtime", "code-to-knowledge"],
+  "author": {
+    "name": "ygwa",
+    "url": "https://github.com/ygwa"
+  },
+  "keywords": [
+    "ai",
+    "engineering",
+    "context-os",
+    "cognitive-runtime",
+    "code-to-knowledge"
+  ],
   "homepage": "https://github.com/ygwa/dapei-skill",
   "license": "MIT"
 }

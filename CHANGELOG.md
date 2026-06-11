@@ -17,6 +17,14 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
+### Changed
+### Fixed
+### Removed
+
+## [3.1.0] - 2026-06-11
+
+
+### Added
 - `scripts/validate-skills.mjs` — zero-dep Node validator for SKILL.md frontmatter, plugin manifests, and command files (inspired by pm-skills' `validate_plugins.py`)
 - `CLAUDE.md` — single source of truth for AI agents contributing to this repo (companion to `agents.md` runtime contract)
 - `.claude-plugin/marketplace.json` + per-skill `.claude-plugin/plugin.json` for 7 skills — enables Claude Code / Cowork / Codex CLI marketplace install

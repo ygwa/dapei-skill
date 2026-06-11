@@ -1,8 +1,17 @@
 {
   "name": "dapei-cdr",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Cognitive Discovery Runtime — code-to-knowledge extraction across profile/entries/behavior/state/domain/capability map layers, with VitePress portal generation.",
-  "author": { "name": "ygwa", "url": "https://github.com/ygwa" },
-  "keywords": ["dapei", "cdr", "code-to-knowledge", "evidence-first", "vitepress"],
+  "author": {
+    "name": "ygwa",
+    "url": "https://github.com/ygwa"
+  },
+  "keywords": [
+    "dapei",
+    "cdr",
+    "code-to-knowledge",
+    "evidence-first",
+    "vitepress"
+  ],
   "license": "MIT"
 }

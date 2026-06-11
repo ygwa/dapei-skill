@@ -1,7 +1,7 @@
 ---
 name: dapei
 description: "Router skill for dapei — AI Native Engineering Context OS. Use when the user mentions workspace setup, repos management, feature lifecycle, workflow stages, validation runs, cognitive discovery, or CDR knowledge extraction."
-version: 3.0.0
+version: 3.1.0
 ---
 
 # dapei Router Skill
