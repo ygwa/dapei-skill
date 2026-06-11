@@ -67,6 +67,18 @@ description: <one sentence>. Use when <trigger 1>, <trigger 2>, or <trigger 3>.
 
 The engine returns file listings (`cdr.entries.candidate`), validates evidence (`validateEvidencePoints`), and writes structured YAML once evidence passes. It does NOT pattern-match code, run regex over source, or infer business logic. Any capability that wants to do those things must be rejected in review.
 
+### Cross-reference rules in command bodies
+
+Commands may reference **capabilities by id** (`feature.create`, `cdr.entries.candidate`, etc.) — these are validated by `scripts/validate-skills.mjs` and are stable contract surface.
+
+Commands **MUST NOT** hard-reference other skills' commands or skills' concepts in body prose. Use natural language only:
+
+- ✅ "Want me to run **drift-check** to see stale assets?"
+- ❌ "Run `@dapei /drift-check` to see stale assets." (the `/drift-check` is a command in another skill)
+- ❌ "Apply the **cdr** skill." (commands orchestrate **capabilities**, not skills — load the skill explicitly via the description-trigger)
+
+This keeps command bodies installable as standalone units in a future marketplace split, and prevents the "I called the wrong skill because its name was hard-coded" failure mode. Skill and command names in *body prose* should look like **bold nouns** the AI is invited to load, not `@dapei /<cmd>` invocations.
+
 ### Two dimensions, never confused
 
 | Dimension | Files | When written |

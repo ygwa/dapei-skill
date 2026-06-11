@@ -30,4 +30,4 @@ Call `workspace.init` with parsed arguments. The engine creates:
 
 Output the workspace overview and suggest next steps:
 
-> "Want me to add a repo? Try `/repos-add <name> <git-url>`."
+> "Want me to add a repo? Try the **repos-add** command: `repos-add <name> <git-url>`."
