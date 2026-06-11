@@ -212,20 +212,26 @@ export function validateCommandsDir(commandsDir, opts = {}) {
 }
 
 function loadCapabilityIds(repoRoot) {
-  // Best-effort static parse of capabilities/index.ts (no TS imports needed).
-  const file = join(repoRoot, "packages/core/src/capabilities/index.ts");
-  if (!existsSync(file)) return null;
-  // We cannot evaluate TS; fall back to scanning capability domain files for `id:`.
-  const domainsDir = join(repoRoot, "packages/core/src/capabilities/domains");
-  if (!existsSync(domainsDir)) return null;
+  // Best-effort static parse of capability files (no TS imports needed).
+  // We cannot evaluate TS; fall back to scanning capability files for `id:` patterns.
+  // Source directories cover the legacy `packages/core` layout AND any extracted
+  // package (e.g. `packages/cdr`).
+  const sourceDirs = [
+    join(repoRoot, "packages/core/src/capabilities/domains"),
+    join(repoRoot, "packages/cdr/src"),
+  ];
   const ids = new Set();
-  for (const f of readdirSync(domainsDir)) {
-    if (!f.endsWith(".ts")) continue;
-    const content = readFileSync(join(domainsDir, f), "utf8");
-    const re = /\bid:\s*['"`]([a-z][a-z0-9.-]+)['"`]/gi;
-    let m;
-    while ((m = re.exec(content))) ids.add(m[1]);
+  for (const dir of sourceDirs) {
+    if (!existsSync(dir)) continue;
+    for (const f of readdirSync(dir)) {
+      if (!f.endsWith(".ts")) continue;
+      const content = readFileSync(join(dir, f), "utf8");
+      const re = /\bid:\s*['"`]([a-z][a-z0-9.-]+)['"`]/gi;
+      let m;
+      while ((m = re.exec(content))) ids.add(m[1]);
+    }
   }
+  if (ids.size === 0) return null;
   return ids;
 }
 
