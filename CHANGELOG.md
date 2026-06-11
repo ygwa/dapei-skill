@@ -24,6 +24,7 @@ Match the language and detail level of the existing release entries.
 - `@dapei/cdr` package extracted from `@dapei/core` — CDR capabilities now have their own evolution cadence
 - 5 ADRs in `docs/decisions/` (modular monorepo, evidence-first, AI-as-scanner, two-dimension boundary, deterministic engine)
 - `npm run validate:skills` script wired into `npm run verify`
+- `commands/feature.md` — multi-mode slash command consolidating the previous `feature-create` and `feature-close` (modes: `create`, `close`)
 
 ### Changed
 - `skills/workspace/SKILL.md`, `skills/repos/SKILL.md`, `skills/validation/SKILL.md` — added YAML frontmatter (name + Use-when description)
@@ -32,11 +33,14 @@ Match the language and detail level of the existing release entries.
 - `scripts/lib/release-version.mjs` — version sync list extended from 6 → 15 sources (added 8 plugin manifests + `packages/cdr/package.json`)
 - `docs/release-process.md` — documents plans→ADR promotion workflow
 - `scripts/validate-skills.mjs` — extended to scan `packages/cdr/src/` for capability IDs (T6 follow-up)
+- `SKILL.md` — router table updated to point at `/feature [create|close]`
+- `CLAUDE.md` — added § "Cross-reference rules in command bodies" (no hard cross-skill/command references in body prose) and § "Operational procedures" (4 checklists: skill/command lifecycle, capability registration, SKILL.md changes, schema bumps)
 
 ### Fixed
 - Validator warning regression: `loadCapabilityIds` now discovers capabilities in the new `@dapei/cdr` package (warnings back to baseline 4 after the T6 move)
 
 ### Removed
+- `commands/feature-create.md` and `commands/feature-close.md` — superseded by multi-mode `commands/feature.md`
 
 ## [3.0.0] - 2026-06-08
 
