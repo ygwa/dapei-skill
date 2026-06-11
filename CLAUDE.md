@@ -108,6 +108,35 @@ Single command before committing:
 npm run verify   # typecheck + validate:skills + build + test + smoke
 ```
 
+## Operational procedures
+
+### After adding or removing a skill or command
+
+1. Run `node scripts/validate-skills.mjs` — frontmatter, name-matches-dir, `Use when` trigger, capability references must all check.
+2. If the change adds/removes a skill, update the `plugins[]` array in `.claude-plugin/marketplace.json` and the counts in its `description`.
+3. If the change touches a command, update the router table in `SKILL.md:35-40` (and anywhere else the old name is referenced).
+4. Run `npm run verify` — typecheck + validate:skills + build + test + smoke.
+5. Bump the version with `scripts/release.sh patch|minor|major` (or `--auto`). The script enforces 6-source version sync and CHANGELOG update; do not bypass.
+
+### After adding or removing a capability
+
+1. Register it in `packages/<domain>/src/capabilities/domains/<file>.ts` and re-export from `packages/<domain>/src/capabilities/index.ts` (or `packages/core/src/capabilities/index.ts` for legacy core).
+2. If the capability is routeable from user intent, add a regex + extractor in `packages/router/src/index.ts` and a test in `tests/unit/router.test.mjs`.
+3. The validator will pick up the new id automatically on next `npm run validate:skills` run (no extra wiring needed).
+
+### After changing a SKILL.md or command body
+
+1. Run `node scripts/validate-skills.mjs` — the body word count and `Use when` trigger are rechecked.
+2. If you changed the `description` (the discovery surface), audit for accidental scope changes — descriptions are how the AI decides to auto-load this skill.
+3. If the body now references a new capability id, the validator will warn if it is unregistered.
+4. Run `npm run verify`.
+
+### After bumping a schema
+
+1. Add a migration entry in `.dapei/schemas/CHANGELOG.md` (if it exists; otherwise create it).
+2. Update any fixture files in `tests/fixtures/` or `tests/ai-behavior/fixtures/`.
+3. Bump version (schemas are a public contract; minor at minimum).
+
 ## What NOT to do
 
 - Do NOT add framework-specific regex to the engine — the v0.3 "AI as scanner" pivot deleted 150 lines of this; don't reintroduce it.
