@@ -154,6 +154,63 @@ export function validateSkillsDir(skillsDir, opts = {}) {
   return { errors, warnings, info };
 }
 
+export function validateCommandsDir(commandsDir, opts = {}) {
+  const errors = [];
+  const warnings = [];
+  const info = [];
+  const knownCapabilities = opts.knownCapabilities || null;
+
+  if (!existsSync(commandsDir)) {
+    errors.push({ path: commandsDir, message: "commands directory does not exist" });
+    return { errors, warnings, info };
+  }
+
+  const entries = readdirSync(commandsDir).filter((name) => name.endsWith(".md"));
+
+  for (const file of entries) {
+    const cmdFile = join(commandsDir, file);
+    const raw = readFileSync(cmdFile, "utf8");
+    const parsed = parseFrontmatter(raw);
+
+    if (!parsed) {
+      errors.push({ path: cmdFile, message: "missing or malformed YAML frontmatter (expected '---' delimited block)" });
+      continue;
+    }
+
+    const { fields, body } = parsed;
+
+    if (!fields.description) {
+      errors.push({ path: cmdFile, message: "frontmatter missing required field: description" });
+    }
+    if (!fields["argument-hint"]) {
+      warnings.push({ path: cmdFile, message: "frontmatter missing recommended field: argument-hint" });
+    }
+
+    // Capability reference check (bold **cap.id** or backtick `cap.id` references)
+    if (knownCapabilities && fields.description) {
+      const re = /`([a-z][a-z0-9.-]*)`/g;
+      let m;
+      const refs = new Set();
+      while ((m = re.exec(body + "\n" + (fields.description || "")))) {
+        const id = m[1];
+        if (id.includes(".") && /^(cdr|cognitive|feature|workspace|workflow|repos|context|validation|memory|audit)\./.test(id)) {
+          refs.add(id);
+        }
+      }
+      for (const ref of refs) {
+        if (!knownCapabilities.has(ref)) {
+          warnings.push({ path: cmdFile, message: `references unknown capability id: '${ref}'` });
+        }
+      }
+    }
+
+    const wc = countWords(body);
+    info.push({ path: cmdFile, message: `body word count: ${wc}` });
+  }
+
+  return { errors, warnings, info };
+}
+
 function loadCapabilityIds(repoRoot) {
   // Best-effort static parse of capabilities/index.ts (no TS imports needed).
   const file = join(repoRoot, "packages/core/src/capabilities/index.ts");
@@ -195,8 +252,14 @@ function main() {
 
   printReport(`skills/ (${basename(repoRoot)})`, result);
 
-  const totalErrors = result.errors.length;
-  console.log(COLOR.bold(`\nSummary: ${totalErrors} errors, ${result.warnings.length} warnings, ${result.info.length} info`));
+  const commandsDir = join(repoRoot, "commands");
+  const cmdResult = validateCommandsDir(commandsDir, { knownCapabilities });
+  printReport(`commands/ (${basename(repoRoot)})`, cmdResult);
+
+  const totalErrors = result.errors.length + cmdResult.errors.length;
+  const totalWarnings = result.warnings.length + cmdResult.warnings.length;
+  const totalInfo = result.info.length + cmdResult.info.length;
+  console.log(COLOR.bold(`\nSummary: ${totalErrors} errors, ${totalWarnings} warnings, ${totalInfo} info`));
   process.exit(totalErrors > 0 ? 1 : 0);
 }
 

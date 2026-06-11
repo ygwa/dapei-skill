@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { validateSkillsDir } from "../../scripts/validate-skills.mjs";
+import { validateSkillsDir, validateCommandsDir } from "../../scripts/validate-skills.mjs";
 
 function setup() {
   const dir = mkdtempSync(join(tmpdir(), "skills-test-"));
@@ -130,6 +130,34 @@ test("validator: errors when plugin.json name does not match skill", () => {
     }));
     const result = validateSkillsDir(dir);
     assert.ok(result.errors.some(e => e.path.endsWith("plugin.json") && /name.*match/i.test(e.message)));
+  } finally {
+    cleanup();
+  }
+});
+
+test("validator: errors when command has no frontmatter", () => {
+  const { dir, cleanup } = setup();
+  try {
+    const cmdDir = join(dir, "..", "commands-test-" + Math.random().toString(36).slice(2));
+    mkdirSync(cmdDir, { recursive: true });
+    writeFileSync(join(cmdDir, "bad.md"), "# no frontmatter\nbody");
+    const result = validateCommandsDir(cmdDir);
+    assert.ok(result.errors.some(e => /frontmatter/.test(e.message)));
+    rmSync(cmdDir, { recursive: true, force: true });
+  } finally {
+    cleanup();
+  }
+});
+
+test("validator: warns when command has no argument-hint", () => {
+  const { dir, cleanup } = setup();
+  try {
+    const cmdDir = join(dir, "..", "commands-test-" + Math.random().toString(36).slice(2));
+    mkdirSync(cmdDir, { recursive: true });
+    writeFileSync(join(cmdDir, "no-hint.md"), "---\ndescription: A command\n---\n# body content goes here with at least fifty words to satisfy the validator check on body content. Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore.");
+    const result = validateCommandsDir(cmdDir);
+    assert.ok(result.warnings.some(w => /argument-hint/.test(w.message)));
+    rmSync(cmdDir, { recursive: true, force: true });
   } finally {
     cleanup();
   }
