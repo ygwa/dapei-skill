@@ -36,8 +36,7 @@ version: 3.0.0
 |---|---|
 | `/workspace-init` | 初始化 dapei workspace |
 | `/cdr-bootstrap` | 一次性走完 profile → entries → behaviors → portal |
-| `/feature-create` | 创建 feature 并注入 cognitive context |
-| `/feature-close` | 关闭 feature 并回写 workspace 知识 |
+| `/feature` | `feature [create\|close] <feature-name> [--repos <csv>]` —— 创建或关闭 feature |
 | `/drift-check` | 检测文档与代码的架构漂移 |
 
 Command 是文档化的多步工作流，不是 router 的替代品。Router 仍然解析单步意图；command 解释如何按顺序组合 capability 完成端到端目标。
