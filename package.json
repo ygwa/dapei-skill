@@ -8,6 +8,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
+    "validate:skills": "node scripts/validate-skills.mjs",
     "build": "esbuild engine/dapei-engine.ts --bundle --platform=node --format=esm --outfile=dist/dapei-engine.js --external:node:* --minify",
     "test": "npm run test:unit && npm run test:integration && npm run test:scenarios && npm run test:ai-behavior",
     "test:unit": "node --experimental-strip-types --test tests/unit/*.test.mjs",
@@ -15,7 +16,7 @@
     "test:scenarios": "node --experimental-strip-types --test tests/scenarios/*.test.mjs",
     "test:ai-behavior": "node --experimental-strip-types --test tests/ai-behavior/*.test.mjs",
     "smoke": "bash scripts/smoke-test.sh",
-    "verify": "npm run typecheck && npm run build && npm run test && npm run smoke"
+    "verify": "npm run typecheck && npm run validate:skills && npm run build && npm run test && npm run smoke"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",
