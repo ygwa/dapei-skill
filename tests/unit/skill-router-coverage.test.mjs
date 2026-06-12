@@ -31,7 +31,7 @@ const FILE_REFERENCE_TOKENS = new Set([
   'package.json', 'feature.yaml', 'workspace.yaml', 'repos.yaml', 'repo.yaml',
   'pom.xml', 'package-lock.json', 'tsconfig.json', 'go.mod', 'go.sum',
   'agents.md', 'README.md', 'index.yaml', 'cognitive.yaml', 'commands.yaml',
-  'feature.schema.yaml', 'repos.schema.yaml', 'behavior.schema.yaml',
+  'feature.schema.yaml', 'repos.schema.yaml', 'domain.yaml', 'behavior.schema.yaml',
   'state-machine.schema.yaml', 'evidence.schema.yaml',
   'runtime-context.md', 'related-cognitive-context.md', 'decision-log.md',
   'feature-progress.md', 'daily-report.md', 'architecture-review.md',

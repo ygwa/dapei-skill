@@ -147,7 +147,7 @@ test('cdr e2e: profile → entries → behavior → state → domain → capabil
     assert.ok(stateRes.data.states.includes('CANCELLED'), 'order.cancelled event must yield CANCELLED state');
     assert.ok(stateRes.data.states.includes('REFUND_INITIATED'), 'order.refund_initiated event must yield REFUND_INITIATED state');
     assert.equal(stateRes.data.confidence.kind, 'inference');
-    assert.ok(existsSync(join(tmp, 'docs/as-is/state-machines/order.yaml')));
+    assert.ok(existsSync(join(tmp, 'docs/as-is/state-machines/sample-app/order.yaml')));
 
     // Step 6: cdr.domain.compose — cluster behaviors under Transaction domain (P1 rule: derived_from required)
     const { result: domainRes } = await core.runCapability(
@@ -220,19 +220,19 @@ test('cdr e2e: profile → entries → behavior → state → domain → capabil
     assert.ok(existsSync(join(portalRoot, '.vitepress/theme/components/StateMachine.vue')));
     assert.ok(existsSync(join(portalRoot, '.vitepress/theme/components/CodeLink.vue')));
     assert.ok(existsSync(join(portalRoot, 'behaviors/index.md')));
-    assert.ok(existsSync(join(portalRoot, 'behaviors/order-create.md')));
-    assert.ok(existsSync(join(portalRoot, 'behaviors/order-cancel.md')));
-    assert.ok(existsSync(join(portalRoot, 'states/order.md')));
+    assert.ok(existsSync(join(portalRoot, 'behaviors/sample-app/order-create.md')));
+    assert.ok(existsSync(join(portalRoot, 'behaviors/sample-app/order-cancel.md')));
+    assert.ok(existsSync(join(portalRoot, 'states/sample-app/order.md')));
     assert.ok(existsSync(join(portalRoot, 'domains/transaction.md')));
     assert.ok(existsSync(join(portalRoot, 'profiles/sample-app.md')));
 
     // Sanity: behavior page must contain Mermaid flow + source pointer
-    const orderCreatePage = readFileSync(join(portalRoot, 'behaviors/order-create.md'), 'utf8');
+    const orderCreatePage = readFileSync(join(portalRoot, 'behaviors/sample-app/order-create.md'), 'utf8');
     assert.match(orderCreatePage, /```mermaid/);
     assert.match(orderCreatePage, /🟢\s*fact/); // fact badge
 
     // Sanity: state page must contain stateDiagram-v2
-    const orderStatePage = readFileSync(join(portalRoot, 'states/order.md'), 'utf8');
+    const orderStatePage = readFileSync(join(portalRoot, 'states/sample-app/order.md'), 'utf8');
     assert.match(orderStatePage, /stateDiagram-v2/);
 
     // Sanity: VitePress sidebar must list all sections

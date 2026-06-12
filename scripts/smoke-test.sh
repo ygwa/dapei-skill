@@ -96,7 +96,7 @@ grep -q "awaiting_agent_analysis" "$TEST_DIR/docs/as-is/behavior/_candidates.yam
 cp "$FIXTURE_SOURCE/__expected__/behavior/order-create.yaml" "$TEST_DIR/order-create.yaml"
 UPSERT_INPUT=$(node -e "const fs=require('fs'); console.log(JSON.stringify({type:'behavior', content: fs.readFileSync('$TEST_DIR/order-create.yaml','utf8')}))")
 DAPEI_WORKSPACE_ROOT="$TEST_DIR" node "$SCRIPT_ROOT/engine/dapei-engine.ts" run --capability cognitive.artifact.upsert --input "$UPSERT_INPUT" >/dev/null 2>&1
-[[ -f "$TEST_DIR/docs/as-is/behavior/order-create.yaml" ]] || { echo "FAIL missing: behavior artifact"; exit 1; }
+[[ -f "$TEST_DIR/docs/as-is/behavior/sample-app/order-create.yaml" ]] || { echo "FAIL missing: behavior artifact"; exit 1; }
 grep -q "order-create" "$TEST_DIR/.dapei/cognitive/index.yaml" || { echo "FAIL missing: index entry"; exit 1; }
 echo "PASS"
 

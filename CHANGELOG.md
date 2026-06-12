@@ -17,38 +17,68 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
+- **CDR v0.8 — Reverse-cluster to L1** (on `feature/cdr-v0.8-reverse-cluster`)
+- New `cdr.domain.suggest` capability: read-only reverse-cluster of behaviors into suggested domain candidates. Output `docs/as-is/cross-repo/domain-suggestions.yaml`. Edge types: shared-events (weight 4), shared-writes (weight 3), cross-repo-calls (weight 2), business-rule co-apply (weight 1). Naming heuristic takes the most-frequent event-name subject across the cluster and prefixes `Cross-Repo:` when the cluster spans more than one repo. Confidence is `high` (shared-events + cross-repo), `medium` (shared-events OR shared-writes), or `low` (everything else). Hard contract: never calls `cdr.domain.compose`; suggest and commit stay two separate steps.
+- New `cdr.capability.map.synth` capability: engine-driven clustering of *domains* into the L1 capability map. Domain sources in priority order: `input.manual_domains[]` → composed domains → suggestions (only when `use_suggested_domains: true`). Back-fills `spans_repos` / `behavior_count` / `fact_ratio` from the cognitive index for each capability. Two modes: auto-synthesize (one capability per domain, id = `domain.<slug>`) or AI-curated (`capabilities[]` passed; ids validated against the v0.5 multi-segment regex). Empty workspace is a legitimate state and writes `status: empty` plus a clear pointer at the next step.
+- New `cdr.reversecluster.doc.generate` capability: renders the L1 capability map and the cluster-suggestions report to the VitePress portal at `<output>/l1/`. Peer of v0.5's `cdr.crossrepo.doc.generate`. Page set: `l1/index.md` (overview + Mermaid total graph), `l1/<capability-id>.md` (one page per capability), `l1/cluster-suggestions.md`. Pure read — never re-runs upstream capabilities. Fails fast with a clear pointer at `cdr.capability.map.synth` if the product-map is missing.
+- Cognitive index now tracks `events[]` and `writes[]` on behavior index entries. Both fields are optional and pre-v0.8 index entries without them keep working. The `writes[]` projection reads `{ table | target }` from each entry so the shared-writes edge can actually fire (previously the index filtered writes entries as strings, making shared-writes unreachable in practice).
+- Six new v0.8 router intent patterns (English + 中文): `suggest domains` / `cluster domains` / `reverse-cluster domains` → `cdr.domain.suggest`; `synth capability map` / `synthesize capability map` → `cdr.capability.map.synth`; `render L1 portal` / `generate capability map portal` → `cdr.reversecluster.doc.generate`. Pattern ordering is load-bearing: v0.8 patterns precede the v0.3 init / doc.generate catch-alls, and the v0.5 cross-repo portal pattern is hoisted above the catch-all. The "Order matters" comment in `packages/router/src/index.ts` documents this so future contributors do not silently break the disambiguation.
+- `skills/cdr/SKILL.md` Phase 5.7 documents the two-stage pipeline and explicitly teaches the AI to **never** expect `cdr.domain.suggest` to commit a domain for it. The three v0.8 capabilities are added to the routing table.
+- 25 new unit tests (`cdr-domain-suggest.test.mjs`, `cdr-capability-synth.test.mjs`, `cdr-reverse-cluster-doc.test.mjs`, plus 12 router-intent tests in `cdr.test.mjs`) and 3 new integration tests in `cdr-v0.8-reverse-cluster.test.mjs` exercising the full pipeline end-to-end across `mall-order` + `mall-payment`.
+
 ### Changed
+- `cdr.domain.compose` input schema now allows optional `confidence:{}`. Existing callers (which never passed it) keep working; the default `medium / inference / composed_from_behaviors` block is used when the AI does not pass one.
+
 ### Fixed
-### Removed
-
-## [3.1.0] - 2026-06-12
-
+- `cognitive-index.ts:upsertIndexEntry` previously threw "confidence must be an object" on every capability-map write because `parseConfidence` was unconditional. Capability-map artifacts do not carry a confidence block (their validity is decided from product+capabilities alone). Now bypassed for `type=capability-map`.
+- `loadComposedDomains` previously preferred `doc.domain` (the kebab slug used for the filesystem name) over `doc.name` (the human label). AI capability `domains[]` entries write the human label, so the back-fill metrics step failed to find composed domains by name. Now prefers `doc.name`.
 
 ### Added
-- `scripts/validate-skills.mjs` — zero-dep Node validator for SKILL.md frontmatter, plugin manifests, and command files (inspired by pm-skills' `validate_plugins.py`)
-- `CLAUDE.md` — single source of truth for AI agents contributing to this repo (companion to `agents.md` runtime contract)
-- `.claude-plugin/marketplace.json` + per-skill `.claude-plugin/plugin.json` for 7 skills — enables Claude Code / Cowork / Codex CLI marketplace install
-- `commands/` directory with 5 high-frequency workflow commands: `cdr-bootstrap`, `feature-create`, `feature-close`, `workspace-init`, `drift-check`
-- `@dapei/cdr` package extracted from `@dapei/core` — CDR capabilities now have their own evolution cadence
-- 5 ADRs in `docs/decisions/` (modular monorepo, evidence-first, AI-as-scanner, two-dimension boundary, deterministic engine)
-- `npm run validate:skills` script wired into `npm run verify`
-- `commands/feature.md` — multi-mode slash command consolidating the previous `feature-create` and `feature-close` (modes: `create`, `close`)
+- **CDR v0.7 — CodeGraph integration** (on `feature/cdr-v0.7-codegraph`)
+- `packages/runtime-adapters/src/codegraph.ts` ships a `CodeGraphAdapter` class wrapping the [lzehrung/codegraph] CLI. Three operations: `orient` (code file listing), `refs` (call-graph neighbourhood), `impact` (blast radius between two refs). A one-shot `which codegraph` probe at construction; an optional `DAPEI_CODEGRAPH_BIN` env var lets tests inject a fake. When the probe fails, the adapter marks the workspace with `.dapei/graph/.no-codegraph`.
+- `cdr.profile` populates a new `codegraph` block (available / version / backend / files_total / apisurface_count / reason). The dangling `data.codegraph.files_total` reference in `runtime/templates/docs/scripts/build-cognitive-pages.ts` is finally wired.
+- `cdr.entries.candidate` tries `codegraph orient` first; on success returns `backend='native'` and per-file `apisurface_hint`. On failure falls back to the v0.3 tree walk with `backend='fallback'`.
+- `cdr.behavior.upsert` cross-checks every structured call with an `evidence` SourceRef against the call graph (`adapter.refs`). Strict rejection when the CLI is present; graceful skip when missing.
+- New `cdr.stale.scan` capability: walks every behavior / state-machine / business-rule in the cognitive index, reads each YAML off disk, and marks entries whose `sources[]` intersect a `codegraph impact` change set with `stale=true / stale_reason / stale_at / stale_base`. Pre-v0.7 assets keep working; `stale` fields are purely additive.
+- `tests/fixtures/fake-codegraph/codegraph` is a shell-script test double for the real codegraph CLI. `PATH` is prepended with this directory per-test so the adapter picks it up. Used by 9 new unit tests.
 
 ### Changed
-- `skills/workspace/SKILL.md`, `skills/repos/SKILL.md`, `skills/validation/SKILL.md` — added YAML frontmatter (name + Use-when description)
-- `skills/cdr/SKILL.md`, root `SKILL.md` — normalized description to "Use when X, Y, or Z." pattern
-- `agents.md` — links to `CLAUDE.md` at top; remains the runtime operating contract
-- `scripts/lib/release-version.mjs` — version sync list extended from 6 → 15 sources (added 8 plugin manifests + `packages/cdr/package.json`)
-- `docs/release-process.md` — documents plans→ADR promotion workflow
-- `scripts/validate-skills.mjs` — extended to scan `packages/cdr/src/` for capability IDs (T6 follow-up)
-- `SKILL.md` — router table updated to point at `/feature [create|close]`
-- `CLAUDE.md` — added § "Cross-reference rules in command bodies" (no hard cross-skill/command references in body prose) and § "Operational procedures" (4 checklists: skill/command lifecycle, capability registration, SKILL.md changes, schema bumps)
+- **CDR v0.6 — Structured calls** (on `feature/cdr-v0.6-structured-calls`)
+- `behavior.calls[]` schema evolution: accepts a mix of legacy strings and structured objects `{ target, protocol?, target_repo?, evidence? }`. Per-entry validation in `evidence.ts`.
+- `IndexBehaviorEntry.target_repos` optional field. `upsertIndexEntry` extracts `target_repo` from structured calls. Pre-v0.6 index entries keep loading without the field.
+- `cdr.doc.generate` renders structured calls with a per-entry upgrade and a new "Cross-service calls" section that lists target / protocol / target_repo / evidence.
+- `skills/cdr/SKILL.md` Phase 2 documents the structured calls form and the field semantics (target / protocol / target_repo / evidence).
 
 ### Fixed
-- Validator warning regression: `loadCapabilityIds` now discovers capabilities in the new `@dapei/cdr` package (warnings back to baseline 4 after the T6 move)
+- `cdr.behavior.upsert` previously stringified every call entry via `input.calls.map(String)`, silently turning any object call into the literal `"[object Object]"` on disk. v0.6 preserves structure. A unit test pins this down by asserting the literal `"[object Object]"` never appears in a v0.6-written behavior YAML.
 
-### Removed
-- `commands/feature-create.md` and `commands/feature-close.md` — superseded by multi-mode `commands/feature.md`
+### Changed
+- **CDR v0.5 — Cross-repo business rules** (on `feature/cdr-v0.5-cross-repo-rules`)
+- `cdr.business.crosslink` — read-only computation that walks every business-rule artifact, resolves `applies_to[]` against the cognitive index, groups by `kind`, and emits a cross-repo view at `docs/as-is/cross-repo/cross-links.yaml`. Empty workspace is a legitimate state and produces an empty view rather than an error.
+- `cdr.crossrepo.doc.generate` — renders the cross-link view to a VitePress section at `<output>/cross-repo/` with an index page, per-rule pages, and Mermaid diagrams. Does not touch the existing `cdr.doc.generate` capability.
+- Two new router intent groups (English + Chinese): `build cross-repo rules` → `cdr.business.crosslink`; `build cross-repo portal` → `cdr.crossrepo.doc.generate`.
+- `skills/cdr/SKILL.md` Phase 5.5: the cross-repo rules workflow. AI is taught to recognise five recurring cross-repo relationship patterns (sync call, async compensation, SLA, shared-DB invariant, cross-service state machine) and write the appropriate business rule for each.
+- `tests/unit/cdr-crosslink.test.mjs` (9 cases) and `tests/integration/cdr-v0.5-cross-repo.test.mjs` (end-to-end against the v0.4 mall-order + mall-payment fixtures).
+- Capability ids use no underscores (`cdr.business.crosslink`, `cdr.crossrepo.doc.generate`) to satisfy the existing `domain.name` ID regex, matching the v0.2 precedent for `cdr.business.compose`.
+
+### Changed
+- **CDR v0.4 — Multi-repo merge** (on `feature/cdr-v0.4-multi-repo-merge`)
+- Per-repo namespace for `behavior` / `state-machine` / `domain` / `business-rule` artifacts. New writes go to `docs/as-is/<section>/<repo>/<id>.yaml`. Two repos can now both produce an `order-create` behavior without overwriting each other.
+- `StaleFields` (`stale` / `stale_reason` / `stale_at` / `stale_base`) reserved on every cognitive index entry. Implementation of `cdr.stale.scan` lands in a follow-up PR.
+- Two new fixtures: `tests/fixtures/mall-order` and `tests/fixtures/mall-payment` (sibling services sharing an `Order` entity).
+- `tests/integration/cdr-v0.4-multi-repo.test.mjs`: cross-repo behavior / state / domain / business-rule merge plus a backward-compat fallback for legacy flat-file reads.
+
+### Changed
+- `packages/core/src/cognitive-index.ts` — `artifactRelativePath` produces per-repo paths when `repo` is set; `upsertIndexEntry` dedupes on `(id, repo)` for per-repo entry types.
+- `packages/core/src/capabilities/domains/cdr.ts` — `cdr.state.derive` resolves behavior paths via the cognitive index (legacy fallback retained). `cdr.domain.compose` writes through `artifactRelativePath` instead of hand-rolling the path.
+- `packages/core/src/capabilities/domains/cognitive.ts` — `cognitive.state.suggest` resolves behavior paths via the index with the same legacy fallback.
+- `packages/doc-gen/src/doc-gen.ts` — `ParsedDoc` carries an inferred `repo` field; per-repo portal pages land at `behaviors/<repo>/<id>.md` etc.; sidebar items carry `(repo)` annotations when the source is namespaced.
+- Existing test assertions updated from the legacy flat paths to the per-repo layout. `scripts/smoke-test.sh` test 9 expects `docs/as-is/behavior/sample-app/order-create.yaml`.
+
+### Fixed
+- Cross-repo workspaces no longer silently overwrite a behavior / state-machine / domain / business-rule written by an earlier repo. (Pre-v0.4 the global `id`-only dedup in the cognitive index dropped earlier entries.)
+
+## [3.0.0] - 2026-06-08
 
 ## [3.0.0] - 2026-06-08
 

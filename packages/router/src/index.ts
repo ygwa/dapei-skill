@@ -111,6 +111,59 @@ const routes: Route[] = [
     reason: "cdr capability map init intent",
     confidence: 0.92
   },
+  // === CDR v0.8 — reverse-cluster to L1 ===
+  // Order matters: v0.8 patterns must precede the v0.3 init / v0.3
+  // doc.generate patterns because those are catch-alls. "synth capability
+  // map" needs to win over "init capability map", and "render L1 portal"
+  // needs to win over "generate documentation portal".
+  {
+    // "suggest domains" / "cluster domains" — verb is the cluster signal,
+    // noun (domains) is the unique key. Keeps "compose domain X" (v0.3)
+    // and "synth capability map" (this version) cleanly separate.
+    pattern: /^(?=.*\b(?:suggest|cluster|reverse[\s_-]?cluster)\b)(?=.*\b(?:domains?)\b).*/i,
+    capability: "cdr.domain.suggest",
+    inputBuilder: (t, ctx) => ({
+      repos: ctx.repos || "",
+      min_size: ctx.min_size || "",
+      max_size: ctx.max_size || "",
+      max_clusters: ctx.max_clusters || ""
+    }),
+    reason: "cdr domain suggest intent (v0.8)",
+    confidence: 0.9
+  },
+  {
+    // "synth capability map" — disambiguate from "init capability map"
+    // (v0.3, AI-authored capabilities). Synth reads clusters/domains;
+    // init takes a hand-rolled capabilities[] from the AI.
+    pattern: /^(?=.*\b(?:synth(?:esize)?)\b)(?=.*\bcapability\b)(?=.*\bmap\b).*/i,
+    capability: "cdr.capability.map.synth",
+    inputBuilder: (t, ctx) => ({
+      product: ctx.product || extractCdrProductName(t) || "",
+      use_suggested_domains: ctx.use_suggested_domains || ""
+    }),
+    reason: "cdr capability map synth intent (v0.8)",
+    confidence: 0.92
+  },
+  {
+    // "render L1 portal" / "build capability map portal" — distinct
+    // from cdr.crossrepo.doc.generate which only renders /cross-repo/.
+    // The L1 / capability-map noun is the unique key.
+    pattern: /^(?=.*\b(?:render|build|generate)\b)(?=.*\b(?:l1|capability[\s_-]?map|reverse[\s_-]?cluster)\b)(?=.*\b(?:portal|docs|documentation)\b).*/i,
+    capability: "cdr.reversecluster.doc.generate",
+    inputBuilder: (t, ctx) => ({ output_dir: ctx.output_dir || ".dapei/docs-portal" }),
+    reason: "cdr reverse_cluster doc generate intent (v0.8)",
+    confidence: 0.92
+  },
+  {
+    // v0.5 cross-repo portal must precede the v0.3 catch-all
+    // "render ... portal" → cdr.doc.generate. "render cross-repo portal"
+    // is more specific and belongs to cdr.crossrepo.doc.generate.
+    pattern: /^(?=.*\b(?:cross[_-]?repo|cross[_-]?repository)\b)(?=.*\b(?:portal|docs|documentation)\b).*/i,
+    capability: "cdr.crossrepo.doc.generate",
+    inputBuilder: (t, ctx) => ({ output_dir: ctx.output_dir || ".dapei/docs-portal" }),
+    reason: "cdr cross_repo doc generate intent (precedence over cdr.doc.generate)",
+    confidence: 0.92
+  },
   {
     // "documentation|docs|portal" noun (not just "build") avoids conflict with context.build
     pattern: /^(?=.*\b(?:generate|build|render)\b)(?=.*\b(?:documentation|docs|portal)\b).*/i,
@@ -221,6 +274,68 @@ const routes: Route[] = [
     reason: "cdr index list intent (chinese)",
     confidence: 0.85
   },
+  // === CDR v0.5 — cross-repo business rules ===
+  {
+    pattern: /^(?=.*\b(?:cross[_-]?repo|cross[_-]?repository)\b)(?=.*\b(?:link|rules?|ruleset|view|map)\b).*/i,
+    capability: "cdr.business.crosslink",
+    inputBuilder: (t, ctx) => ({ min_confidence: ctx.min_confidence || "" }),
+    reason: "cdr business cross-link intent",
+    confidence: 0.9
+  },
+  {
+    pattern: /(?:建立|生成|build|cluster|汇总|推导)\s*(?:跨[_-]?仓库?|跨[_-]?服务?|cross[_-]?repo|cross[_-]?repository)\s*(?:业务规则|关系|rules?|ruleset|view|map)?/i,
+    capability: "cdr.business.crosslink",
+    inputBuilder: (t, ctx) => ({ min_confidence: ctx.min_confidence || "" }),
+    reason: "cdr business cross-link intent (chinese)",
+    confidence: 0.88
+  },
+  {
+    pattern: /^(?=.*\b(?:cross[_-]?repo|cross[_-]?repository)\b)(?=.*\b(?:portal|docs|documentation|render)\b).*/i,
+    capability: "cdr.crossrepo.doc.generate",
+    inputBuilder: (t, ctx) => ({ output_dir: ctx.output_dir || ".dapei/docs-portal" }),
+    reason: "cdr cross_repo doc generate intent",
+    confidence: 0.9
+  },
+  {
+    pattern: /(?:生成|渲染|render|build)\s*(?:跨[_-]?仓库?|跨[_-]?服务?|cross[_-]?repo|cross[_-]?repository)\s*(?:门户|视图|portal|view|page)/i,
+    capability: "cdr.crossrepo.doc.generate",
+    inputBuilder: (t, ctx) => ({ output_dir: ctx.output_dir || ".dapei/docs-portal" }),
+    reason: "cdr cross_repo doc generate intent (chinese)",
+    confidence: 0.88
+  },
+  // === CDR v0.8 — Chinese intents ===
+  // The English v0.8 patterns live earlier (before v0.3 init / doc.generate
+  // to win the precedence battle). The Chinese variants sit here as their
+  // own block because they cannot collide with English verbs/nouns.
+  {
+    pattern: /(?:推荐|聚类|建议|reverse[\s_-]?cluster|suggest).*(?:领域|domain)/i,
+    capability: "cdr.domain.suggest",
+    inputBuilder: (t, ctx) => ({
+      repos: ctx.repos || "",
+      min_size: ctx.min_size || "",
+      max_size: ctx.max_size || "",
+      max_clusters: ctx.max_clusters || ""
+    }),
+    reason: "cdr domain suggest intent (chinese)",
+    confidence: 0.88
+  },
+  {
+    pattern: /(?:聚类|生成|推导|合成).*(?:功能|能力|capability)\s*(?:地图|map|全景)/i,
+    capability: "cdr.capability.map.synth",
+    inputBuilder: (t, ctx) => ({
+      product: ctx.product || extractCdrProductName(t) || "",
+      use_suggested_domains: ctx.use_suggested_domains || ""
+    }),
+    reason: "cdr capability map synth intent (chinese)",
+    confidence: 0.88
+  },
+  {
+    pattern: /(?:渲染|生成|build|render).*(?:L1|能力地图|功能全景|capability[\s_-]?map)/i,
+    capability: "cdr.reversecluster.doc.generate",
+    inputBuilder: (t, ctx) => ({ output_dir: ctx.output_dir || ".dapei/docs-portal" }),
+    reason: "cdr reverse_cluster doc generate intent (chinese)",
+    confidence: 0.88
+  },
   {
     pattern: /^(?=.*\brepos?\b)(?=.*\banalyze\b).*/i,
     capability: "repos.analyze",
@@ -325,91 +440,6 @@ const routes: Route[] = [
     inputBuilder: () => ({}),
     reason: "status intent",
     confidence: 0.7
-  },
-  {
-    pattern: /^(?=.*\b(?:stale|过时|过期|失效|文档过时|asset.*stale|stale.*check)\b).*/i,
-    capability: "cdr.asset.stale-check",
-    inputBuilder: (t, ctx) => ({ repo: ctx.repo || extractCdrRepoName(t) || "" }),
-    reason: "stale asset check intent",
-    confidence: 0.92
-  },
-  {
-    pattern: /^(?=.*\b(?:assign|指派|分配)\b)(?=.*\bfeature\b).*/i,
-    capability: "feature.assign",
-    inputBuilder: (t, ctx) => ({
-      feature: ctx.feature || extractFeatureName(t),
-      owner: ctx.owner || extractAssignee(t) || "",
-      assignees: ctx.assignees || ""
-    }),
-    reason: "feature assign intent",
-    confidence: 0.92
-  },
-  {
-    pattern: /^(?=.*\b(?:handoff|转交|交接)\b).*/i,
-    capability: "feature.handoff",
-    inputBuilder: (t, ctx) => ({
-      feature: ctx.feature || extractFeatureName(t),
-      to: ctx.to || extractAssignee(t) || "",
-      note: ctx.note || ""
-    }),
-    reason: "feature handoff intent",
-    confidence: 0.92
-  },
-  {
-    pattern: /^(?=.*\b(?:team|team.*status|who.*working|团队|谁在做什么|团队状态)\b).*/i,
-    capability: "feature.team-status",
-    inputBuilder: () => ({}),
-    reason: "team status intent",
-    confidence: 0.93
-  },
-  {
-    pattern: /^(?=.*\b(?:explore|explore.*repo|了解|看看|帮我看看|了解一下)\b).*/i,
-    capability: "cognitive.explore",
-    inputBuilder: (t, ctx) => ({
-      intent: t,
-      repo: ctx.repo || extractCdrRepoName(t) || extractRepoFromBehavior(t) || ""
-    }),
-    reason: "exploration mode intent",
-    confidence: 0.88
-  },
-  {
-    pattern: /^(?=.*\b(?:drift|漂移|architecture.*drift|drift.*check)\b).*/i,
-    capability: "cdr.architecture-drift-check",
-    inputBuilder: (t, ctx) => ({
-      feature: ctx.feature || extractFeatureName(t),
-      repo: ctx.repo || extractCdrRepoName(t) || ""
-    }),
-    reason: "architecture drift check intent",
-    confidence: 0.92
-  },
-  {
-    pattern: /(?:stale|过时|哪些.*过时|哪些.*变化)/i,
-    capability: "cdr.asset.stale-check",
-    inputBuilder: (t, ctx) => ({ repo: ctx.repo || extractCdrRepoName(t) || "" }),
-    reason: "stale check intent (chinese)",
-    confidence: 0.9
-  },
-  {
-    pattern: /(?:指派|分配).*(?:给|to)\s+(\S+)/i,
-    capability: "feature.assign",
-    inputBuilder: (t, ctx) => ({
-      feature: ctx.feature || extractFeatureName(t),
-      owner: ctx.owner || (t.match(/(?:指派|分配).*(?:给|to)\s+(\S+)/i)?.[1] || ""),
-      assignees: ctx.assignees || ""
-    }),
-    reason: "feature assign intent (chinese)",
-    confidence: 0.9
-  },
-  {
-    pattern: /(?:转交|交接).*(?:给|to)\s+(\S+)/i,
-    capability: "feature.handoff",
-    inputBuilder: (t, ctx) => ({
-      feature: ctx.feature || extractFeatureName(t),
-      to: ctx.to || (t.match(/(?:转交|交接).*(?:给|to)\s+(\S+)/i)?.[1] || ""),
-      note: ctx.note || ""
-    }),
-    reason: "feature handoff intent (chinese)",
-    confidence: 0.9
   }
 ];
 
@@ -584,18 +614,6 @@ function extractCdrDescription(t: string): string {
   for (const p of patterns) {
     const m = t.match(p);
     if (m && m[1]) return m[1].trim();
-  }
-  return "";
-}
-
-function extractAssignee(t: string): string {
-  const patterns = [
-    /(?:assign|指派|分配|handoff|转交|交接)\s+(?:feature\s+)?(?:to\s+|给\s+)?(\S+)/i,
-    /(?:to\s+|给\s+)([a-zA-Z0-9_-]+)/i
-  ];
-  for (const p of patterns) {
-    const m = t.match(p);
-    if (m && m[1] && m[1].toLowerCase() !== "feature") return m[1];
   }
   return "";
 }

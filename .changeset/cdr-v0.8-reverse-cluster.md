@@ -1,0 +1,5 @@
+---
+"dapei-skill": minor
+---
+
+CDR v0.8 — Reverse-cluster to L1. The L1 capability map, previously hand-rolled by the AI via `cdr.capability.map.init`, is now reachable through an engine-driven pipeline: `cdr.domain.suggest` reads `behavior.events[]`, `behavior.writes[]`, `behavior.calls[].target_repo`, and `business-rule.applies_to[]` from the cognitive index and writes a suggestions file the AI reviews; `cdr.capability.map.synth` clusters domains (composed or suggested) into capabilities and back-fills `spans_repos` / `behavior_count` / `fact_ratio` from the index; `cdr.reversecluster.doc.generate` renders a new `/l1/` portal section peer of `/cross-repo/`. Hard contract: `cdr.domain.suggest` never calls `cdr.domain.compose` — suggest and commit stay two separate steps. Cognitive index now tracks `events[]` and `writes[]` on behavior index entries (both optional, pre-v0.8 entries keep working). Six new router intents (English + 中文) with load-bearing pattern precedence documented in-code.

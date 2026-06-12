@@ -5,15 +5,48 @@ import { parseYamlDocument, stringifyYamlDocument } from "./yaml-doc.ts";
 import type { ArtifactType } from "./evidence.ts";
 import { parseConfidence } from "./evidence.ts";
 
-export interface IndexBehaviorEntry {
+/**
+ * v0.4 — `stale` and `stale_reason` are reserved for `cdr.stale.scan` (planned
+ * but not yet implemented). Adding the fields now keeps the index schema
+ * stable across the next PR that lands `cdr.stale.scan`.
+ */
+export interface StaleFields {
+  stale?: boolean;
+  stale_reason?: string;
+  stale_at?: string;
+  stale_base?: string;
+}
+
+export interface IndexBehaviorEntry extends StaleFields {
   id: string;
   path: string;
   repo?: string;
   kind: string;
   level: string;
+  /**
+   * v0.6 — set of repo names this behavior calls into, derived from
+   * structured `calls[]` entries that carry an explicit `target_repo`.
+   * Strings and object calls without `target_repo` do not contribute.
+   * Optional; pre-v0.6 index entries that lack the field keep working.
+   */
+  target_repos?: string[];
+  /**
+   * v0.8 — event names this behavior emits (from `events[]` on the
+   * behavior YAML). The reverse-cluster pipeline uses these to find
+   * behaviors that share the same event names as cross-repo signals.
+   * Optional; pre-v0.8 entries without the field keep working.
+   */
+  events?: string[];
+  /**
+   * v0.8 — table / collection names this behavior writes (from
+   * `writes[]` on the behavior YAML). Used as a secondary
+   * reverse-cluster signal when events are missing.
+   * Optional.
+   */
+  writes?: string[];
 }
 
-export interface IndexStateMachineEntry {
+export interface IndexStateMachineEntry extends StaleFields {
   entity: string;
   path: string;
   repo?: string;
@@ -21,20 +54,20 @@ export interface IndexStateMachineEntry {
   level: string;
 }
 
-export interface IndexDomainEntry {
+export interface IndexDomainEntry extends StaleFields {
   domain: string;
   path: string;
   repo?: string;
   derived_from: string[];
 }
 
-export interface IndexCapabilityMapEntry {
+export interface IndexCapabilityMapEntry extends StaleFields {
   product: string;
   path: string;
   capability_count: number;
 }
 
-export interface IndexBusinessRuleEntry {
+export interface IndexBusinessRuleEntry extends StaleFields {
   id: string;
   kind: string;
   path: string;
@@ -104,6 +137,45 @@ export function cognitivePaths(rootDir: string) {
   };
 }
 
+/**
+ * v0.4 — per-repo namespace for `behavior` / `state-machine` / `business-rule`.
+ * The path resolves to `docs/as-is/<section>/<repo>/<id>.yaml` when `repo`
+ * is provided. Capabilities/domains stay global (single source of truth per
+ * product / domain). Profiles/entries keep their existing per-repo layout.
+ *
+ * Existing flat files (`docs/as-is/behavior/<id>.yaml` written by pre-v0.4
+ * capability calls) are still readable; `loadCognitiveIndex` does not enforce
+ * the new path layout. New writes always go through this function.
+ */
+export function artifactRelativePath(type: ArtifactType, doc: Record<string, unknown>): string {
+  const repo = typeof doc.repo === "string" && doc.repo.trim() ? doc.repo.trim() : undefined;
+  if (type === "behavior") {
+    const id = String(doc.id || "unknown");
+    return repo
+      ? `docs/as-is/behavior/${repo}/${id}.yaml`
+      : `docs/as-is/behavior/${id}.yaml`;
+  }
+  if (type === "domain") {
+    const domain = String(doc.domain || "unknown").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+    return repo
+      ? `docs/as-is/domains/${repo}/${domain}.yaml`
+      : `docs/as-is/domains/${domain}.yaml`;
+  }
+  if (type === "capability-map") {
+    return `docs/as-is/capabilities/product-map.yaml`;
+  }
+  if (type === "business-rule") {
+    const id = String(doc.id || "unknown").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+    return repo
+      ? `docs/as-is/business-rules/${repo}/${id}.yaml`
+      : `docs/as-is/business-rules/${id}.yaml`;
+  }
+  const entity = String(doc.entity || "unknown").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+  return repo
+    ? `docs/as-is/state-machines/${repo}/${entity}.yaml`
+    : `docs/as-is/state-machines/${entity}.yaml`;
+}
+
 export function loadCognitiveIndex(rootDir: string): CognitiveIndex {
   const { indexFile } = cognitivePaths(rootDir);
   if (!existsSync(indexFile)) {
@@ -141,39 +213,77 @@ export function saveCognitiveIndex(rootDir: string, index: CognitiveIndex): void
   write(indexFile, stringifyYamlDocument(index as unknown as Record<string, import("./yaml-doc.ts").YamlValue>));
 }
 
-export function artifactRelativePath(type: ArtifactType, doc: Record<string, unknown>): string {
-  if (type === "behavior") {
-    const id = String(doc.id || "unknown");
-    return `docs/as-is/behavior/${id}.yaml`;
-  }
-  if (type === "domain") {
-    const domain = String(doc.domain || "unknown").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
-    return `docs/as-is/domains/${domain}.yaml`;
-  }
-  if (type === "capability-map") {
-    return `docs/as-is/capabilities/product-map.yaml`;
-  }
-  if (type === "business-rule") {
-    const id = String(doc.id || "unknown").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
-    return `docs/as-is/business-rules/${id}.yaml`;
-  }
-  const entity = String(doc.entity || "unknown").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
-  return `docs/as-is/state-machines/${entity}.yaml`;
-}
-
 export function upsertIndexEntry(
   index: CognitiveIndex,
   type: ArtifactType,
   relPath: string,
   doc: Record<string, unknown>
 ): CognitiveIndex {
-  const confidence = parseConfidence(doc.confidence);
+  // v0.8 — capability-map artifacts do not carry a confidence block
+  // (their validity is decided by the engine from product+capabilities),
+  // so skip parseConfidence for that type. All other artifact types
+  // (behavior, state-machine, domain, business-rule) still require it.
+  const confidence = type === "capability-map"
+    ? { level: "unknown" as const, kind: "unknown" as const }
+    : parseConfidence(doc.confidence);
   const repo = doc.repo ? String(doc.repo) : undefined;
 
   if (type === "behavior") {
     const id = String(doc.id);
-    index.behaviors = index.behaviors.filter((b) => b.id !== id);
-    index.behaviors.push({ id, path: relPath, repo, kind: confidence.kind, level: confidence.level });
+    // v0.4 — per-repo dedup: the same behavior id from two different repos
+    // is two distinct index entries. We key on (id, repo); behavior without
+    // a repo (legacy) is treated as the global namespace and still de-duped
+    // by id alone.
+    index.behaviors = index.behaviors.filter((b) => !(b.id === id && (b.repo || "") === (repo || "")));
+    // v0.6 — extract target_repos from structured calls[]. Only object
+    // calls with an explicit `target_repo` field contribute. We do not
+    // attempt to infer target_repo from a free-form target string.
+    let targetRepos: string[] | undefined;
+    if (Array.isArray(doc.calls)) {
+      const set = new Set<string>();
+      for (const c of doc.calls as unknown[]) {
+        if (c && typeof c === "object" && !Array.isArray(c)) {
+          const co = c as Record<string, unknown>;
+          const tr = typeof co.target_repo === "string" ? co.target_repo.trim() : "";
+          if (tr) set.add(tr);
+        }
+      }
+      if (set.size > 0) targetRepos = [...set].sort();
+    }
+    // v0.8 — extract events[] and writes[] straight from the behavior doc.
+    // Both fields are simple string arrays. Sorting keeps the index diff
+    // stable across calls that pass the same content in different order.
+    let events: string[] | undefined;
+    if (Array.isArray(doc.events)) {
+      const evs = (doc.events as unknown[])
+        .map((x) => (typeof x === "string" ? x.trim() : ""))
+        .filter((x) => x.length > 0);
+      if (evs.length > 0) events = [...new Set(evs)].sort();
+    }
+    let writes: string[] | undefined;
+    if (Array.isArray(doc.writes)) {
+      // writes[] entries are { table?, target?, ... } — we project to the
+      // resource name (table or target) because that is the field
+      // reverse-cluster uses to match behaviors that touch the same store.
+      const ws = (doc.writes as unknown[])
+        .map((x) => {
+          if (typeof x === "string") return x.trim();
+          if (x && typeof x === "object") {
+            const o = x as Record<string, unknown>;
+            const t = typeof o.table === "string" ? o.table.trim() : "";
+            const g = typeof o.target === "string" ? o.target.trim() : "";
+            return t || g;
+          }
+          return "";
+        })
+        .filter((x) => x.length > 0);
+      if (ws.length > 0) writes = [...new Set(ws)].sort();
+    }
+    const entry: IndexBehaviorEntry = { id, path: relPath, repo, kind: confidence.kind, level: confidence.level };
+    if (targetRepos) entry.target_repos = targetRepos;
+    if (events) entry.events = events;
+    if (writes) entry.writes = writes;
+    index.behaviors.push(entry);
     if (confidence.kind === "unknown" && doc.reason) {
       index.unknowns = index.unknowns.filter((u) => u.id !== id);
       index.unknowns.push({
@@ -185,7 +295,8 @@ export function upsertIndexEntry(
     }
   } else if (type === "state-machine") {
     const entity = String(doc.entity);
-    index.state_machines = index.state_machines.filter((s) => s.entity !== entity);
+    // v0.4 — same per-repo dedup rule for state machines.
+    index.state_machines = index.state_machines.filter((s) => !(s.entity === entity && (s.repo || "") === (repo || "")));
     index.state_machines.push({ entity, path: relPath, repo, kind: confidence.kind, level: confidence.level });
     if (confidence.kind === "unknown" && doc.reason) {
       index.unknowns = index.unknowns.filter((u) => u.id !== entity);
@@ -198,7 +309,10 @@ export function upsertIndexEntry(
     }
   } else if (type === "domain") {
     const domain = String(doc.domain);
-    index.domains = index.domains.filter((d) => d.domain !== domain);
+    // v0.4 — domain: same id across repos is now a single domain if no repo,
+    // two domains if they differ by repo. Legacy global domains still
+    // dedupe on id alone.
+    index.domains = index.domains.filter((d) => !(d.domain === domain && (d.repo || "") === (repo || "")));
     const derived_from = Array.isArray(doc.derived_from)
       ? doc.derived_from.map((x: unknown) => String(x))
       : [];
@@ -211,7 +325,8 @@ export function upsertIndexEntry(
   } else if (type === "business-rule") {
     const id = String(doc.id);
     const kind = optionalString(doc.kind) || "unknown";
-    index.business_rules = index.business_rules.filter((b) => b.id !== id);
+    // v0.4 — per-repo dedup for business rules.
+    index.business_rules = index.business_rules.filter((b) => !(b.id === id && (b.repo || "") === (repo || "")));
     index.business_rules.push({
       id,
       kind,
@@ -240,7 +355,7 @@ export function upsertRepoSnapshot(index: CognitiveIndex, snapshot: RepoSnapshot
 }
 
 export function markAssetStale(index: CognitiveIndex, asset: StaleAsset): CognitiveIndex {
-  index.stale_assets = index.stale_assets.filter((a) => a.id !== asset.id);
+  index.stale_assets = index.stale_assets.filter((a) => !(a.id === asset.id && (a.repo || "") === (asset.repo || "")));
   index.stale_assets.push(asset);
   return index;
 }
@@ -248,12 +363,4 @@ export function markAssetStale(index: CognitiveIndex, asset: StaleAsset): Cognit
 export function clearAssetStale(index: CognitiveIndex, assetId: string): CognitiveIndex {
   index.stale_assets = index.stale_assets.filter((a) => a.id !== assetId);
   return index;
-}
-
-export function resolveArtifactType(path: string): "behavior" | "state-machine" | "domain" | "business-rule" | "capability-map" {
-  if (path.includes("/behavior/")) return "behavior";
-  if (path.includes("/state-machines/")) return "state-machine";
-  if (path.includes("/domains/")) return "domain";
-  if (path.includes("/business-rules/")) return "business-rule";
-  return "capability-map";
 }

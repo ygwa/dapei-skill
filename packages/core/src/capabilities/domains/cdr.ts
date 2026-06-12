@@ -1,28 +1,21 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { basename, join, relative } from "node:path";
-import type { CapabilitySpec } from "../../core/src/types.ts";
-import { CapabilityError } from "../../core/src/types.ts";
-import { assertValidArtifact, validateArtifact, parseConfidence, type SourceRef } from "../../core/src/evidence.ts";
-import type { ArtifactType } from "../../core/src/evidence.ts";
+import type { CapabilitySpec } from "../../types.ts";
+import { CapabilityError } from "../../types.ts";
+import { assertValidArtifact, validateArtifact, parseConfidence, type SourceRef } from "../../evidence.ts";
+import type { ArtifactType } from "../../evidence.ts";
 import {
   artifactRelativePath,
   cognitivePaths,
   loadCognitiveIndex,
   saveCognitiveIndex,
-  upsertIndexEntry,
-  getRepoSnapshot,
-  upsertRepoSnapshot,
-  markAssetStale,
-  clearAssetStale,
-  type RepoSnapshot,
-  type StaleAsset,
-  type StaleSource
-} from "../../core/src/cognitive-index.ts";
-import { parseYamlDocument, stringifyYamlDocument, type YamlValue } from "../../core/src/yaml-doc.ts";
-import { requireFields, detectRepoLanguage, detectTestCommands, parseReposYamlNames, featureRepoNames } from "../../core/src/capabilities/shared.ts";
-import { ensureDir, read, write, runSafe, workspacePaths, listFilesRecursively } from "../../runtime-adapters/src/system.ts";
-import { CodeGraphAdapter } from "../../runtime-adapters/src/codegraph.ts";
+  upsertIndexEntry
+} from "../../cognitive-index.ts";
+import { parseYamlDocument, stringifyYamlDocument, type YamlValue } from "../../yaml-doc.ts";
+import { requireFields, detectRepoLanguage, detectTestCommands, parseReposYamlNames } from "../shared.ts";
+import { ensureDir, read, write, runSafe, workspacePaths, listFilesRecursively } from "../../../../runtime-adapters/src/system.ts";
+import { CodeGraphAdapter } from "../../../../runtime-adapters/src/codegraph.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
 
@@ -217,30 +210,51 @@ export const cdrProfile: AnyCap = {
     const directoryTree = repoDirectoryTree(repoPath, p.rootDir);
     const testCommands = detectTestCommands(repoPath);
 
-    // v0.7 — CodeGraph integration. The profile records what the substrate
-    // actually inspected so downstream consumers (build-cognitive-pages.ts,
-    // the agent itself) can tell whether the graph was used. When the CLI
-    // is missing, the block degrades to a `reason` and the rest of the
-    // profile is unaffected.
-    const adapter = new CodeGraphAdapter(ctx.rootDir);
-    const codegraphBlock: Record<string, YamlValue> = {
-      available: adapter.isAvailable()
-    };
-    if (adapter.isAvailable()) {
-      const orient = adapter.orient(repoPath, { maxFiles: 1, maxBytes: 0 });
-      codegraphBlock.version = adapter.getDoctor().version || "";
-      codegraphBlock.backend = orient.backend;
-      codegraphBlock.files_total = orient.files_total || 0;
-      if (orient.apisurface_count !== undefined) {
-        codegraphBlock.apisurface_count = orient.apisurface_count;
+    // v0.7 — try CodeGraph first; degrade gracefully. The doctor probe
+    // happens once per process; the profile output always records the
+    // state so consumers can tell native from fallback.
+    let codegraphBlock: Record<string, YamlValue> = {};
+    let reportNote = "";
+    try {
+      const adapter = new CodeGraphAdapter(ctx.rootDir);
+      const doc = adapter.fullDoctor();
+      if (doc.available) {
+        const orient = adapter.orient(repoPath, {});
+        codegraphBlock = {
+          available: true,
+          version: doc.version || null,
+          backend: orient.backend,
+          indexed_at: orient.indexed_at,
+          files_total: orient.files_total ?? orient.files.length,
+          apisurface_count: orient.apisurface_count ?? null
+        };
+        reportNote = `codegraph: ${doc.version || "unknown"} (${orient.files.length} files via native backend)`;
+      } else {
+        codegraphBlock = {
+          available: false,
+          version: null,
+          backend: "fallback",
+          reason: doc.reason || "codegraph CLI not in PATH"
+        };
+        reportNote = "codegraph: fallback (tree walk + manifest)";
+        adapter.markUnavailable();
       }
-    } else {
-      codegraphBlock.reason = adapter.getDoctor().reason || "codegraph CLI not in PATH";
+    } catch {
+      // Adapter construction must never block a profile write. The
+      // doctor failure is a degraded-data signal, not a hard error.
+      codegraphBlock = { available: false, backend: "fallback", reason: "adapter init failed" };
+      reportNote = "codegraph: fallback (adapter init failed)";
     }
 
     // v0.3: removed `frameworks` field. The engine no longer prescribes which
     // frameworks a repo uses — the AI reads manifest_files + directory_tree
     // and decides. See cdr-architecture.md "AI as scanner" principle.
+    // v0.7: the `codegraph` field re-introduces structured metadata about
+    // what the platform actually inspected, but it is metadata about the
+    // substrate, not a claim about the repo's framework. The dangling
+    // `data.codegraph.files_total` reference in
+    // runtime/templates/docs/scripts/build-cognitive-pages.ts is finally
+    // populated.
     const profileData: Record<string, YamlValue> = {
       repo,
       generated_at: ctx.now.toISOString(),
@@ -248,7 +262,7 @@ export const cdrProfile: AnyCap = {
       manifest_files: manifestFiles,
       directory_tree: directoryTree,
       test_commands: testCommands,
-      codegraph: codegraphBlock as YamlValue
+      codegraph: codegraphBlock
     };
 
     const outDir = profilesDir(ctx.rootDir);
@@ -267,7 +281,7 @@ export const cdrProfile: AnyCap = {
         codegraph: codegraphBlock
       },
       sideEffects: [`profile written: ${relative(p.rootDir, outFile)}`],
-      reportFragments: [`generated profile for ${repo}`]
+      reportFragments: [`generated profile for ${repo}`, reportNote]
     };
   }
 };
@@ -311,75 +325,80 @@ export const cdrEntriesCandidate: AnyCap = {
       ? Math.min(input.max_bytes, 2_000_000)
       : MAX_FILE_BYTES;
 
-    // v0.7 — prefer CodeGraph when present. The adapter returns a richer
-    // structure (each file carries `apisurface_hint` when the CLI tagged it)
-    // and reports `backend: 'native'`. When the CLI is missing the adapter
-    // returns `available: false` and we fall back to the v0.3 tree walk
-    // with `backend: 'fallback'`. Existing callers see the same `files[]`
-    // shape; new callers branch on `data.backend` to use richer output.
-    const adapter = new CodeGraphAdapter(ctx.rootDir);
-    const orient = adapter.orient(repoPath, { maxFiles, maxBytes });
-    let backend: "native" | "fallback" = "fallback";
-    let backendReason: string | undefined;
-    if (!orient.available) {
-      backendReason = orient.reason || adapter.getDoctor().reason || "codegraph CLI not available";
-    }
-    let fileEntries: Array<Record<string, YamlValue>>;
+    const fileEntries: Array<Record<string, YamlValue>> = [];
     const skipped: Array<{ relpath: string; reason: string }> = [];
+    let backendUsed: "native" | "fallback" = "fallback";
+    let backendReason: string | undefined;
 
-    if (orient.available && orient.files.length > 0) {
-      backend = "native";
-      fileEntries = orient.files.map((f) => {
-        const entry: Record<string, YamlValue> = {
+    // v0.7 — try CodeGraph orient first. When the CLI is present the
+    // result is structurally richer (it knows about apisurface hints,
+    // test data flow, etc.). When it is not, we fall back to the v0.3
+    // tree walk — same behaviour as before, no functional regression.
+    let codegraphFiles: Array<{ relpath: string; content: string; size_bytes: number; truncated: boolean; apisurface_hint?: unknown }> = [];
+    try {
+      const adapter = new CodeGraphAdapter(ctx.rootDir);
+      const orient = adapter.orient(repoPath, { maxFiles, maxBytes });
+      if (orient.available && orient.files.length > 0) {
+        backendUsed = "native";
+        codegraphFiles = orient.files.map((f) => ({
           relpath: f.relpath,
-          language: f.language,
+          content: f.content,
           size_bytes: f.size_bytes,
           truncated: f.truncated,
-          content: f.content
-        };
-        if (f.apisurface_hint) entry.apisurface_hint = f.apisurface_hint as unknown as YamlValue;
-        return entry;
-      });
-    } else {
-      const allFiles = listFilesRecursively(repoPath, CODE_EXTS, maxFiles);
-      fileEntries = [];
-      for (const filePath of allFiles) {
-        const relFile = relative(repoPath, filePath);
-        let content = "";
-        let truncated = false;
-        try {
-          const raw = read(filePath);
-          if (raw.length > maxBytes) {
-            content = raw.slice(0, maxBytes);
-            truncated = true;
-            skipped.push({ relpath: relFile, reason: `exceeds ${maxBytes} bytes` });
-          } else {
-            content = raw;
-          }
-        } catch {
-          skipped.push({ relpath: relFile, reason: "unreadable" });
-          continue;
+          apisurface_hint: f.apisurface_hint
+        }));
+      } else {
+        backendReason = orient.reason;
+        if (orient.available) {
+          // CLI present but returned no files — still the native path
+          backendUsed = "native";
+        } else {
+          adapter.markUnavailable();
         }
-        fileEntries.push({
-          relpath: relFile,
-          language: languageHintForFile(relFile),
-          size_bytes: content.length,
-          truncated,
-          content
-        });
       }
+    } catch {
+      backendReason = "codegraph adapter init failed; falling back to tree walk";
+    }
+
+    const sources: Array<{ relpath: string; content: string; size_bytes: number; truncated: boolean; apisurface_hint?: unknown }> = codegraphFiles.length > 0
+      ? codegraphFiles
+      : listFilesRecursively(repoPath, CODE_EXTS, maxFiles).map((filePath) => {
+          const relFile = relative(repoPath, filePath);
+          try {
+            const raw = read(filePath);
+            if (raw.length > maxBytes) {
+              skipped.push({ relpath: relFile, reason: `exceeds ${maxBytes} bytes` });
+              return { relpath: relFile, content: raw.slice(0, maxBytes), size_bytes: maxBytes, truncated: true };
+            }
+            return { relpath: relFile, content: raw, size_bytes: raw.length, truncated: false };
+          } catch {
+            skipped.push({ relpath: relFile, reason: "unreadable" });
+            return null;
+          }
+        }).filter((entry): entry is { relpath: string; content: string; size_bytes: number; truncated: boolean } => entry !== null);
+
+    for (const f of sources) {
+      const entry: Record<string, YamlValue> = {
+        relpath: f.relpath,
+        language: languageHintForFile(f.relpath),
+        size_bytes: f.size_bytes,
+        truncated: f.truncated,
+        content: f.content
+      };
+      if (f.apisurface_hint) entry.apisurface_hint = f.apisurface_hint as YamlValue;
+      fileEntries.push(entry);
     }
 
     return {
       ok: true,
       data: {
         repo,
-        backend,
-        ...(backendReason ? { backend_reason: backendReason } : {}),
         file_count: fileEntries.length,
         files: fileEntries as unknown as YamlValue,
         skipped: skipped as unknown as YamlValue,
         max_bytes: maxBytes,
+        backend: backendUsed,
+        backend_reason: backendReason,
         workflow: {
           step: 1,
           phase: "candidate",
@@ -388,7 +407,10 @@ export const cdrEntriesCandidate: AnyCap = {
         }
       },
       sideEffects: [],
-      reportFragments: [`listed ${fileEntries.length} code file(s) in ${repo} for AI triage (backend=${backend})`]
+      reportFragments: [
+        `listed ${fileEntries.length} code file(s) in ${repo} for AI triage`,
+        backendUsed === "native" ? "codegraph backend: native" : "codegraph backend: fallback (tree walk)"
+      ]
     };
   }
 };
@@ -737,11 +759,13 @@ export const cdrDomainCompose: AnyCap = {
       generated_at: ctx.now.toISOString(),
       modules: matchedBehaviors as unknown as YamlValue,
       derived_from: behaviorIds,
-      confidence: {
-        level: "medium",
-        kind: "inference",
-        evidence_type: "composed_from_behaviors"
-      }
+      confidence: input.confidence && typeof input.confidence === "object"
+        ? (input.confidence as YamlValue)
+        : {
+            level: "medium",
+            kind: "inference",
+            evidence_type: "composed_from_behaviors"
+          } as YamlValue
     };
     if (repo) domainDoc.repo = repo;
     if (Array.isArray(input.sources)) domainDoc.sources = input.sources as unknown as YamlValue;
@@ -758,9 +782,8 @@ export const cdrDomainCompose: AnyCap = {
       throw new CapabilityError("INVALID_ARTIFACT", errors.join("; "));
     }
 
-    const outDir = cp.domainDir;
-    ensureDir(outDir);
-    const outFile = join(outDir, `${domainSlug}.yaml`);
+    const relPath = artifactRelativePath("domain", domainDoc as Record<string, unknown>);
+    const outFile = join(ctx.rootDir, relPath);
     write(outFile, stringifyYamlDocument(domainDoc));
 
     return {
@@ -1059,6 +1082,83 @@ export const cdrIndexList: AnyCap = {
 // 10. cdr.behavior.upsert
 // ---------------------------------------------------------------------------
 
+/**
+ * v0.7 — for each structured call that carries an `evidence` SourceRef
+ * pointing at a call site, ask the CodeGraph adapter whether the
+ * call site actually references the named `target`. Returns an
+ * array of error strings (empty when everything checks out).
+ *
+ * The adapter is reused across calls in the same `cdr.behavior.upsert`
+ * invocation so we only pay the doctor probe cost once. When the
+ * CLI is not present, this function returns an empty array and
+ * the upsert proceeds; the user has accepted the absence.
+ */
+function validateStructuredCallsAgainstCodeGraph(
+  ctx: { rootDir: string },
+  doc: Record<string, unknown>
+): string[] {
+  const calls = Array.isArray(doc.calls) ? doc.calls : [];
+  if (calls.length === 0) return [];
+
+  // Pre-filter to structured calls with both an evidence and a target.
+  // Legacy string calls and structured calls without evidence are out
+  // of scope for this check (the engine does not know where the call
+  // happens, so it cannot ask CodeGraph).
+  const checkable: Array<{ idx: number; target: string; file: string; line: number | undefined; repo: string | undefined }> = [];
+  for (const [i, raw] of calls.entries()) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const co = raw as Record<string, unknown>;
+    const target = typeof co.target === "string" ? co.target : "";
+    const ev = co.evidence && typeof co.evidence === "object" && !Array.isArray(co.evidence) ? co.evidence as Record<string, unknown> : null;
+    if (!target || !ev) continue;
+    const file = typeof ev.file === "string" ? ev.file : "";
+    const line = typeof ev.line === "number" ? ev.line : undefined;
+    const repo = typeof doc.repo === "string" ? doc.repo : undefined;
+    if (!file) continue;
+    checkable.push({ idx: i, target, file, line, repo });
+  }
+  if (checkable.length === 0) return [];
+
+  let adapter: CodeGraphAdapter | null = null;
+  try {
+    adapter = new CodeGraphAdapter(ctx.rootDir);
+    if (!adapter.isAvailable()) return [];
+  } catch {
+    return [];
+  }
+
+  const errors: string[] = [];
+  for (const c of checkable) {
+    const repoPath = c.repo ? join(workspacePaths(ctx.rootDir).reposDir, c.repo) : "";
+    if (!repoPath || !existsSync(repoPath)) continue;
+    const refs = adapter.refs(repoPath, { file: c.file, line: c.line });
+    if (!refs.available) continue;
+    const found = refs.callees.some((cal) => matchesTargetName(cal.name, c.target));
+    if (!found) {
+      errors.push(
+        `calls[${c.idx}].target '${c.target}' not found in codegraph refs of ${c.file}:${c.line || 0} (callees seen: ${refs.callees.map((cal) => cal.name).join(", ") || "none"})`
+      );
+    }
+  }
+  return errors;
+}
+
+function matchesTargetName(calleeName: string, target: string): boolean {
+  if (!calleeName || !target) return false;
+  // Exact match, dot-segment match (PaymentClient === PaymentClient),
+  // or method-on-instance match (FooClient.create === FooClient).
+  if (calleeName === target) return true;
+  const targetTail = target.includes(".") ? target.split(".").pop() || target : target;
+  const calleeTail = calleeName.includes(".") ? calleeName.split(".").pop() || calleeName : calleeName;
+  if (targetTail === calleeTail) return true;
+  // topic:event form: target = 'order.events:order.created' -> look for
+  // 'order.events' or 'order.created' as a substring match.
+  if (target.includes(":") && (calleeName.includes(target.split(":")[0]) || calleeName.includes(target.split(":")[1] || ""))) {
+    return true;
+  }
+  return false;
+}
+
 export const cdrBehaviorUpsert: AnyCap = {
   id: "cdr.behavior.upsert",
   version: "1.0.0",
@@ -1089,79 +1189,37 @@ export const cdrBehaviorUpsert: AnyCap = {
     if (Array.isArray(input.steps)) doc.steps = input.steps as unknown as YamlValue;
     if (Array.isArray(input.writes)) doc.writes = input.writes as unknown as YamlValue;
     if (Array.isArray(input.events)) doc.events = input.events.map((x: unknown) => String(x)) as unknown as YamlValue;
-    // v0.6 — structured calls[]. Preserve objects (v0.5 used calls.map(String)
-    // which silently turned objects into the literal "[object Object]").
-    // Legacy string calls pass through unchanged; object calls with `target`
-    // / `protocol` / `target_repo` / `evidence` keep their structure.
-    if (Array.isArray(input.calls)) {
-      doc.calls = input.calls.map((c: unknown) => {
-        if (typeof c === "string") return c as unknown as YamlValue;
-        if (c && typeof c === "object" && !Array.isArray(c)) {
-          const co = c as Record<string, unknown>;
-          // v0.6 minimal validation: structured calls must have `target`.
-          // Protocol is optional but if present must be a known string.
-          if (typeof co.target !== "string" || !co.target.trim()) {
-            throw new CapabilityError("INVALID_INPUT", "calls[0].target is required");
-          }
-          if (co.protocol !== undefined && (typeof co.protocol !== "string" || !["http", "grpc", "mq", "sql", "function"].includes(co.protocol))) {
-            throw new CapabilityError("INVALID_INPUT", `structured call protocol must be one of http|grpc|mq|sql|function, got: ${String(co.protocol)}`);
-          }
-          return co as unknown as YamlValue;
-        }
-        throw new CapabilityError("INVALID_INPUT", "call entries must be strings or objects");
-      }) as unknown as YamlValue;
-    }
     if (Array.isArray(input.risks)) doc.risks = input.risks.map((x: unknown) => String(x)) as unknown as YamlValue;
+    // v0.6 — calls[] now accepts a mix of strings and structured objects.
+    // The previous v0.5 behaviour stringified every entry, which silently
+    // turned any object call into the literal string "[object Object]".
+    // Preserve structure so doc-gen can render the rich form, and so
+    // cognitive-index can extract target_repos from explicit hints.
+    if (Array.isArray(input.calls)) {
+      doc.calls = input.calls as unknown as YamlValue;
+    }
     if (Array.isArray(input.sources)) doc.sources = input.sources as unknown as YamlValue;
     if (Array.isArray(input.derived_from)) doc.derived_from = input.derived_from.map((x: unknown) => String(x)) as unknown as YamlValue;
     if (input.reason) doc.reason = String(input.reason);
     doc.confidence = input.confidence as YamlValue;
 
-    // v0.7 — CodeGraph refs cross-check. For each structured call that
-    // carries an `evidence` SourceRef, ask the adapter whether the
-    // named `target` appears in the call-graph neighborhood at that
-    // file:line. When the CLI is present and the target is NOT in
-    // refs, the call is rejected with INVALID_EVIDENCE — the user
-    // has CodeGraph and expects accuracy. When the CLI is missing,
-    // the check is skipped (graceful degradation) — the user has
-    // accepted the absence by not installing the CLI. The single
-    // doctor probe means every calls[] entry in one upsert
-    // invocation shares one CLI invocation.
-    if (Array.isArray(doc.calls) && input.repo) {
-      const adapter = new CodeGraphAdapter(ctx.rootDir);
-      if (adapter.isAvailable()) {
-        const repoPath = join(workspacePaths(ctx.rootDir).reposDir, String(input.repo));
-        for (let i = 0; i < (doc.calls as unknown[]).length; i++) {
-          const c = (doc.calls as unknown[])[i];
-          if (!c || typeof c !== "object") continue;
-          const co = c as Record<string, unknown>;
-          const evidence = co.evidence as Record<string, unknown> | undefined;
-          if (!evidence || typeof evidence.file !== "string") continue;
-          const refsRes = adapter.refs(repoPath, {
-            file: String(evidence.file),
-            line: typeof evidence.line === "number" ? evidence.line : undefined
-          });
-          if (!refsRes.available) continue;
-          const target = String(co.target);
-          const matched = refsRes.callees.some((cal) => {
-            if (cal.name === target) return true;
-            if (cal.name.endsWith("." + target)) return true;
-            return false;
-          });
-          if (!matched) {
-            throw new CapabilityError(
-              "INVALID_EVIDENCE",
-              `calls[${i}].target '${target}' not found in codegraph refs at ${evidence.file}:${evidence.line || 0}`
-            );
-          }
-        }
-      }
-    }
-
     // P1: validate sources[] point at real code (file exists, line in range)
     const evidenceErrors = validateEvidencePoints(ctx, doc as Record<string, unknown>);
     if (evidenceErrors.length) {
       throw new CapabilityError("INVALID_EVIDENCE", evidenceErrors.join("; "));
+    }
+
+    // v0.7 — when CodeGraph is present, cross-check structured
+    // calls[].target against the call-graph. The check is per-call:
+    // for each structured call that carries a SourceRef evidence
+    // pointing at a call site, ask the adapter whether that site
+    // actually references the named target. If CodeGraph is present
+    // and the target is NOT in the refs list, reject. If CodeGraph
+    // is missing, skip the check (graceful degradation; the user has
+    // accepted the absence by not installing the CLI).
+    const structuredCallErrors = validateStructuredCallsAgainstCodeGraph(ctx, doc);
+    if (structuredCallErrors.length) {
+      throw new CapabilityError("INVALID_EVIDENCE", structuredCallErrors.join("; "));
     }
 
     const errors = validateArtifact("behavior", doc as Record<string, unknown>);
@@ -1245,7 +1303,7 @@ export const cdrStateDerive: AnyCap = {
     additionalProperties: false
   },
   async execute(ctx, input) {
-    requireFields(input as Record<string, import("../../core/src/types.ts").Json>, ["entity", "behaviors"]);
+    requireFields(input as Record<string, import("../../types.ts").Json>, ["entity", "behaviors"]);
     const entity = String(input.entity);
     const behaviorIds: string[] = Array.isArray(input.behaviors)
       ? input.behaviors.map((b: unknown) => String(b))
@@ -1257,33 +1315,22 @@ export const cdrStateDerive: AnyCap = {
     }
 
     const cp = cognitivePaths(ctx.rootDir);
+    const index = loadCognitiveIndex(ctx.rootDir);
     const allStates = new Set<string>();
     const allTransitions: Array<Record<string, YamlValue>> = [];
     const derivedFrom: string[] = [];
     const missingBehaviors: string[] = [];
 
     for (const bid of behaviorIds) {
-      // v0.4 — per-repo layout: try the flat path first (legacy), then any
-      // per-repo subdirectory. We do not know which repo the behavior
-      // lives under at this point (behaviorIds is a flat list), so we
-      // glob one level deep under behaviorDir.
-      const flatPath = join(cp.behaviorDir, `${bid}.yaml`);
-      let behaviorPath: string | null = null;
-      if (existsSync(flatPath)) {
-        behaviorPath = flatPath;
-      } else {
-        const subdirs = readdirSync(cp.behaviorDir).filter((d) => {
-          try {
-            return existsSync(join(cp.behaviorDir, d, `${bid}.yaml`));
-          } catch {
-            return false;
-          }
-        });
-        if (subdirs.length > 0) {
-          behaviorPath = join(cp.behaviorDir, subdirs[0], `${bid}.yaml`);
-        }
-      }
-      if (!behaviorPath) {
+      // v0.4 — look up the canonical path via the cognitive index so we can
+      // resolve per-repo behavior files (`docs/as-is/behavior/<repo>/<id>.yaml`)
+      // without guessing. Falls back to the flat legacy path for pre-v0.4
+      // artifacts only when the index does not know about the id.
+      const indexEntry = index.behaviors.find((b) => b.id === bid);
+      const behaviorPath = indexEntry
+        ? join(ctx.rootDir, indexEntry.path)
+        : join(cp.behaviorDir, `${bid}.yaml`);
+      if (!existsSync(behaviorPath)) {
         missingBehaviors.push(bid);
         continue;
       }
@@ -1333,7 +1380,6 @@ export const cdrStateDerive: AnyCap = {
     const absPath = join(ctx.rootDir, relPath);
     write(absPath, stringifyYamlDocument(draft));
 
-    const index = loadCognitiveIndex(ctx.rootDir);
     upsertIndexEntry(index, "state-machine", relPath, draft as Record<string, unknown>);
     saveCognitiveIndex(ctx.rootDir, index);
 
@@ -1355,336 +1401,6 @@ export const cdrStateDerive: AnyCap = {
   }
 };
 
-function getCurrentCommitHash(repoPath: string, rootDir: string): string {
-  const hash = runSafe("git", ["-C", repoPath, "rev-parse", "HEAD"], rootDir);
-  return hash || "";
-}
-
-function getRepoFilesChangedSince(repoPath: string, rootDir: string, sinceCommit: string): Set<string> {
-  if (!sinceCommit) return new Set();
-  const out = runSafe(
-    "git",
-    ["-C", repoPath, "diff", "--name-only", `${sinceCommit}..HEAD`],
-    rootDir
-  );
-  if (!out) return new Set();
-  return new Set(out.trim().split("\n").filter(Boolean));
-}
-
-export const cdrAssetStaleCheck: AnyCap = {
-  id: "cdr.asset.stalecheck",
-  version: "1.0.0",
-  inputSchema: {
-    properties: {
-      repo: { type: "string" },
-      clear_stale: { type: "boolean" }
-    },
-    additionalProperties: false
-  },
-  async execute(ctx, input) {
-    const p = workspacePaths(ctx.rootDir);
-    const repoFilter = input.repo ? String(input.repo) : undefined;
-    const clearStale = input.clear_stale === true;
-
-    const index = loadCognitiveIndex(ctx.rootDir);
-
-    const reposToCheck: string[] = [];
-    if (repoFilter) {
-      const repoPath = join(p.reposDir, repoFilter);
-      if (!existsSync(repoPath)) {
-        throw new CapabilityError("REPO_MISSING", `repos/${repoFilter} not found`);
-      }
-      reposToCheck.push(repoFilter);
-    } else {
-      for (const entry of readdirSync(p.reposDir)) {
-        const repoPath = join(p.reposDir, entry);
-        if (existsSync(join(repoPath, ".git"))) {
-          reposToCheck.push(entry);
-        }
-      }
-    }
-
-    const now = ctx.now.toISOString();
-    const newlyStale: StaleAsset[] = [];
-    const cleared: string[] = [];
-
-    for (const repo of reposToCheck) {
-      const repoPath = join(p.reposDir, repo);
-      const currentHash = getCurrentCommitHash(repoPath, p.rootDir);
-      if (!currentHash) continue;
-
-      const snapshot = getRepoSnapshot(index, repo);
-      const lastHash = snapshot?.commit_hash;
-
-      const newSnapshot: RepoSnapshot = {
-        repo,
-        commit_hash: currentHash,
-        committed_at: runSafe("git", ["-C", repoPath, "log", "-1", "--format=%ci", "--", "HEAD"], p.rootDir) || now,
-        analyzed_at: now,
-        source_snapshots: snapshot?.source_snapshots || {}
-      };
-
-      if (lastHash && lastHash !== currentHash) {
-        const changedFiles = getRepoFilesChangedSince(repoPath, p.rootDir, lastHash);
-        if (changedFiles.size > 0) {
-          newSnapshot.source_snapshots = { ...newSnapshot.source_snapshots };
-          for (const file of changedFiles) {
-            newSnapshot.source_snapshots[file] = currentHash;
-          }
-        }
-      }
-
-      upsertRepoSnapshot(index, newSnapshot);
-
-      const allArtifacts: Array<{ id: string; path: string; repo?: string; artifact_type: "behavior" | "state-machine" | "domain" | "business-rule" | "capability-map" }> = [];
-
-      for (const b of index.behaviors) {
-        allArtifacts.push({ id: b.id, path: b.path, repo: b.repo, artifact_type: "behavior" });
-      }
-      for (const s of index.state_machines) {
-        allArtifacts.push({ id: s.entity, path: s.path, repo: s.repo, artifact_type: "state-machine" });
-      }
-      for (const d of index.domains) {
-        allArtifacts.push({ id: d.domain, path: d.path, repo: d.repo, artifact_type: "domain" });
-      }
-      for (const r of index.business_rules) {
-        allArtifacts.push({ id: r.id, path: r.path, repo: r.repo, artifact_type: "business-rule" });
-      }
-
-      for (const artifact of allArtifacts) {
-        if (repoFilter && artifact.repo !== repoFilter) continue;
-        const absPath = join(ctx.rootDir, artifact.path);
-        if (!existsSync(absPath)) continue;
-
-        const doc = parseYamlDocument(read(absPath));
-        const sources = Array.isArray(doc.sources) ? doc.sources : [];
-        if (!sources.length) continue;
-
-        const artifactRepo = artifact.repo || (doc as Record<string, unknown>).repo as string;
-        if (artifactRepo !== repo) continue;
-
-        const staleSources: StaleSource[] = [];
-
-        for (const src of sources) {
-          if (!src || typeof src !== "object" || Array.isArray(src)) continue;
-          const s = src as Record<string, unknown>;
-          const file = typeof s.file === "string" ? s.file.trim() : "";
-          if (!file) continue;
-
-          const lastValidCommit = snapshot?.source_snapshots[file] || lastHash || "";
-          if (!lastValidCommit) continue;
-
-          const changedFiles = lastHash ? getRepoFilesChangedSince(repoPath, p.rootDir, lastValidCommit) : new Set<string>();
-          if (!changedFiles.has(file)) continue;
-
-          staleSources.push({
-            file,
-            last_valid_commit: lastValidCommit,
-            current_commit: currentHash,
-            reason: "new_commits"
-          });
-        }
-
-        if (staleSources.length > 0) {
-          const staleAsset: StaleAsset = {
-            id: artifact.id,
-            artifact_type: artifact.artifact_type === "capability-map" ? "domain" : artifact.artifact_type,
-            path: artifact.path,
-            repo,
-            stale_sources: staleSources,
-            checked_at: now
-          };
-          markAssetStale(index, staleAsset);
-          newlyStale.push(staleAsset);
-        } else if (clearStale) {
-          clearAssetStale(index, artifact.id);
-          cleared.push(artifact.id);
-        }
-      }
-    }
-
-    saveCognitiveIndex(ctx.rootDir, index);
-
-    const reportLines: string[] = [];
-    reportLines.push(`## Stale Asset Check — ${now}`);
-    reportLines.push("");
-    if (newlyStale.length === 0) {
-      reportLines.push("✅ No stale assets detected.");
-    } else {
-      reportLines.push(`⚠️  ${newlyStale.length} artifact(s) have stale sources:`);
-      for (const asset of newlyStale) {
-        reportLines.push(`\n### ${asset.id} [${asset.artifact_type}]`);
-        for (const ss of asset.stale_sources) {
-          reportLines.push(`  - ${ss.file}: changed since ${ss.last_valid_commit.slice(0, 8)}`);
-        }
-      }
-    }
-    if (cleared.length > 0) {
-      reportLines.push(`\n✅ Cleared stale flag for: ${cleared.join(", ")}`);
-    }
-
-    return {
-      ok: true,
-      data: {
-        checked_at: now,
-        repos_checked: reposToCheck,
-        stale_count: newlyStale.length,
-        stale_assets: newlyStale as unknown as YamlValue,
-        cleared_count: cleared.length,
-        cleared,
-        report: reportLines.join("\n")
-      },
-      sideEffects: newlyStale.length > 0 ? ["index updated with stale assets"] : cleared.length > 0 ? ["stale flags cleared"] : [],
-      reportFragments: [
-        `${newlyStale.length} stale asset(s) detected${cleared.length > 0 ? `, ${cleared.length} cleared` : ""}`
-      ]
-    };
-  }
-};
-
-export const cdrArchitectureDriftCheck: AnyCap = {
-  id: "cdr.architecture.driftcheck",
-  version: "1.0.0",
-  inputSchema: {
-    properties: {
-      feature: { type: "string" },
-      repo: { type: "string" }
-    },
-    additionalProperties: false
-  },
-  async execute(ctx, input) {
-    const p = workspacePaths(ctx.rootDir);
-    const featureFilter = input.feature ? String(input.feature) : undefined;
-    const repoFilter = input.repo ? String(input.repo) : undefined;
-
-    const index = loadCognitiveIndex(ctx.rootDir);
-    const now = ctx.now.toISOString();
-    const driftItems: Array<{
-      id: string;
-      artifact_type: string;
-      repo: string;
-      path: string;
-      drift_type: string;
-      detail: string;
-    }> = [];
-
-    const reposToCheck: string[] = [];
-    if (repoFilter) {
-      reposToCheck.push(repoFilter);
-    } else if (featureFilter) {
-      const featureDir = join(p.featuresDir, featureFilter);
-      const featureYaml = join(featureDir, "feature.yaml");
-      if (existsSync(featureYaml)) {
-        for (const repo of featureRepoNames(read(featureYaml))) {
-          reposToCheck.push(repo);
-        }
-      }
-    } else {
-      for (const entry of readdirSync(p.reposDir)) {
-        const repoPath = join(p.reposDir, entry);
-        if (existsSync(join(repoPath, ".git"))) {
-          reposToCheck.push(entry);
-        }
-      }
-    }
-
-    for (const repo of reposToCheck) {
-      const repoPath = join(p.reposDir, repo);
-      if (!existsSync(join(repoPath, ".git"))) continue;
-
-      const currentHash = getCurrentCommitHash(repoPath, p.rootDir);
-      if (!currentHash) continue;
-
-      const repoBehaviors = index.behaviors.filter((b) => b.repo === repo);
-      const repoStateMachines = index.state_machines.filter((s) => s.repo === repo);
-
-      for (const b of repoBehaviors) {
-        const absPath = join(ctx.rootDir, b.path);
-        if (!existsSync(absPath)) {
-          driftItems.push({
-            id: b.id,
-            artifact_type: "behavior",
-            repo,
-            path: b.path,
-            drift_type: "file_missing",
-            detail: "artifact references a file that no longer exists"
-          });
-          continue;
-        }
-
-        const doc = parseYamlDocument(read(absPath));
-        const sources = Array.isArray(doc.sources) ? doc.sources : [];
-        for (const src of sources) {
-          if (!src || typeof src !== "object" || Array.isArray(src)) continue;
-          const s = src as Record<string, unknown>;
-          const file = typeof s.file === "string" ? s.file.trim() : "";
-          if (!file) continue;
-
-          const absSrcFile = join(ctx.rootDir, "repos", repo, file);
-          if (!existsSync(absSrcFile)) {
-            driftItems.push({
-              id: b.id,
-              artifact_type: "behavior",
-              repo,
-              path: b.path,
-              drift_type: "source_file_deleted",
-              detail: `source file ${file} was deleted`
-            });
-          }
-        }
-      }
-
-      for (const s of repoStateMachines) {
-        const absPath = join(ctx.rootDir, s.path);
-        if (!existsSync(absPath)) {
-          driftItems.push({
-            id: s.entity,
-            artifact_type: "state-machine",
-            repo,
-            path: s.path,
-            drift_type: "file_missing",
-            detail: "artifact file no longer exists"
-          });
-        }
-      }
-    }
-
-    const reportLines: string[] = [];
-    reportLines.push(`## Architecture Drift Check — ${now}`);
-    reportLines.push("");
-
-    if (driftItems.length === 0) {
-      reportLines.push("✅ No architecture drift detected.");
-      reportLines.push("");
-      reportLines.push("All behavior and state machine artifacts are consistent with current code.");
-    } else {
-      reportLines.push(`⚠️  ${driftItems.length} drift item(s) detected:`);
-      for (const item of driftItems) {
-        reportLines.push(`\n### ${item.id} [${item.artifact_type}] (${item.repo})`);
-        reportLines.push(`  - **Type**: ${item.drift_type}`);
-        reportLines.push(`  - **Detail**: ${item.detail}`);
-        reportLines.push(`  - **Path**: ${item.path}`);
-      }
-      reportLines.push("");
-      reportLines.push("**Recommendation**: Run `@dapei discover behaviors for <repo>` to re-analyze drifted areas.");
-    }
-
-    return {
-      ok: true,
-      data: {
-        checked_at: now,
-        repos_checked: reposToCheck,
-        drift_count: driftItems.length,
-        drift_items: driftItems as unknown as YamlValue,
-        report: reportLines.join("\n")
-      },
-      sideEffects: [],
-      reportFragments: [
-        `${driftItems.length} drift item(s) detected across ${reposToCheck.length} repo(s)`
-      ]
-    };
-  }
-};
 // ---------------------------------------------------------------------------
 // 12. cdr.business.cross_link — v0.5
 //

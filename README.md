@@ -148,6 +148,9 @@ and requirements (`features/`):
 | `cdr.domain.compose` | `@dapei compose domain Transaction` | `docs/as-is/domains/<domain>.yaml` |
 | `cdr.capability.map.init` | `@dapei init capability map for E-Commerce Mall` | `docs/as-is/capabilities/product-map.yaml` |
 | `cdr.business.compose` | `@dapei compose business order-amount-positive` | `docs/as-is/business-rules/<id>.yaml` (5 kinds: invariant / constraint / authorization / sla / compensation) |
+| `cdr.domain.suggest` (v0.8) | `@dapei suggest domains` | `docs/as-is/cross-repo/domain-suggestions.yaml` (read-only reverse-cluster) |
+| `cdr.capability.map.synth` (v0.8) | `@dapei synth capability map for E-Commerce Mall` | `docs/as-is/capabilities/product-map.yaml` (engine-driven; back-fills spans_repos / fact_ratio) |
+| `cdr.reversecluster.doc.generate` (v0.8) | `@dapei render L1 portal` | `.dapei/docs-portal/l1/` (VitePress `/l1/` section + cluster-suggestions) |
 | `cdr.index.list` | `@dapei list assets` | in-memory summary |
 | `cdr.doc.generate` | `@dapei generate documentation portal` | `.dapei/docs-portal/` (VitePress, 6 sections incl. business-rules/) |
 
@@ -404,10 +407,15 @@ npx skills add ygwa/dapei-skill@vX.Y.Z
 | Document | Description |
 | --- | --- |
 | [agents.md](agents.md) | Agent collaboration constraints for this repo |
-| [docs/cdr-architecture.md](docs/cdr-architecture.md) | CDR + CodeGraph integration architecture (v0.3 implemented; CodeGraph substrate proposal now aligned with `colbymchenry/codegraph` MCP/CLI/Library surfaces) |
+| [docs/cdr-architecture.md](docs/cdr-architecture.md) | CDR + CodeGraph integration architecture (v0.3 implemented; v1.0 proposed) |
 | [docs/features/cdr-runtime.md](docs/features/cdr-runtime.md) | Feature delivery doc for `feature/cdr-runtime` (v0.1) |
 | [docs/features/cdr-mining.md](docs/features/cdr-mining.md) | Feature delivery doc for `feature/cdr-mining` (v0.2: annotation-aware entries + business-rule artifacts) |
 | [docs/features/cdr-v0.3-ai-as-scanner.md](docs/features/cdr-v0.3-ai-as-scanner.md) | Feature delivery doc for `feature/cdr-v0.3-ai-as-scanner` (v0.3: AI as scanner, engine as validator) |
+| [docs/features/cdr-v0.4-multi-repo-merge.md](docs/features/cdr-v0.4-multi-repo-merge.md) | Feature delivery doc for `feature/cdr-v0.4-multi-repo-merge` (v0.4: per-repo namespace, `(id, repo)` dedup) |
+| [docs/features/cdr-v0.5-cross-repo-rules.md](docs/features/cdr-v0.5-cross-repo-rules.md) | Feature delivery doc for `feature/cdr-v0.5-cross-repo-rules` (v0.5: cross-repo business rules) |
+| [docs/features/cdr-v0.6-structured-calls.md](docs/features/cdr-v0.6-structured-calls.md) | Feature delivery doc for `feature/cdr-v0.6-structured-calls` (v0.6: structured calls) |
+| [docs/features/cdr-v0.7-codegraph.md](docs/features/cdr-v0.7-codegraph.md) | Feature delivery doc for `feature/cdr-v0.7-codegraph` (v0.7: CodeGraph integration) |
+| [docs/features/cdr-v0.8-reverse-cluster.md](docs/features/cdr-v0.8-reverse-cluster.md) | Feature delivery doc for `feature/cdr-v0.8-reverse-cluster` (v0.8: reverse-cluster to L1) |
 | [DESIGN.md](DESIGN.md) | Technical design documentation |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 | [docs/release-process.md](docs/release-process.md) | How to cut a release |

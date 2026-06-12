@@ -1,7 +1,7 @@
 ---
 name: dapei
-description: "Router skill for dapei — AI Native Engineering Context OS. Use when the user mentions workspace setup, repos management, feature lifecycle, workflow stages, validation runs, cognitive discovery, or CDR knowledge extraction."
-version: 3.1.0
+description: AI Native Engineering Context OS - Router Skill
+version: 3.0.0
 ---
 
 # dapei Router Skill
@@ -27,19 +27,6 @@ version: 3.1.0
 - validation 类意图 -> `skills/validation/SKILL.md` -> `validation.run`
 - cognitive 类意图 -> `skills/cognitive/SKILL.md` -> `cognitive.discover|cognitive.artifact.*|cognitive.state.suggest`
 - cdr/知识提取/文档门户 类意图 -> `skills/cdr/SKILL.md` -> `cdr.profile|cdr.entries.*|cdr.domain.compose|cdr.capability.map.init|cdr.index.list|cdr.doc.generate`
-
-## 高频组合工作流（commands/）
-
-以下 command 把多步 capability 编排为一个用户可触发的工作流：
-
-| Command | What |
-|---|---|
-| `/workspace-init` | 初始化 dapei workspace |
-| `/cdr-bootstrap` | 一次性走完 profile → entries → behaviors → portal |
-| `/feature` | `feature [create\|close] <feature-name> [--repos <csv>]` —— 创建或关闭 feature |
-| `/drift-check` | 检测文档与代码的架构漂移 |
-
-Command 是文档化的多步工作流，不是 router 的替代品。Router 仍然解析单步意图；command 解释如何按顺序组合 capability 完成端到端目标。
 
 ## 阶段确认点
 

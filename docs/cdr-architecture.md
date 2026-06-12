@@ -7,7 +7,7 @@
 | Version | 1.0 |
 | Status | **Implemented v0.3** (in `feature/cdr-v0.3-ai-as-scanner`; CodeGraph substrate not yet wired) |
 | Baseline | dapei.skill v2.2.x |
-| External dependency | [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph) (`npm: @colbymchenry/codegraph`) — CLI + MCP server + Node library — **not wired in v0.1 / v0.2 / v0.3** |
+| External dependency | [lzehrung/codegraph](https://github.com/lzehrung/codegraph) ≥ v1.8 (CLI / library / optional MCP) — **not wired in v0.1 / v0.2 / v0.3** |
 | User entry | `@dapei ...` (no new shell commands for end users) |
 | Implementation branches | `feature/cdr-runtime` (v0.1), `feature/cdr-mining` (v0.2), `feature/cdr-v0.3-ai-as-scanner` (v0.3) |
 | Feature delivery docs | [`docs/features/cdr-runtime.md`](features/cdr-runtime.md), [`docs/features/cdr-mining.md`](features/cdr-mining.md), [`docs/features/cdr-v0.3-ai-as-scanner.md`](features/cdr-v0.3-ai-as-scanner.md) |
@@ -123,9 +123,7 @@ CDR does **not** replace Feature/Workflow. It supplies **Workspace-dimension L3 
           ▼                                       ▼
 ┌─────────────────────────────────────────────────────────┐
 │ CodeGraph substrate (Finding only)                      │
-│ MCP tools: codegraph_explore · node · search · callers   │
-│ CLI: codegraph explore · node · search · callers ·      │
-│      callees · impact · files · affected · status        │
+│ orient · apisurface · explain · refs · impact · graph     │
 │ Never auto-promoted to kind=fact business artifacts     │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -134,7 +132,7 @@ CDR does **not** replace Feature/Workflow. It supplies **Workspace-dimension L3 
 - **Agent**: Understanding (what a step means, business semantics, rule synthesis).
 - **Platform**: Contract (schema, index, upsert, guardrail, context injection).
 
-Layer 3 "DFS" is **Agent-driven along bounded graph neighborhoods** from CodeGraph `codegraph_explore` / `codegraph_callers` / `codegraph_impact`, not engine grep heuristics for business flow.
+Layer 3 “DFS” is **Agent-driven along bounded graph neighborhoods** from CodeGraph `explain` / `refs`, not engine grep heuristics for business flow.
 
 ### 2.2 Principles (executable)
 
@@ -162,7 +160,7 @@ Layer 3 "DFS" is **Agent-driven along bounded graph neighborhoods** from CodeGra
 ```text
 Workspace (docs/as-is + .dapei/cdr/)
 │
-├── profiles/           ← L0 technical profile (platform + CodeGraph status snapshot)
+├── profiles/           ← L0 technical profile (platform + CodeGraph orient)
 ├── entries/            ← L2 entry catalog (CodeGraph candidates + Agent confirm)
 ├── behavior/           ← L3 behaviors (Agent + CodeGraph trace)
 ├── state-machines/     ← L3 states (derived from behaviors + Agent confirm)
@@ -172,10 +170,11 @@ Workspace (docs/as-is + .dapei/cdr/)
 
 .dapei/cdr/
 ├── index.yaml          ← unified artifact index
+├── graph/<repo>/       ← CodeGraph cache/SQLite (gitignored by default)
 └── sessions/<id>/      ← optional per-discover trace metadata
 ```
 
-CodeGraph indexes live under **`<repo>/.codegraph/codegraph.db`** (the tool's default, created by `codegraph init -i`). Each product repo under `repos/<repo>/` hosts its own index; the index is gitignored. Product repos are not required to host SQLite unless `codegraph init` is explicitly run. dapei itself does not own or relocate `.codegraph/` — the file watcher inside CodeGraph keeps it fresh on its own.
+CodeGraph indexes live under **`.dapei/graph/<repo>/`**, scanning `repos/<repo>/`. Product repos are not required to host SQLite unless explicitly configured.
 
 ---
 
@@ -189,7 +188,7 @@ CodeGraph indexes live under **`<repo>/.codegraph/codegraph.db`** (the tool's de
 
 **Platform**:
 
-- CodeGraph: `codegraph status --json` (presence check, language counts, `files_total`, pending sync), `codegraph files --json` (file structure)
+- CodeGraph: `orient --budget small --json`, `inspect`, `apisurface` when available
 - Existing: `detectRepoLanguage`, `detectTestCommands`, manifest list
 - **Remove** grep-based API/MQ as fact; optional downgrade to `signals` with `kind: unknown`
 
@@ -203,10 +202,8 @@ stack:
   frameworks: [spring-boot]
 codegraph:
   indexed_at: "..."
-  installed: true
-  status: ready            # ready | pending-sync | not-initialized | not-installed
+  backend: native
   files_total: 842
-  languages: { java: 820, xml: 22 }
 entry_patterns_suggested:
   - type: api
     handles: ["symbol:OrderController#create"]
@@ -223,30 +220,21 @@ test_commands: ["mvn test"]
 
 **Capability**: `cdr.graph.ensure` (idempotent index)
 
-**Implementation**: `packages/runtime-adapters/src/codegraph.ts`. Three integration modes, in priority order:
+**Implementation**: `packages/runtime-adapters/src/codegraph.ts` invoking CLI (Phase A); optional TS API later.
 
-| Mode | When | How |
-| --- | --- | --- |
-| **MCP server** (preferred when the Agent host supports MCP) | opencode / Claude Code / Cursor etc. | User runs `codegraph install --target=opencode --location=local` once; the Agent gains 4 default + 4 opt-in MCP tools (`codegraph_explore`, `codegraph_node`, `codegraph_search`, `codegraph_callers`, …). dapei does not implement any tool — it only documents the workflow. |
-| **CLI subprocess** (fallback / CI / scripted CDR runs) | non-interactive contexts, smoke tests, `cdr.graph.ensure` from `runtime-adapters` | `child_process.spawn('codegraph', [...args, '--json'])`; output parsed as JSON. |
-| **Node library** (`@colbymchenry/codegraph`) | when called from inside a Node ≥ 22.5 process and we want zero IPC | `CodeGraph.init(repoPath)` → `indexAll()` / `searchNodes()` / `getCallers()` / `getImpactRadius()`. Library depends on built-in `node:sqlite`, so it is **not** usable from the esbuild-bundled engine on Node < 22.5; CLI is the safe default. |
+**Platform**: Node ≥ 24, `codegraph doctor`, index into `.dapei/graph/<repo>/`
 
-**Platform**: CodeGraph ships a self-contained Node runtime — **no system Node version requirement** for CLI/MCP use. Library mode needs Node ≥ 22.5 (we already require `>=22.6.0`, so library mode is permitted when we choose it).
-
-**Not platform-owned**: Auto-writing graph edges as behavior steps; dumping full graph into `context.build`.
+**Not platform-owned**: Auto-writing graph edges as behavior steps; dumping full graph into `context.build`
 
 **Agent usage** (documented in `skills/cdr/SKILL.md`):
 
-| CodeGraph tool | CDR use |
+| CodeGraph | CDR use |
 | --- | --- |
-| `codegraph_explore` (`codegraph explore <query>`) | Primary: answer "how does X work / how does X reach Y" in one call; surveys an area; surfaces dynamic-dispatch hops grep misses |
-| `codegraph_node` (`codegraph node <sym\|file>`) | One symbol's full source + callers/callees; pass a file path to read with line numbers (replaces `Read`) |
-| `codegraph_search` (`codegraph query <search>`) | Locate symbols by name; populates entry candidate pools |
-| `codegraph_callers` (`codegraph callers <sym>`) | Every call site (incl. callback registrations) — fills `sources[].symbol_handle` and blast-radius evidence |
-| `codegraph_callees` (`codegraph callees <sym>`) | Downstream call trace for a behavior step |
-| `codegraph_impact` (`codegraph impact <sym> --depth N`) | Regression scope before/after a feature change |
-| `codegraph_files` (`codegraph files --json`) | Repo file structure — replaces `tree`/`find` in `cdr.profile` |
-| `codegraph_status` (`codegraph status --json`) | Index freshness check; populates `profile.codegraph.*` fields |
+| `orient` / `inspect` | Stack, hotspots, next commands |
+| `search` / `packet get` | Anchor symbols; bounded file context |
+| `explain` / `refs` | Expand from entry; fill `sources[]` |
+| `impact` / `review` | Regression scope after feature changes |
+| `graph --compact-json` | Optional Mermaid in `artifacts/` |
 
 ---
 
@@ -285,10 +273,10 @@ entries:
 
 **Skill protocol** per confirmed entry:
 
-1. `codegraph_explore <entry-anchor>` (or `codegraph explore <anchor>` from CLI) — one call returns the entry's source + nearby symbols + call paths
-2. Agent traces along graph edges via `codegraph_callers` / `codegraph_callees` / `codegraph_impact` (no whole-repo keyword sweeps)
+1. `codegraph explain <handle> --json`
+2. Agent traces along graph edges (no whole-repo keyword sweeps)
 3. Fill `behavior.schema.yaml`: `entry`, `writes`, `events`, `calls`, `risks`
-4. `sources[]` for key conclusions; `symbol_handle` carries the CodeGraph node id when used
+4. `sources[]` for key conclusions; optional `trace_session`
 5. Upsert → `.dapei/cdr/index.yaml`
 
 **Incremental**: Only `behavior_status: missing|stale`; git change → re-`cdr.graph.ensure` → mark related behaviors stale
@@ -408,37 +396,23 @@ Compatibility:
 
 ### 7.1 Integration modes
 
-CodeGraph exposes three surfaces; dapei uses them at different layers.
-
-| Surface | Form | dapei use |
-| --- | --- | --- |
-| **MCP server** | `codegraph serve --mcp` (stdio) — 4 default tools + 4 opt-in via `CODEGRAPH_MCP_TOOLS` | Preferred when the Agent host (opencode / Claude Code / Cursor / Codex CLI / Hermes Agent / Gemini CLI / Antigravity / Kiro) supports MCP. dapei does not implement or vendor these tools — `codegraph install --target=<host> --location=local` wires them in, the Agent uses them directly, and CDR skills tell the Agent *when*. |
-| **CLI** | `codegraph <subcommand> [--json]` — `init`, `index`, `sync`, `status`, `files`, `query`, `explore`, `node`, `callers`, `callees`, `impact`, `affected`, `upgrade`, `install`, `uninstall` | Used by `packages/runtime-adapters/src/codegraph.ts` for any `cdr.graph.*` capability that runs deterministically (CI, scripted discovery, profile snapshot). |
-| **Node library** | `import CodeGraph from '@colbymchenry/codegraph'` — `CodeGraph.init / open / indexAll / searchNodes / getCallers / getImpactRadius / buildContext / watch / close` | Optional, when called from a Node ≥ 22.5 process that has the built-in `node:sqlite` (the dapei engine currently meets this). Suitable for in-process graph queries that would otherwise spawn many CLI invocations. |
-
-Artifacts produced under all three modes still land under `docs/as-is/` — CodeGraph never replaces the YAML/evidence contract, it only feeds it.
+| Mode | Use |
+| --- | --- |
+| CLI subprocess (preferred) | `runtime-adapters` calls `codegraph`; version-pinned |
+| TypeScript API | High-frequency packet paths (later) |
+| MCP | Agent in Cursor; artifacts **must** still land under `docs/as-is` |
 
 ### 7.2 Configuration
 
-CodeGraph is **zero-config**. There is no `codegraph.config.json` to write. Language support is automatic from file extension. By default it skips:
-
-- Dependency / build / cache directories (`node_modules`, `vendor`, `dist`, `build`, `target`, `.venv`, `Pods`, `.next`, …)
-- Anything listed in the project's `.gitignore` (honored via `git` in git repos, otherwise read directly)
-- Files larger than 1 MB (generated bundles, minified JS)
-
-To exclude something else, add it to `.gitignore`. To pull a default-excluded directory back in, use a `.gitignore` negation (`!vendor/`).
-
-dapei does not own or ship a CodeGraph config template. The only dapei-side decision is *which repo* to point CodeGraph at — every product repo under `repos/<repo>/` is independently initialized by `codegraph init -i`.
+Template: `runtime/templates/codegraph.config.json.template` with standard ignore globs. Per-repo override under `repos/<name>/`. Index output: `.dapei/graph/<name>/`.
 
 ### 7.3 Degradation
 
 | Failure | Behavior |
 | --- | --- |
-| codegraph binary not on PATH | `cdr.profile` sets `codegraph.installed: false`, skips graph calls, uses `manifest` + `tree` only. No error to the user; degradation is silent and the profile reflects it. |
-| `.codegraph/` not initialized in the repo | `cdr.profile` sets `codegraph.status: not-initialized` and surfaces the fix-up command (`codegraph init -i`) in the report's **Next Steps** block. |
-| Index pending sync (file edits since last sync) | `codegraph_status` surfaces a `### Pending sync:` section naming affected files; the Agent reads those directly per the staleness banner protocol, no dapei-side action. |
-| Weak language parse (Lua / Liquid / Pascal have lower measured cross-file coverage) | `cdr.entries.candidate` lowers candidate confidence for those files; more Agent confirmation; the engine never silently fabricates entries. |
-| Stale graph (commit drift) | `cdr.stale.scan` compares `repo_revision` against the index `revision`; mismatches prompt `cdr.graph.ensure` before the next `cdr.behavior.upsert`. |
+| codegraph missing | `cdr.profile` uses manifest + tree only |
+| Weak language parse | Lower candidate confidence; more Agent confirmation |
+| Stale graph | `cdr.stale.scan` prompts `cdr.graph.ensure` |
 
 ---
 
@@ -446,7 +420,7 @@ dapei does not own or ship a CodeGraph config template. The only dapei-side deci
 
 | Metric | Definition |
 | --- | --- |
-| Entry coverage | confirmed_entries / codegraph candidates |
+| Entry coverage | confirmed_entries / apisurface candidates |
 | Behavior coverage | fact_behaviors / confirmed_entries |
 | Fact ratio | fact / (fact + inference + unknown) |
 | Stale queue | index entries with `stale: true` |
@@ -472,7 +446,7 @@ Reports use dapei format: **Conclusion / Risk / Needs Confirmation / Next Steps*
 
 ```text
 E1  Contracts + index: profiles, entries, business-rule schema, cdr.index
-E2  CodeGraph adapter: cdr.graph.ensure / status snapshot / runtime-adapters/src/codegraph.ts
+E2  CodeGraph adapter: cdr.graph.ensure / packet + config template
 E3  cdr.profile + retire repos.analyze semantic grep
 E4  skills/cdr + Router + cognitive compatibility
 E5  cdr.entries + cdr.behavior session + upsert/stale
@@ -492,7 +466,7 @@ E10 capability map templates
 On a workspace with `repos/sample-node-repo` (or equivalent fixture):
 
 1. `@dapei profile repo sample-node-repo` produces profile **without** grep API pseudo-evidence.
-2. `@dapei discover entries` yields ≥2 **confirmed** entries with `anchor.symbol_handle` populated from `codegraph_search`.
+2. `@dapei discover entries` yields ≥2 **confirmed** entries with CodeGraph handles.
 3. `@dapei discover behaviors` yields **fact** behaviors with `sources` (file/line).
 4. `@dapei discover states for Order` produces inference draft + Agent-confirmed upsert.
 5. `feature.create` references related behaviors; `context.build` includes summary tables under a fixed size budget.
@@ -511,7 +485,7 @@ On a workspace with `repos/sample-node-repo` (or equivalent fixture):
 
 ### Follow-up ADRs (recommended)
 
-- **ADR-001**: CodeGraph Substrate Adapter (`runtime-adapters/src/codegraph.ts`, three integration modes MCP/CLI/Library, version pinned via `codegraph upgrade` policy)
+- **ADR-001**: CodeGraph Substrate Adapter (`runtime-adapters`, cache layout, CLI contract)
 - **ADR-002**: CDR Asset Layout & v2.2 Compatibility (paths, index migration, aliases)
 
 ---
@@ -520,7 +494,7 @@ On a workspace with `repos/sample-node-repo` (or equivalent fixture):
 
 CDR preserves **behavior → state → rule → domain → capability** ordering while making delivery feasible inside dapei:
 
-1. **CodeGraph = Finding** via `cdr.graph.*`; indexes live under `<repo>/.codegraph/` (CodeGraph-owned); Agent uses `codegraph_explore` / `codegraph_node` / `codegraph_callers` / `codegraph_impact` for bounded deep-dives.
+1. **CodeGraph = Finding** via `cdr.graph.*`, indexes under `.dapei/graph`, Agent uses orient/packet/explain for bounded deep-dives.
 2. **Agent = Understanding** for YAML artifacts; platform validates, indexes, increments, and injects into features.
 3. **Skills = Protocol** via `skills/cdr`, compatible with existing `cognitive.*` and workspace/feature dimension rules.
 

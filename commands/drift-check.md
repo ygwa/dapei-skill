@@ -17,11 +17,11 @@ argument-hint: "[--repo <name>] [--feature <name>]"
 
 ### Step 1: Detect stale assets
 
-Call `cdr.asset.stale-check`. The engine compares asset `sources[].file` mtime/hash against the asset's `revision`. Returns list of stale assets.
+Call `cdr.asset.stalecheck`. The engine compares asset `sources[].file` mtime/hash against the asset's `revision`. Returns list of stale assets.
 
 ### Step 2: Check architecture drift
 
-Call `cdr.architecture-drift-check`. The engine compares documented behaviors against current entry points.
+Call `cdr.architecture.driftcheck`. The engine compares documented behaviors against current entry points.
 
 ### Step 3: Report
 

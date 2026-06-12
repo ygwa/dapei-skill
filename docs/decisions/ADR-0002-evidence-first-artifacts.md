@@ -35,7 +35,7 @@ The engine REJECTS any artifact where `kind` does not match the supplied evidenc
 
 ### Positive
 - Reviewers can audit confidence at a glance
-- Stale-check (`cdr.asset.stale-check`) compares `sources[].file` mtime to detect when fact-level artifacts became uncertain
+- Stale-check (`cdr.asset.stalecheck`) compares `sources[].file` mtime to detect when fact-level artifacts became uncertain
 - Forces AI to point at a file/line, not paraphrase
 
 ### Negative

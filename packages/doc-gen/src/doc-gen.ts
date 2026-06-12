@@ -15,6 +15,13 @@ export type AnyCap = CapabilitySpec<any, any>;
 interface ParsedDoc {
   file: string;
   doc: Record<string, unknown>;
+  /**
+   * v0.4 — namespace inferred from the file's parent directory when the
+   * artifact lives under `<section>/<repo>/<id>.yaml`. Empty for global
+   * sections (capabilities, profiles) where the file is `<id>.yaml` directly
+   * under the section root, and for legacy flat files.
+   */
+  repo?: string;
 }
 
 function confidenceBadge(doc: Record<string, unknown>): string {
@@ -41,7 +48,10 @@ function loadYamlDir(dirPath: string): ParsedDoc[] {
     try {
       const content = read(f);
       const doc = parseYamlDocument(content);
-      results.push({ file: f, doc: doc as Record<string, unknown> });
+      const rel = relative(dirPath, f);
+      const segments = rel.split("/");
+      const repo = segments.length >= 2 ? segments[0] : undefined;
+      results.push({ file: f, doc: doc as Record<string, unknown>, repo });
     } catch {
       // skip unparseable files gracefully
     }
@@ -294,7 +304,10 @@ title: Behaviors
     const repo = String(b.doc.repo || "—");
     const entry = b.doc.entry as Record<string, unknown> | undefined;
     const entryStr = entry ? `${String(entry.type || "")} ${String(entry.method || "")} ${String(entry.path || entry.handler || "")}`.trim() : "—";
-    md += `| [${id}](/behaviors/${safeId(id)}) | ${repo} | ${confidenceBadge(b.doc)} | ${entryStr} |\n`;
+    // v0.4 — per-repo layout: link to the per-repo page when repo is set,
+    // else the flat page. Matches generateBehaviorPage's output path.
+    const linkPath = repo !== "—" ? `/behaviors/${safeId(repo)}/${safeId(id)}` : `/behaviors/${safeId(id)}`;
+    md += `| [${id}](${linkPath}) | ${repo} | ${confidenceBadge(b.doc)} | ${entryStr} |\n`;
   }
   return md;
 }
@@ -351,17 +364,53 @@ title: "${id}"
     }
   }
 
-  // Calls
+  // Calls — v0.6 supports a mix of legacy strings and structured objects.
   const calls = behavior.doc.calls as unknown[] | undefined;
+  const crossServiceCalls: Array<{ target: string; protocol: string; targetRepo: string; evidenceFile: string; evidenceLine: number | null; evidenceRepo: string | null }> = [];
   if (Array.isArray(calls) && calls.length > 0) {
     md += "\n## Calls\n\n";
     for (const c of calls) {
       if (typeof c === "string") {
         md += `- \`${c}\`\n`;
-      } else {
-        const co = c as Record<string, unknown>;
-        md += `- **${String(co.target || co.service || "?")}** — ${String(co.method || co.action || "")}\n`;
+        continue;
       }
+      if (!c || typeof c !== "object" || Array.isArray(c)) continue;
+      const co = c as Record<string, unknown>;
+      const target = String(co.target || co.service || "?");
+      const protocol = typeof co.protocol === "string" ? co.protocol : "";
+      const targetRepo = typeof co.target_repo === "string" ? co.target_repo : "";
+      const ev = co.evidence && typeof co.evidence === "object" ? co.evidence as Record<string, unknown> : null;
+      const evFile = ev ? String(ev.file || "") : "";
+      const evLine = ev && typeof ev.line === "number" ? ev.line : null;
+      const evRepo = ev ? (typeof ev.repo === "string" ? ev.repo : null) : null;
+      const method = typeof co.method === "string" ? ` (${co.method})` : "";
+
+      md += `- **${target}**${method}`;
+      if (protocol) md += ` \`[${protocol}]\``;
+      md += "\n";
+      if (evFile) {
+        const evJson = JSON.stringify({ file: evFile, line: evLine, repo: evRepo }).replace(/'/g, "&#39;");
+        md += `  - evidence: <CodeLink :source='${evJson}' />\n`;
+      }
+      if (targetRepo) {
+        crossServiceCalls.push({ target, protocol, targetRepo, evidenceFile: evFile, evidenceLine: evLine, evidenceRepo: evRepo });
+      }
+    }
+  }
+
+  // v0.6 — cross-service calls grouped by target repo
+  if (crossServiceCalls.length > 0) {
+    md += "\n## Cross-service calls\n\n";
+    md += "This behavior calls into the following repos:\n\n";
+    md += "| Target | Protocol | Target repo | Evidence |\n";
+    md += "|--------|----------|-------------|----------|\n";
+    for (const c of crossServiceCalls) {
+      const evCell = c.evidenceFile
+        ? c.evidenceLine
+          ? `\`${c.evidenceFile}:${c.evidenceLine}\``
+          : `\`${c.evidenceFile}\``
+        : "—";
+      md += `| \`${c.target}\` | ${c.protocol || "—"} | \`${c.targetRepo}\` | ${evCell} |\n`;
     }
   }
 
@@ -401,7 +450,9 @@ title: State Machines
     const entity = String(s.doc.entity || basename(s.file, ".yaml"));
     const repo = String(s.doc.repo || "—");
     const stateList = Array.isArray(s.doc.states) ? (s.doc.states as string[]).join(", ") : "—";
-    md += `| [${entity}](/states/${safeId(entity)}) | ${repo} | ${confidenceBadge(s.doc)} | ${stateList} |\n`;
+    // v0.4 — per-repo layout: link to the per-repo page when repo is set.
+    const linkPath = repo !== "—" ? `/states/${safeId(repo)}/${safeId(entity)}` : `/states/${safeId(entity)}`;
+    md += `| [${entity}](${linkPath}) | ${repo} | ${confidenceBadge(s.doc)} | ${stateList} |\n`;
   }
   return md;
 }
@@ -576,13 +627,22 @@ title: "${id}"
 
 function generateVitepressConfig(
   productName: string,
-  sidebarConfig: Record<string, Array<{ text: string; items?: Array<{ text: string; link: string }> }>>
+  sidebarConfig: Record<string, Array<{ text: string; link: string; items: Array<{ text: string; link?: string; items?: Array<{ text: string; link: string }> }> }>>,
+  allPages: string[]
 ): string {
+  // v0.4 — VitePress only builds HTML for pages it can discover. The sidebar
+  // config works for top-level and per-repo pages that are reachable from
+  // a nested sidebar structure, but in practice the nested structure is
+  // fragile across VitePress versions. The most reliable approach is to
+  // register every page in the `pages` config (a flat list of source
+  // paths) — VitePress builds HTML for each one regardless of sidebar.
+  const pagesJson = JSON.stringify(allPages, null, 6);
   return `import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: '${productName} - Knowledge Portal',
   description: 'Auto-generated living documentation from code analysis',
+  pages: ${pagesJson},
   themeConfig: {
     nav: [
       { text: 'Home', link: '/' },
@@ -709,7 +769,7 @@ export const docGenerate: AnyCap = {
     };
 
     // Build sidebar configuration
-    const sidebarConfig: Record<string, Array<{ text: string; items: Array<{ text: string; link: string }> }>> = {};
+    const sidebarConfig: Record<string, Array<{ text: string; link: string; items: Array<{ text: string; link?: string; items?: Array<{ text: string; link: string }> }> }>> = {};
 
     // --- Capabilities ---
     write(join(outputDir, "capabilities", "index.md"), generateCapabilityIndex(capDocs));
@@ -723,7 +783,7 @@ export const docGenerate: AnyCap = {
       totalPages++;
       sections.capabilities++;
     }
-    sidebarConfig["/capabilities/"] = [{ text: "Capabilities", items: [{ text: "Overview", link: "/capabilities/" }, ...capItems] }];
+    sidebarConfig["/capabilities/"] = [{ text: "Capabilities", link: "/capabilities/", items: [{ text: "Overview", link: "/capabilities/" }, ...capItems] }];
 
     // --- Domains ---
     write(join(outputDir, "domains", "index.md"), generateDomainIndex(domainDocs));
@@ -732,40 +792,81 @@ export const docGenerate: AnyCap = {
     for (const d of domainDocs) {
       const name = String(d.doc.name || d.doc.domain || basename(d.file, ".yaml"));
       const slug = safeId(name);
-      write(join(outputDir, "domains", `${slug}.md`), generateDomainPage(d, p.rootDir));
-      domainItems.push({ text: name, link: `/domains/${slug}` });
+      // v0.4 — per-repo namespace: pages live at /domains/<repo>/<slug>
+      // when the source file is under <repo>/ subdir. Legacy global files
+      // (no repo in path) keep the flat /domains/<slug> URL.
+      const urlPath = d.repo ? `/domains/${safeId(d.repo)}/${slug}` : `/domains/${slug}`;
+      const pagePath = d.repo
+        ? join(outputDir, "domains", safeId(d.repo), `${slug}.md`)
+        : join(outputDir, "domains", `${slug}.md`);
+      write(pagePath, generateDomainPage(d, p.rootDir));
+      domainItems.push({ text: d.repo ? `${name} (${d.repo})` : name, link: urlPath });
       totalPages++;
       sections.domains++;
     }
-    sidebarConfig["/domains/"] = [{ text: "Domains", items: [{ text: "Overview", link: "/domains/" }, ...domainItems] }];
+    sidebarConfig["/domains/"] = [{ text: "Domains", link: "/domains/", items: [{ text: "Overview", link: "/domains/" }, ...domainItems] }];
 
     // --- Behaviors ---
     write(join(outputDir, "behaviors", "index.md"), generateBehaviorIndex(behaviorDocs));
     totalPages++;
-    const behaviorItems: Array<{ text: string; link: string }> = [];
+    // v0.4 — group behavior sidebar items by repo. VitePress only
+    // builds pages that are reachable from the sidebar (or pages
+    // config), and nested directory pages need a nested sidebar
+    // structure. Flat per-repo links at the top level are ignored.
+    const behaviorGroups: Record<string, Array<{ text: string; link: string }>> = {};
     for (const b of behaviorDocs) {
       const id = String(b.doc.id || basename(b.file, ".yaml"));
       const slug = safeId(id);
-      write(join(outputDir, "behaviors", `${slug}.md`), generateBehaviorPage(b, p.rootDir));
-      behaviorItems.push({ text: id, link: `/behaviors/${slug}` });
+      const urlPath = b.repo ? `/behaviors/${safeId(b.repo)}/${slug}` : `/behaviors/${slug}`;
+      const pagePath = b.repo
+        ? join(outputDir, "behaviors", safeId(b.repo), `${slug}.md`)
+        : join(outputDir, "behaviors", `${slug}.md`);
+      write(pagePath, generateBehaviorPage(b, p.rootDir));
+      const repoKey = b.repo ? safeId(b.repo) : "_norepo";
+      (behaviorGroups[repoKey] ||= []).push({ text: id, link: urlPath });
       totalPages++;
       sections.behaviors++;
     }
-    sidebarConfig["/behaviors/"] = [{ text: "Behaviors", items: [{ text: "Overview", link: "/behaviors/" }, ...behaviorItems] }];
+    const behaviorSidebarItems: Array<{ text: string; link?: string; items?: Array<{ text: string; link: string }> }> = [
+      { text: "Overview", link: "/behaviors/" }
+    ];
+    for (const [repoKey, items] of Object.entries(behaviorGroups)) {
+      if (repoKey === "_norepo") {
+        behaviorSidebarItems.push(...items);
+      } else {
+        behaviorSidebarItems.push({ text: repoKey, items });
+      }
+    }
+    sidebarConfig["/behaviors/"] = [{ text: "Behaviors", link: "/behaviors/", items: behaviorSidebarItems }];
 
     // --- State Machines ---
     write(join(outputDir, "states", "index.md"), generateStateIndex(stateDocs));
     totalPages++;
-    const stateItems: Array<{ text: string; link: string }> = [];
+    const stateGroups: Record<string, Array<{ text: string; link: string }>> = {};
     for (const s of stateDocs) {
       const entity = String(s.doc.entity || basename(s.file, ".yaml"));
       const slug = safeId(entity);
-      write(join(outputDir, "states", `${slug}.md`), generateStatePage(s, p.rootDir));
-      stateItems.push({ text: entity, link: `/states/${slug}` });
+      const urlPath = s.repo ? `/states/${safeId(s.repo)}/${slug}` : `/states/${slug}`;
+      const pagePath = s.repo
+        ? join(outputDir, "states", safeId(s.repo), `${slug}.md`)
+        : join(outputDir, "states", `${slug}.md`);
+      write(pagePath, generateStatePage(s, p.rootDir));
+      const repoKey = s.repo ? safeId(s.repo) : "_norepo";
+      (stateGroups[repoKey] ||= []).push({ text: entity, link: urlPath });
       totalPages++;
       sections.states++;
     }
-    sidebarConfig["/states/"] = [{ text: "State Machines", items: [{ text: "Overview", link: "/states/" }, ...stateItems] }];
+    const stateSidebarItems: Array<{ text: string; link?: string; items?: Array<{ text: string; link: string }> }> = [
+      { text: "Overview", link: "/states/" }
+    ];
+    for (const [repoKey, items] of Object.entries(stateGroups)) {
+      if (repoKey === "_norepo") {
+        stateSidebarItems.push(...items);
+      } else {
+        stateSidebarItems.push({ text: repoKey, items });
+      }
+    }
+    sidebarConfig["/states/"] = [{ text: "State Machines", link: "/states/", items: stateSidebarItems }];
 
     // --- Profiles ---
     write(join(outputDir, "profiles", "index.md"), generateProfileIndex(profileDocs));
@@ -779,7 +880,7 @@ export const docGenerate: AnyCap = {
       totalPages++;
       sections.profiles++;
     }
-    sidebarConfig["/profiles/"] = [{ text: "Profiles", items: [{ text: "Overview", link: "/profiles/" }, ...profileItems] }];
+    sidebarConfig["/profiles/"] = [{ text: "Profiles", link: "/profiles/", items: [{ text: "Overview", link: "/profiles/" }, ...profileItems] }];
 
     // --- Business Rules ---
     write(join(outputDir, "business-rules", "index.md"), generateBusinessRuleIndex(businessRuleDocs));
@@ -788,12 +889,16 @@ export const docGenerate: AnyCap = {
     for (const r of businessRuleDocs) {
       const id = String(r.doc.id || basename(r.file, ".yaml"));
       const slug = safeId(id);
-      write(join(outputDir, "business-rules", `${slug}.md`), generateBusinessRulePage(r, p.rootDir));
-      ruleItems.push({ text: id, link: `/business-rules/${slug}` });
+      const urlPath = r.repo ? `/business-rules/${safeId(r.repo)}/${slug}` : `/business-rules/${slug}`;
+      const pagePath = r.repo
+        ? join(outputDir, "business-rules", safeId(r.repo), `${slug}.md`)
+        : join(outputDir, "business-rules", `${slug}.md`);
+      write(pagePath, generateBusinessRulePage(r, p.rootDir));
+      ruleItems.push({ text: r.repo ? `${id} (${r.repo})` : id, link: urlPath });
       totalPages++;
       sections.business_rules++;
     }
-    sidebarConfig["/business-rules/"] = [{ text: "Business Rules", items: [{ text: "Overview", link: "/business-rules/" }, ...ruleItems] }];
+    sidebarConfig["/business-rules/"] = [{ text: "Business Rules", link: "/business-rules/", items: [{ text: "Overview", link: "/business-rules/" }, ...ruleItems] }];
 
     // --- Homepage ---
     write(join(outputDir, "index.md"), generateHomepage(productName, index, sections));
@@ -801,7 +906,32 @@ export const docGenerate: AnyCap = {
 
     // --- VitePress config + custom theme (Vue components: BehaviorFlow / StateMachine / CodeLink) ---
     write(join(outputDir, "package.json"), generatePortalPackageJson());
-    write(join(outputDir, ".vitepress", "config.mts"), generateVitepressConfig(productName, sidebarConfig));
+    // v0.4 — collect every page we wrote so VitePress builds HTML for
+    // all of them, including per-repo pages that the sidebar nesting
+    // alone doesn't reliably trigger. Path is relative to the portal
+    // root (outputDir), with a leading slash and no .md extension.
+    const allPages: string[] = [
+      "/index.md",
+      "/capabilities/index.md",
+      ...capItems.map((c) => c.link + ".md"),
+      "/domains/index.md",
+      ...domainItems.map((d) => d.link + ".md"),
+      "/behaviors/index.md",
+      ...behaviorGroups["_norepo"] ? behaviorGroups["_norepo"].map((b) => b.link + ".md") : [],
+      ...Object.entries(behaviorGroups).filter(([k]) => k !== "_norepo").flatMap(([, items]) =>
+        items.map((b) => b.link + ".md")
+      ),
+      "/states/index.md",
+      ...stateGroups["_norepo"] ? stateGroups["_norepo"].map((s) => s.link + ".md") : [],
+      ...Object.entries(stateGroups).filter(([k]) => k !== "_norepo").flatMap(([, items]) =>
+        items.map((s) => s.link + ".md")
+      ),
+      "/profiles/index.md",
+      ...profileItems.map((p) => p.link + ".md"),
+      "/business-rules/index.md",
+      ...ruleItems.map((r) => r.link + ".md")
+    ];
+    write(join(outputDir, ".vitepress", "config.mts"), generateVitepressConfig(productName, sidebarConfig, allPages));
     copyThemeTemplates(outputDir);
 
     return {

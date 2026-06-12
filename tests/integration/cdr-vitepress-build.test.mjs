@@ -86,8 +86,8 @@ test('cdr e2e: vitepress build produces static HTML with all sections', async ()
 
     const dist = join(portal, '.vitepress/dist');
     assert.ok(existsSync(join(dist, 'index.html')));
-    assert.ok(existsSync(join(dist, 'behaviors/order-create.html')));
-    assert.ok(existsSync(join(dist, 'states/order.html')));
+    assert.ok(existsSync(join(dist, 'behaviors/sample-app/order-create.html')));
+    assert.ok(existsSync(join(dist, 'states/sample-app/order.html')));
 
     // Vue components must be referenced in the built JS bundles
     const assetFiles = readdirSync(join(dist, 'assets')).filter((f) => /\.(js|css)$/.test(f));

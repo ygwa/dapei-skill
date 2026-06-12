@@ -25,7 +25,13 @@ import {
   cdrStateDerive,
   cdrBusinessCompose,
   cdrAssetStaleCheck,
-  cdrArchitectureDriftCheck
+  cdrArchitectureDriftCheck,
+  cdrBusinessCrossLink,
+  cdrCrossRepoDocGenerate,
+  cdrStaleScan,
+  cdrDomainSuggest,
+  cdrCapabilityMapSynth,
+  cdrReverseClusterDocGenerate
 } from "../../../cdr/src/capabilities.ts";
 import { docGenerate } from "../../../doc-gen/src/doc-gen.ts";
 import { memoryAppend } from "./domains/memory.ts";
@@ -85,6 +91,12 @@ export const capabilitySpecs: AnyCap[] = [
   cdrBusinessCompose,
   cdrAssetStaleCheck,
   cdrArchitectureDriftCheck,
+  cdrBusinessCrossLink,
+  cdrCrossRepoDocGenerate,
+  cdrStaleScan,
+  cdrDomainSuggest,
+  cdrCapabilityMapSynth,
+  cdrReverseClusterDocGenerate,
   // Documentation generation
   docGenerate
 ];

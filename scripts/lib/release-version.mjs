@@ -3,26 +3,16 @@
 //
 // Single source of truth for reading/writing version across the dapei-skill repo.
 //
-// Version sources (16):
+// Version sources (6):
 //   - package.json (root)
 //   - engine/package.json
 //   - packages/core/package.json
-//   - packages/cdr/package.json
 //   - packages/router/package.json
 //   - packages/runtime-adapters/package.json
 //   - SKILL.md (YAML frontmatter)
-//   - .claude-plugin/marketplace.json (marketplace catalog)
-//   - .claude-plugin/plugin.json (root meta)
-//   - skills/workspace/.claude-plugin/plugin.json
-//   - skills/repos/.claude-plugin/plugin.json
-//   - skills/feature/.claude-plugin/plugin.json
-//   - skills/workflow/.claude-plugin/plugin.json
-//   - skills/validation/.claude-plugin/plugin.json
-//   - skills/cognitive/.claude-plugin/plugin.json
-//   - skills/cdr/.claude-plugin/plugin.json
 //
-// Subcommand `check`  : assert all 16 sources currently agree; exit 0 / 1.
-// Subcommand `set`    : write `NEW_VERSION` into all 16 sources; update CHANGELOG.
+// Subcommand `check`  : assert all 6 sources currently agree; exit 0 / 1.
+// Subcommand `set`    : write `NEW_VERSION` into all 6 sources; update CHANGELOG.
 //
 // Exit codes:
 //   0  ok
@@ -41,19 +31,9 @@ export const VERSION_SOURCES = [
   { key: "root", file: "package.json", kind: "json" },
   { key: "engine", file: "engine/package.json", kind: "json" },
   { key: "packages/core", file: "packages/core/package.json", kind: "json" },
-  { key: "packages/cdr", file: "packages/cdr/package.json", kind: "json" },
   { key: "packages/router", file: "packages/router/package.json", kind: "json" },
   { key: "packages/runtime-adapters", file: "packages/runtime-adapters/package.json", kind: "json" },
   { key: "SKILL.md", file: "SKILL.md", kind: "skill-md" },
-  { key: "marketplace", file: ".claude-plugin/marketplace.json", kind: "json" },
-  { key: "plugin-root", file: ".claude-plugin/plugin.json", kind: "json" },
-  { key: "plugin-workspace", file: "skills/workspace/.claude-plugin/plugin.json", kind: "json" },
-  { key: "plugin-repos", file: "skills/repos/.claude-plugin/plugin.json", kind: "json" },
-  { key: "plugin-feature", file: "skills/feature/.claude-plugin/plugin.json", kind: "json" },
-  { key: "plugin-workflow", file: "skills/workflow/.claude-plugin/plugin.json", kind: "json" },
-  { key: "plugin-validation", file: "skills/validation/.claude-plugin/plugin.json", kind: "json" },
-  { key: "plugin-cognitive", file: "skills/cognitive/.claude-plugin/plugin.json", kind: "json" },
-  { key: "plugin-cdr", file: "skills/cdr/.claude-plugin/plugin.json", kind: "json" },
 ];
 
 function readVersion(source) {

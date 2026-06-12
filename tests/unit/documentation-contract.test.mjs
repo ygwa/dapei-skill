@@ -60,7 +60,7 @@ test('documentation-contract: SKILL.md references match capability implementatio
 
     // Each referenced capability should be implemented (ignore common false positives)
     for (const ref of capRefs) {
-      if (['package.json', 'feature.yaml', 'workspace.yaml', 'repos.yaml', 'repo.yaml', 'pom.xml', 'package-lock.json', 'tsconfig.json', 'go.mod', 'go.sum', 'agents.md', 'README.md', 'index.yaml', 'cognitive.yaml', 'commands.yaml', 'feature.schema.yaml', 'repos.schema.yaml'].includes(ref)) continue;
+      if (['package.json', 'feature.yaml', 'workspace.yaml', 'repos.yaml', 'repo.yaml', 'pom.xml', 'package-lock.json', 'tsconfig.json', 'go.mod', 'go.sum', 'agents.md', 'README.md', 'index.yaml', 'cognitive.yaml', 'commands.yaml', 'feature.schema.yaml', 'repos.schema.yaml', 'domain.yaml'].includes(ref)) continue;
       assert.ok(implementedCaps.has(ref), `${skillName}/SKILL.md references ${ref} which is not a known capability`);
     }
   }

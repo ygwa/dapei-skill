@@ -491,7 +491,7 @@ test('cdr.behavior.upsert: writes behavior when sources[] point at real code', a
 
     assert.equal(result.ok, true);
     assert.equal(result.data.kind, 'fact');
-    assert.ok(existsSync(join(tmp, 'docs/as-is/behavior/order-create.yaml')));
+    assert.ok(existsSync(join(tmp, 'docs/as-is/behavior/sample-app/order-create.yaml')));
     assert.ok(existsSync(join(tmp, '.dapei/cognitive/index.yaml')));
   } finally {
     rmSync(tmp, { recursive: true, force: true });
@@ -855,7 +855,7 @@ test('cdr.business.compose: writes invariant rule when sources[] valid', async (
     );
     assert.equal(result.ok, true);
     assert.equal(result.data.kind, 'invariant');
-    assert.ok(existsSync(join(tmp, 'docs/as-is/business-rules/order-amount-positive.yaml')));
+    assert.ok(existsSync(join(tmp, 'docs/as-is/business-rules/sample-app/order-amount-positive.yaml')));
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

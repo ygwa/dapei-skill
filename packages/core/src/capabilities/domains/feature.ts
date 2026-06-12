@@ -479,7 +479,7 @@ export const featureHandoff: AnyCap = {
 };
 
 export const featureTeamStatus: AnyCap = {
-  id: "feature.team-status",
+  id: "feature.teamstatus",
   version: "1.0.0",
   inputSchema: {},
   async execute(ctx) {
