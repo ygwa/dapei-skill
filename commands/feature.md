@@ -78,7 +78,7 @@ A close report:
 ## Notes
 
 - Feature names must be `[a-z0-9-]+`.
-- Mapping a repo that is not in the registry triggers a friendly error suggesting the **repos-add** command first.
+- Mapping a repo that is not in the registry triggers a friendly error referencing the `repos.add` capability so the registry can be populated first.
 - `create` does NOT advance the stage DAG — the user controls progression.
 - `close` is the ONLY routine path where feature-dimension content writes to workspace-dimension. The boundary is explicit; do not bypass.
 - `close` MUST pause for confirmation before Step 3.

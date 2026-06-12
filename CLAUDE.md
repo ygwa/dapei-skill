@@ -97,7 +97,7 @@ The AI working in a feature workspace MUST NOT write to workspace-dimension path
 | Add a new skill | `mkdir skills/<name>`, create `SKILL.md` with frontmatter, run validator |
 | Add a new command (workflow) | Create `commands/<name>.md` with frontmatter (description, argument-hint), document workflow steps that reference capabilities by id |
 | Add a route | Edit `packages/router/src/index.ts`, add regex + extractor, add test in `tests/unit/router.test.mjs` |
-| Bump version | Use `scripts/release.sh`; it enforces the 6-source version sync via `scripts/check-version-consistency.sh` |
+| Bump version | Use `scripts/release.sh`; it enforces the 16-source version sync via `scripts/check-version-consistency.sh` |
 | Document a decision | Add an ADR to `docs/decisions/ADR-NNNN-<slug>.md` (template at `docs/decisions/TEMPLATE.md`) |
 
 ## Verify your changes
@@ -116,7 +116,7 @@ npm run verify   # typecheck + validate:skills + build + test + smoke
 2. If the change adds/removes a skill, update the `plugins[]` array in `.claude-plugin/marketplace.json` and the counts in its `description`.
 3. If the change touches a command, update the router table in `SKILL.md:35-40` (and anywhere else the old name is referenced).
 4. Run `npm run verify` — typecheck + validate:skills + build + test + smoke.
-5. Bump the version with `scripts/release.sh patch|minor|major` (or `--auto`). The script enforces 6-source version sync and CHANGELOG update; do not bypass.
+5. Bump the version with `scripts/release.sh patch|minor|major` (or `--auto`). The script enforces 16-source version sync and CHANGELOG update — these are red lines. Do NOT hand-edit versions or skip the sync; drift breaks the marketplace install and the validator.
 
 ### After adding or removing a capability
 

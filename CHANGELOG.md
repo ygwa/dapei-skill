@@ -21,7 +21,7 @@ Match the language and detail level of the existing release entries.
 ### Fixed
 ### Removed
 
-## [3.1.0] - 2026-06-11
+## [3.1.0] - 2026-06-12
 
 
 ### Added

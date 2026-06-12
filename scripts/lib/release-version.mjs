@@ -3,13 +3,15 @@
 //
 // Single source of truth for reading/writing version across the dapei-skill repo.
 //
-// Version sources (15):
+// Version sources (16):
 //   - package.json (root)
 //   - engine/package.json
 //   - packages/core/package.json
+//   - packages/cdr/package.json
 //   - packages/router/package.json
 //   - packages/runtime-adapters/package.json
 //   - SKILL.md (YAML frontmatter)
+//   - .claude-plugin/marketplace.json (marketplace catalog)
 //   - .claude-plugin/plugin.json (root meta)
 //   - skills/workspace/.claude-plugin/plugin.json
 //   - skills/repos/.claude-plugin/plugin.json
@@ -19,8 +21,8 @@
 //   - skills/cognitive/.claude-plugin/plugin.json
 //   - skills/cdr/.claude-plugin/plugin.json
 //
-// Subcommand `check`  : assert all 15 sources currently agree; exit 0 / 1.
-// Subcommand `set`    : write `NEW_VERSION` into all 15 sources; update CHANGELOG.
+// Subcommand `check`  : assert all 16 sources currently agree; exit 0 / 1.
+// Subcommand `set`    : write `NEW_VERSION` into all 16 sources; update CHANGELOG.
 //
 // Exit codes:
 //   0  ok
@@ -43,6 +45,7 @@ export const VERSION_SOURCES = [
   { key: "packages/router", file: "packages/router/package.json", kind: "json" },
   { key: "packages/runtime-adapters", file: "packages/runtime-adapters/package.json", kind: "json" },
   { key: "SKILL.md", file: "SKILL.md", kind: "skill-md" },
+  { key: "marketplace", file: ".claude-plugin/marketplace.json", kind: "json" },
   { key: "plugin-root", file: ".claude-plugin/plugin.json", kind: "json" },
   { key: "plugin-workspace", file: "skills/workspace/.claude-plugin/plugin.json", kind: "json" },
   { key: "plugin-repos", file: "skills/repos/.claude-plugin/plugin.json", kind: "json" },
