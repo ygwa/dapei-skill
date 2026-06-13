@@ -2222,20 +2222,29 @@ export const cdrStaleScan: AnyCap = {
     }
 
     let changedFiles: string[] = [];
-    let backendUsed: "codegraph" | "git-diff" = "git-diff";
+    // v0.9 — the change set is always computed via `git diff --name-only`.
+    // The real `codegraph impact <sym> --depth N` is symbol-level
+    // (what's affected if I change symbol X), not commit-level. The
+    // codegraph adapter wraps git diff for its caching/marker
+    // machinery, but the underlying source of truth is git, so the
+    // backend label is always "git-diff" for this capability.
+    // (Symbol-level blast radius is a future capability that will
+    // use `codegraph_callers` on each changed symbol.)
+    const backendUsed: "codegraph" | "git-diff" = "git-diff";
     try {
       const adapter = new CodeGraphAdapter(ctx.rootDir);
-      const impact = adapter.impact(repoPath, base, head);
-      if (impact.available && impact.changed_files.length > 0) {
-        changedFiles = impact.changed_files;
-        backendUsed = "codegraph";
+      if (adapter.isAvailable()) {
+        const impact = adapter.impact(repoPath, base, head);
+        if (impact.available) {
+          changedFiles = impact.changed_files;
+        } else {
+          changedFiles = gitDiffFileNames(repoPath, base, head);
+        }
       } else {
         changedFiles = gitDiffFileNames(repoPath, base, head);
-        backendUsed = "git-diff";
       }
     } catch {
       changedFiles = gitDiffFileNames(repoPath, base, head);
-      backendUsed = "git-diff";
     }
 
     if (changedFiles.length === 0) {

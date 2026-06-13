@@ -394,25 +394,44 @@ Compatibility:
 
 ## 7. CodeGraph integration
 
-### 7.1 Integration modes
+### 7.1 The actual CLI
+
+v0.9 rewrites the adapter against the real [`colbymchenry/codegraph`](https://github.com/colbymchenry/codegraph) CLI. The v0.7 / v0.8 branch called a fictional subcommand set (`orient`, `refs`, `impact`, `doctor`) that the actual CLI never shipped; those calls would have silently no-oped against the real binary. The v0.9 adapter uses the real subcommands:
+
+| v0.9 method | Real CLI call | Purpose |
+| --- | --- | --- |
+| `orient(repo, opts)` | `codegraph files --format=json <repo>` + `codegraph query --kind=function --json <pattern> <repo>` | List code files with content + apisurface hints. The `query` subcommand returns route metadata for web-framework handlers; the adapter merges those into per-file `apisurface_hint` on the orient result. |
+| `refs(repo, anchor)` | `codegraph node <file:line> --json <repo>` then `codegraph callees <sym> --json <repo>` | Find outbound callees at a call site. If the anchor carries a `symbol`, skip the `node` lookup; otherwise resolve the symbol at the file:line first, then query callees. |
+| `impact(repo, base, head)` | `git diff --name-only <base>..<head>` (via the adapter) | Compute the file-level change set between two commits. The real `codegraph impact <sym> --depth N` is symbol-level (what's affected if I change symbol X), not commit-level, so the adapter wraps `git diff` for the change set. |
+| `fullDoctor()` | `codegraph status --json <workspaceRoot>` | Surface the real CLI's status: `{ version, pending_sync, files_total, languages }`. |
+
+The real CLI's `codegraph impact <sym> --depth N` is reserved for a future symbol-level blast-radius capability (which would call `codegraph_callers` on each changed symbol).
+
+### 7.2 Integration modes
 
 | Mode | Use |
 | --- | --- |
-| CLI subprocess (preferred) | `runtime-adapters` calls `codegraph`; version-pinned |
-| TypeScript API | High-frequency packet paths (later) |
-| MCP | Agent in Cursor; artifacts **must** still land under `docs/as-is` |
+| CLI subprocess (default) | `runtime-adapters` calls `codegraph`; the real CLI ships a self-contained runtime so no system Node is required. |
+| MCP server | The `codegraph install --target=<host>` command wires the CodeGraph MCP server into Claude Code / Cursor / Codex CLI / opencode / etc. The agent then has `codegraph_explore`, `codegraph_node`, `codegraph_search`, `codegraph_callers` tools directly. dapei does **not** implement or vendor these tools — `codegraph install` wires them in, and CDR skills tell the agent **when** to use them. |
+| Node library | `import CodeGraph from '@colbymchenry/codegraph'`; requires Node ≥ 22.5 for built-in `node:sqlite`. Not used in v0.9 — the CLI subprocess mode covers all current callers. |
 
-### 7.2 Configuration
+### 7.3 Configuration
 
-Template: `runtime/templates/codegraph.config.json.template` with standard ignore globs. Per-repo override under `repos/<name>/`. Index output: `.dapei/graph/<name>/`.
+CodeGraph is **zero-config**. There is no `codegraph.config.json` to write. Language support is automatic from file extension. The real CLI skips dependency / build / cache directories and respects `.gitignore` by default. To exclude something else, add it to `.gitignore`. To pull a default-excluded directory back in, use a `.gitignore` negation (`!vendor/`).
 
-### 7.3 Degradation
+The only dapei-side decision is *which repo* to point CodeGraph at — every product repo under `repos/<repo>/` is independently initialized by `codegraph init -i` in that repo's directory. The index lives at `<repo>/.codegraph/codegraph.db` (CodeGraph-owned, gitignored). dapei does not own or relocate the index.
+
+### 7.4 Degradation
 
 | Failure | Behavior |
 | --- | --- |
-| codegraph missing | `cdr.profile` uses manifest + tree only |
-| Weak language parse | Lower candidate confidence; more Agent confirmation |
-| Stale graph | `cdr.stale.scan` prompts `cdr.graph.ensure` |
+| codegraph missing | `cdr.profile` sets `codegraph.installed: false`, skips graph calls, uses `manifest` + `tree` only. `cdr.entries.candidate` and `cdr.stale.scan` fall back to tree-walk / `git diff`. The profile block reflects it. |
+| `.codegraph/` not initialized in the repo | `cdr.profile` sets `codegraph.status: not-initialized` and surfaces the fix-up command (`codegraph init -i`) in the report's **Next Steps**. |
+| Index pending sync (file edits since last sync) | `codegraph_status` surfaces a `### Pending sync:` section naming affected files; the agent reads those directly per the staleness banner protocol. No dapei-side action. |
+| Weak language parse (Lua / Liquid / Pascal have lower measured cross-file coverage) | `cdr.entries.candidate` lowers candidate confidence for those files; more Agent confirmation; the engine never silently fabricates entries. |
+| Stale graph (commit drift) | `cdr.stale.scan` compares `repo_revision` against the index `revision`; mismatches prompt a re-`codegraph init -i` before the next `cdr.behavior.upsert`. |
+
+The adapter's `orient()`, `refs()`, `impact()`, and `fullDoctor()` methods all return `{ available: false, reason: "..." }` when the CLI is missing or fails. Callers MUST check the flag and degrade gracefully. The design principle is that the dapei platform ships with a working tree-walk + manifest fallback at every level; CodeGraph is an upgrade, not a dependency.
 
 ---
 
