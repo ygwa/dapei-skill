@@ -124,7 +124,7 @@ test('cdr.behavior.upsert rejects a structured call whose target is not in codeg
     process.env.PATH = `${fakeCli}${origPath ? ':' + origPath : ''}`;
     // Force the fake to return an empty callee list so the validation
     // cannot find any target.
-    process.env.FAKE_CODEGRAPH_REFS_JSON = '{"callees":[]}';
+    process.env.FAKE_CODEGRAPH_CALLEES_JSON = '{"callees":[]}';
     const core = await import('../../packages/core/src/index.ts');
     await core.runCapability('workspace.init', {}, c(tmp));
     const srcDir = await seedFixtureRepo(tmp, 'mall-order');
@@ -152,7 +152,7 @@ test('cdr.behavior.upsert rejects a structured call whose target is not in codeg
     );
   } finally {
     process.env.PATH = origPath;
-    delete process.env.FAKE_CODEGRAPH_REFS_JSON;
+    delete process.env.FAKE_CODEGRAPH_CALLEES_JSON;
     rmSync(tmp, { recursive: true, force: true });
   }
 });
@@ -162,7 +162,7 @@ test('cdr.behavior.upsert accepts a structured call whose target matches codegra
   withFakeCli();
   try {
     process.env.PATH = `${fakeCli}${origPath ? ':' + origPath : ''}`;
-    process.env.FAKE_CODEGRAPH_REFS_JSON = '{"callees":[{"name":"PaymentClient","kind":"method"}]}';
+    process.env.FAKE_CODEGRAPH_CALLEES_JSON = '{"callees":[{"name":"PaymentClient","kind":"method"}]}';
     const core = await import('../../packages/core/src/index.ts');
     await core.runCapability('workspace.init', {}, c(tmp));
     const srcDir = await seedFixtureRepo(tmp, 'mall-order');
@@ -188,7 +188,7 @@ test('cdr.behavior.upsert accepts a structured call whose target matches codegra
     assert.equal(result.ok, true);
   } finally {
     process.env.PATH = origPath;
-    delete process.env.FAKE_CODEGRAPH_REFS_JSON;
+    delete process.env.FAKE_CODEGRAPH_CALLEES_JSON;
     rmSync(tmp, { recursive: true, force: true });
   }
 });

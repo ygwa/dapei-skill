@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
-# v0.7 — fake codegraph CLI used by tests.
+# v0.9 — fake codegraph CLI used by tests.
 #
 # Tests prepend this directory to PATH so that the real codegraph
-# binary is shadowed. The fake supports the three subcommands the
-# v0.7 adapter invokes (orient, refs, impact) and produces JSON
-# outputs that the adapter can parse.
+# binary is shadowed. The fake supports the subcommands the v0.9
+# adapter invokes and produces JSON outputs that the adapter can
+# parse. The contract is a strict subset of the real codegraph JSON;
+# see packages/runtime-adapters/src/codegraph.ts for the contract.
 #
 # Behaviour is controlled by the FAKE_CODEGRAPH_* env vars the test
 # sets. Defaults are tuned for the mall-order + mall-payment fixtures:
-# `orient` returns one file per language, `refs` returns an empty
-# callee list (the test for cross-repo calls has its own FAKE_CODEGRAPH_REFS
-# script in the test), `impact` returns the diff between HEAD and
-# the main branch's last commit touching repos/.
+#   - `status` reports a small number of files + 0 pending
+#   - `files` returns one entry per language
+#   - `query --kind=function` returns one apisurface candidate per
+#     Controller/routes file
+#   - `callees` returns an empty callee list by default; tests
+#     inject precomputed JSON via FAKE_CODEGRAPH_CALLEES_JSON
 
 set -euo pipefail
 
@@ -23,9 +26,11 @@ fake-codegraph — a test double for the real codegraph CLI.
 
 Usage:
   fake-codegraph --version
-  fake-codegraph orient --budget small --json [--max-files N] [--max-bytes N] <repo>
-  fake-codegraph refs --json <repo> <anchor>
-  fake-codegraph impact --json <repo> <base> <head>
+  fake-codegraph status --json <repo>
+  fake-codegraph files --format=json [--limit N] <repo>
+  fake-codegraph query --kind=function --json <pattern> <repo>
+  fake-codegraph callees --json <symbol> <repo>
+  fake-codegraph node --json <file:line> <repo>
 
 All subcommands print a single JSON object on stdout. The shape is
 a strict subset of the real codegraph JSON; see
@@ -39,9 +44,24 @@ case "$PROG" in
   *) echo "fake-codegraph: invoked as $PROG" >&2; exit 2 ;;
 esac
 
-# v0.7 — the real CLI emits a --version line. Tests assert this is
+# v0.9 — the real CLI emits a --version line. Tests assert this is
 # captured in the profile's codegraph.version field.
-version_line="${FAKE_CODEGRAPH_VERSION:-1.8.0 (fake)}"
+version_line="${FAKE_CODEGRAPH_VERSION:-1.9.0 (fake)}"
+
+# v0.9 — extracted the language-by-extension mapping into a
+# function so we don't hit the bash parser's confusion with `;;`
+# inside a `$(case ... esac)` command substitution.
+lang_for() {
+  case "$1" in
+    *.ts|*.tsx) echo "typescript" ;;
+    *.js|*.jsx|*.mjs|*.cjs) echo "javascript" ;;
+    *.py) echo "python" ;;
+    *.java) echo "java" ;;
+    *.go) echo "go" ;;
+    *.rs) echo "rust" ;;
+    *) echo "text" ;;
+  esac
+}
 
 if [[ "${1:-}" == "--version" ]]; then
   printf '%s\n' "$version_line"
@@ -58,118 +78,130 @@ shift || true
 
 # Parse the few flags we honour. Anything else is silently passed
 # through (the real CLI is the one with a stable contract).
-max_files=200
-max_bytes=200000
 emit_json=0
+kind_filter=""
+limit=200
 rest=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --json) emit_json=1 ;;
-    --budget) shift || true ;;
-    --max-files) max_files="${2:-200}"; shift || true ;;
-    --max-bytes) max_bytes="${2:-200000}"; shift || true ;;
+    --format=json) : ;;  # files subcommand uses this instead of --json
+    --kind) kind_filter="${2:-}"; shift || true ;;
+    --kind=*) kind_filter="${1#--kind=}" ;;
+    --limit) limit="${2:-200}"; shift || true ;;
+    --limit=*) limit="${1#--limit=}" ;;
     *) rest+=("$1") ;;
   esac
   shift || true
 done
 
-if [[ "$emit_json" -ne 1 ]]; then
+if [[ "$emit_json" -ne 1 && "$subcommand" != "files" ]]; then
   echo "fake-codegraph: requires --json (the real CLI is the same)" >&2
   exit 2
 fi
 
 case "$subcommand" in
-  orient)
+  status)
+    # The real CLI emits { pending, files_total, languages, version }.
+    repo_path="${rest[0]:-}"
+    files_total=0
+    if [[ -n "$repo_path" && -d "$repo_path" ]]; then
+      files_total=$(find "$repo_path" -type f \( -name "*.ts" -o -name "*.js" -o -name "*.py" -o -name "*.java" \) 2>/dev/null | wc -l | tr -d ' ')
+    fi
+    cat <<EOF
+{"pending":0,"files_total":${files_total},"languages":{"typescript":${files_total}},"version":"$version_line","indexed_at":"2026-06-12T00:00:00Z"}
+EOF
+    ;;
+  files)
+    # Replaces the v0.7/v0.8 `orient` subcommand. The real CLI's
+    # `codegraph files --format=json <repo>` returns a { files: [...] }
+    # object where each file has { relpath, language, size_bytes,
+    # content, truncated }. Content may be omitted by the real CLI for
+    # large files; the fake inlines it.
     repo_path="${rest[0]:-}"
     if [[ -z "$repo_path" || ! -d "$repo_path" ]]; then
-      echo "fake-codegraph: orient requires a directory argument" >&2
+      echo "fake-codegraph: files requires a directory argument" >&2
       exit 2
     fi
     file_count=0
-    apisurface_count=0
     files_json="["
     first=1
-    # Walk the repo, picking files with extensions the real adapter
-    # cares about. Cap at max_files.
     while IFS= read -r -d '' f; do
       [[ $first -eq 0 ]] && files_json+=","
       first=0
       relpath="${f#$repo_path/}"
-      # Strip leading "./" if present
       relpath="${relpath#./}"
       size=$(wc -c < "$f" | tr -d ' ')
-      [[ $size -gt $max_bytes ]] && { content_head=$(head -c $max_bytes "$f"); truncated=true; size=$max_bytes; } || { content_head=$(cat "$f"); truncated=false; }
-      # Naive apisurface detection: a file with 'Controller' or
-      # 'routes' in its name and an HTTP verb-looking method body
-      # is reported as an api entry. This is the same heuristic the
-      # real CLI's apisurface command uses; the test double just
-      # inlines the count.
-      case "$relpath" in
-        *Controller*|*routes*|*router*|*server*|*app.py*)
-          apisurface_count=$((apisurface_count + 1))
-          apisurface_hint=',"apisurface_hint":{"type":"api"}'
-          ;;
-        *)
-          apisurface_hint=''
-          ;;
-      esac
-      # JSON-encode the content (escape backslashes and quotes).
-      esc_content=$(printf '%s' "$content_head" | python3 -c 'import sys,json; sys.stdout.write(json.dumps(sys.stdin.read()))')
-      if [[ "$truncated" == "true" ]]; then
-        files_json+="{\"relpath\":\"$relpath\",\"language\":\"text\",\"size_bytes\":$size,\"truncated\":true,\"content\":$esc_content$apisurface_hint}"
-      else
-        files_json+="{\"relpath\":\"$relpath\",\"language\":\"text\",\"size_bytes\":$size,\"truncated\":false,\"content\":$esc_content$apisurface_hint}"
-      fi
+      content=$(python3 -c 'import sys,json; sys.stdout.write(json.dumps(sys.stdin.read()))' < "$f")
+      lang=$(lang_for "$relpath")
+      files_json+="{\"relpath\":\"$relpath\",\"language\":\"$lang\",\"size_bytes\":$size,\"truncated\":false,\"content\":$content}"
       file_count=$((file_count + 1))
-      if [[ $file_count -ge $max_files ]]; then break; fi
+      if [[ $file_count -ge $limit ]]; then break; fi
     done < <(find "$repo_path" -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.mjs" -o -name "*.cjs" -o -name "*.java" -o -name "*.kt" -o -name "*.scala" -o -name "*.py" -o -name "*.rb" -o -name "*.go" -o -name "*.rs" -o -name "*.php" -o -name "*.cs" -o -name "*.swift" -o -name "*.m" -o -name "*.dart" \) -print0 2>/dev/null)
     files_json+="]"
     cat <<EOF
-{
-  "files_total": $file_count,
-  "apisurface_count": $apisurface_count,
-  "files": $files_json
-}
+{"files_total":$file_count,"files":$files_json}
 EOF
     ;;
-  refs)
-    # Tests inject a precomputed refs JSON via FAKE_CODEGRAPH_REFS_JSON.
-    # Default is an empty callee list.
-    if [[ -n "${FAKE_CODEGRAPH_REFS_JSON:-}" ]]; then
-      printf '%s\n' "$FAKE_CODEGRAPH_REFS_JSON"
+  query)
+    # Replaces the v0.7/v0.8 apisurface_hint inline computation.
+    # The real CLI's `codegraph query --kind=function --json <pattern> <repo>`
+    # returns { results: [{ name, kind, file, line, route? }, ...] }.
+    # The adapter merges route-bearing entries into the per-file
+    # apisurface_hint on the orient result.
+    pattern="${rest[0]:-}"
+    repo_path="${rest[1]:-}"
+    if [[ -z "$repo_path" || ! -d "$repo_path" ]]; then
+      echo "fake-codegraph: query requires a directory argument" >&2
+      exit 2
+    fi
+    results="["
+    first=1
+    while IFS= read -r -d '' f; do
+      relpath="${f#$repo_path/}"
+      relpath="${relpath#./}"
+      entry=""
+      case "$relpath" in
+        *Controller*)
+          entry="{\"name\":\"$(basename "$relpath" .ts)\",\"kind\":\"function\",\"file\":\"$relpath\",\"line\":1,\"route\":{\"method\":\"POST\",\"path\":\"/orders\"}}"
+          ;;
+        *routes*)
+          entry="{\"name\":\"$(basename "$relpath" .ts)\",\"kind\":\"function\",\"file\":\"$relpath\",\"line\":1,\"route\":{\"method\":\"GET\",\"path\":\"/orders/:id\"}}"
+          ;;
+        *) entry="" ;;  # non-routes files don't contribute apisurface hints
+      esac
+      if [[ -n "$entry" ]]; then
+        [[ $first -eq 0 ]] && results+=","
+        first=0
+        results+="$entry"
+      fi
+    done < <(find "$repo_path" -type f -name "*.ts" -print0 2>/dev/null)
+    results+="]"
+    cat <<EOF
+{"results":${results}}
+EOF
+    ;;
+  node)
+    # The real CLI's `codegraph node <file:line> --json` returns
+    # { symbol, name, kind, file, line, body? }. The fake returns
+    # a synthetic symbol derived from the file:line anchor.
+    # The printf adds a trailing newline — the real CLI's output
+    # is newline-terminated and the adapter's JSON.parse needs it.
+    anchor="${rest[0]:-}"
+    printf '{"symbol":"%s#synthetic","name":"%s#synthetic","kind":"function","file":"%s","line":%s}\n' \
+      "$anchor" "$anchor" "${anchor%:*}" "${anchor##*:}"
+    ;;
+  callees)
+    # Tests inject a precomputed callees JSON via
+    # FAKE_CODEGRAPH_CALLEES_JSON. Default is an empty callee list.
+    symbol="${rest[0]:-}"
+    if [[ -n "${FAKE_CODEGRAPH_CALLEES_JSON:-}" ]]; then
+      printf '%s\n' "$FAKE_CODEGRAPH_CALLEES_JSON"
     else
       cat <<'EOF'
 {"callees":[]}
 EOF
     fi
-    ;;
-  impact)
-    # Compute a fake blast radius from the head ref's changed files.
-    # If the repo is a git repo and both refs exist, use git diff
-    # to derive the change set; otherwise emit a stub. The whole
-    # output is built in Python so the JSON encoding is correct.
-    repo_path="${rest[0]:-}"
-    base="${rest[1]:-}"
-    head="${rest[2]:-}"
-    python3 - "$repo_path" "$base" "$head" <<'PYEOF'
-import json, subprocess, sys
-repo_path, base, head = sys.argv[1], sys.argv[2], sys.argv[3]
-out = {"base": base, "head": head, "changed_files": []}
-try:
-    files = subprocess.check_output(
-        ["git", "-C", repo_path, "diff", "--name-only", f"{base}..{head}", "--"],
-        stderr=subprocess.DEVNULL, text=True
-    ).split()
-    out["changed_files"] = files
-except Exception:
-    pass
-print(json.dumps(out))
-PYEOF
-    ;;
-  doctor)
-    cat <<EOF
-{"available":true,"version":"$version_line"}
-EOF
     ;;
   *)
     echo "fake-codegraph: unknown subcommand: $subcommand" >&2
