@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="2550" viewBox="0 0 1800 2550" role="img" aria-labelledby="title desc">
+  <title id="title">dapei.skill 3.1.0 技术实现架构与能力清单</title>
+  <desc id="desc">展示 dapei 的用户入口、skills、commands、router、capability registry、CDR 认知资产链路、feature 生命周期、证据规则和完整能力清单。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#06111f"/><stop offset="48%" stop-color="#10243a"/><stop offset="100%" stop-color="#08131f"/></linearGradient>
+    <linearGradient id="hero" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#42e8d4"/><stop offset="50%" stop-color="#f6d365"/><stop offset="100%" stop-color="#fb7185"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000000" flood-opacity="0.32"/></filter>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto"><path d="M1,1 L11,6 L1,11 Z" fill="#7dd3fc"/></marker>
+    <marker id="arrowHot" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto"><path d="M1,1 L11,6 L1,11 Z" fill="#f6d365"/></marker>
+    <style>
+      .panel{fill:#0d1b2c;stroke:#2b5b77;stroke-width:1.4;rx:28;filter:url(#shadow)}
+      .soft{fill:rgba(255,255,255,.05);stroke:rgba(125,211,252,.35);stroke-width:1.2;rx:22}
+      .skill{fill:#113444;stroke:#42e8d4;stroke-width:1.3;rx:20}
+      .cdr{fill:#241b39;stroke:#c084fc;stroke-width:1.3;rx:20}
+      .warn{fill:rgba(251,113,133,.10);stroke:#fb7185;stroke-width:1.3;rx:18}
+      .ok{fill:rgba(66,232,212,.10);stroke:#42e8d4;stroke-width:1.3;rx:18}
+      .title{font-family:"Avenir Next","PingFang SC","Noto Sans CJK SC",sans-serif;font-weight:800;fill:#f8fafc;letter-spacing:-1px}
+      .section{font-family:"Avenir Next","PingFang SC","Noto Sans CJK SC",sans-serif;font-weight:800;fill:#e6f7ff;font-size:32px}
+      .label{font-family:"Avenir Next","PingFang SC","Noto Sans CJK SC",sans-serif;font-weight:700;fill:#f8fafc;font-size:23px}
+      .small{font-family:"Avenir Next","PingFang SC","Noto Sans CJK SC",sans-serif;fill:#c9d8e8;font-size:18px}
+      .tiny{font-family:"Avenir Next","PingFang SC","Noto Sans CJK SC",sans-serif;fill:#aebed0;font-size:15px}
+      .mono{font-family:"SF Mono","JetBrains Mono","Menlo",monospace;fill:#d6f5ff;font-size:17px}
+      .monoSmall{font-family:"SF Mono","JetBrains Mono","Menlo",monospace;fill:#cdefff;font-size:14px}
+      .accent{fill:#42e8d4;font-weight:800}.gold{fill:#f6d365;font-weight:800}.pink{fill:#fb7185;font-weight:800}.purple{fill:#c084fc;font-weight:800}
+      .line{stroke:#7dd3fc;stroke-width:2.2;fill:none;marker-end:url(#arrow);opacity:.82}.hot{stroke:#f6d365;stroke-width:2.6;fill:none;marker-end:url(#arrowHot);opacity:.9}.dash{stroke:#94a3b8;stroke-width:1.8;fill:none;stroke-dasharray:8 8;opacity:.72}
+      .chip{fill:rgba(125,211,252,.13);stroke:rgba(125,211,252,.45);rx:12}.chipText{font-family:"SF Mono","JetBrains Mono","Menlo",monospace;fill:#d6f5ff;font-size:14px;font-weight:700}
+    </style>
+  </defs>
+  <rect width="1800" height="2550" fill="url(#bg)"/>
+  <g opacity=".65"><circle cx="120" cy="180" r="3" fill="#fff" opacity=".045"/><circle cx="760" cy="160" r="2.4" fill="#fff" opacity=".045"/><circle cx="1320" cy="110" r="3" fill="#fff" opacity=".045"/><circle cx="220" cy="640" r="2" fill="#fff" opacity=".045"/><circle cx="1510" cy="760" r="2.5" fill="#fff" opacity=".045"/><circle cx="80" cy="1220" r="2.5" fill="#fff" opacity=".045"/><circle cx="1710" cy="1320" r="3" fill="#fff" opacity=".045"/><circle cx="420" cy="1810" r="2" fill="#fff" opacity=".045"/><circle cx="1240" cy="2060" r="2.5" fill="#fff" opacity=".045"/></g>
+
+  <g transform="translate(86 74)">
+    <rect x="0" y="0" width="1628" height="188" rx="34" fill="rgba(255,255,255,.055)" stroke="rgba(125,211,252,.30)" filter="url(#shadow)"/>
+    <rect x="32" y="34" width="14" height="120" rx="7" fill="url(#hero)" filter="url(#glow)"/>
+    <text x="72" y="72" class="title" font-size="52">dapei.skill 3.1.0 技术实现架构</text>
+    <text x="74" y="116" class="small" font-size="26">AI Native Engineering Context OS：用户通过 <tspan class="accent">@dapei</tspan> 对话，AI 编排 deterministic capability registry，产出 evidence-first 认知资产。</text>
+    <text x="74" y="154" class="small">核心原则：<tspan class="gold">skills 是知识域</tspan> · <tspan class="gold">commands 是工作流</tspan> · <tspan class="gold">capabilities 是原子能力</tspan> · <tspan class="gold">engine 不读代码，只校验证据并落盘</tspan></text>
+    <g transform="translate(1262 42)"><rect class="chip" x="0" y="0" width="278" height="42"/><text class="chipText" x="18" y="27">50 registered capabilities</text><rect class="chip" x="0" y="58" width="278" height="42"/><text class="chipText" x="18" y="85">7 modular skills + 4 commands</text></g>
+  </g>
+
+  <g transform="translate(86 306)">
+    <text x="0" y="0" class="section">一、从用户意图到确定性执行</text><rect class="panel" x="0" y="26" width="1628" height="380"/>
+    <g transform="translate(42 74)"><rect class="skill" x="0" y="0" width="245" height="120"/><text x="22" y="36" class="label">User Conversation</text><text x="22" y="68" class="mono">@dapei &lt;intent&gt;</text><text x="22" y="96" class="tiny">自然语言入口，不要求用户记脚本</text></g><path class="hot" d="M300 134 C335 134 352 134 385 134"/>
+    <g transform="translate(394 74)"><rect class="skill" x="0" y="0" width="266" height="120"/><text x="22" y="36" class="label">Router Skill</text><text x="22" y="68" class="mono">SKILL.md</text><text x="22" y="96" class="tiny">识别意图，选择 skill / command / capability</text></g><path class="line" d="M672 134 C704 134 720 134 750 134"/>
+    <g transform="translate(758 74)"><rect class="skill" x="0" y="0" width="278" height="120"/><text x="22" y="36" class="label">Intent Router</text><text x="22" y="68" class="mono">packages/router</text><text x="22" y="96" class="tiny">中英文 regex + extractor → capability id</text></g><path class="line" d="M1046 134 C1080 134 1098 134 1130 134"/>
+    <g transform="translate(1138 74)"><rect class="skill" x="0" y="0" width="250" height="120"/><text x="22" y="36" class="label">Capability Registry</text><text x="22" y="68" class="mono">packages/core</text><text x="22" y="96" class="tiny">runCapability(id, input, ctx)</text></g><path class="hot" d="M1398 134 C1430 134 1448 134 1480 134"/>
+    <g transform="translate(1488 74)"><rect class="skill" x="0" y="0" width="96" height="120"/><text x="18" y="36" class="label">YAML</text><text x="18" y="67" class="tiny">validated</text><text x="18" y="94" class="tiny">artifacts</text></g>
+    <g transform="translate(42 240)"><rect class="soft" x="0" y="0" width="472" height="104"/><text x="20" y="34" class="label">对外体验边界</text><text x="20" y="64" class="small">普通用户使用 @dapei initialize / create feature / discover...</text><text x="20" y="88" class="tiny">内部脚本只作为维护者、CI、smoke test、调试入口。</text></g>
+    <g transform="translate(572 240)"><rect class="ok" x="0" y="0" width="470" height="104"/><text x="20" y="34" class="label">Engine 职责</text><text x="20" y="64" class="small">目录脚手架 · schema 校验 · evidence 校验 · 审计 · 索引 · 落盘</text><text x="20" y="88" class="tiny">无 LLM 调用，CI 可复现，行为确定。</text></g>
+    <g transform="translate(1100 240)"><rect class="warn" x="0" y="0" width="484" height="104"/><text x="20" y="34" class="label">Agent 职责</text><text x="20" y="64" class="small">读代码 · 判断业务语义 · 追踪调用链 · 提交事实证据</text><text x="20" y="88" class="tiny">AI 是 scanner；engine 是 validator。</text></g>
+  </g>
+
+  <g transform="translate(86 770)">
+    <text x="0" y="0" class="section">二、搭配 skills：知识域、命令工作流与用户场景</text><rect class="panel" x="0" y="26" width="1628" height="436"/>
+    <g transform="translate(40 70)"><text x="0" y="0" class="label">7 个模块化 skills</text>
+      <g transform="translate(0 30)"><rect class="skill" x="0" y="0" width="220" height="82"/><text x="18" y="30" class="mono">workspace</text><text x="18" y="57" class="tiny">初始化 / 校验 / 状态</text></g>
+      <g transform="translate(240 30)"><rect class="skill" x="0" y="0" width="220" height="82"/><text x="18" y="30" class="mono">repos</text><text x="18" y="57" class="tiny">仓库注册 / 同步 / 分析</text></g>
+      <g transform="translate(480 30)"><rect class="skill" x="0" y="0" width="220" height="82"/><text x="18" y="30" class="mono">feature</text><text x="18" y="57" class="tiny">需求生命周期 / closeout</text></g>
+      <g transform="translate(720 30)"><rect class="skill" x="0" y="0" width="220" height="82"/><text x="18" y="30" class="mono">workflow</text><text x="18" y="57" class="tiny">stage DAG / 上下文构建</text></g>
+      <g transform="translate(0 132)"><rect class="skill" x="0" y="0" width="220" height="82"/><text x="18" y="30" class="mono">validation</text><text x="18" y="57" class="tiny">测试发现 / 执行 / 报告</text></g>
+      <g transform="translate(240 132)"><rect class="skill" x="0" y="0" width="220" height="82"/><text x="18" y="30" class="mono">cognitive</text><text x="18" y="57" class="tiny">行为认知 / 状态草稿</text></g>
+      <g transform="translate(480 132)"><rect class="cdr" x="0" y="0" width="460" height="82"/><text x="18" y="30" class="mono">cdr</text><text x="18" y="57" class="tiny">Profile → Entries → Behavior → State → Domain → Capability Map → Portal</text></g>
+      <g transform="translate(0 264)"><text x="0" y="0" class="label">4 个高频 commands（多 capability 编排）</text><rect class="soft" x="0" y="28" width="226" height="78"/><text x="18" y="58" class="mono">/workspace-init</text><text x="18" y="83" class="tiny">validate → init → report</text><rect class="soft" x="246" y="28" width="226" height="78"/><text x="264" y="58" class="mono">/cdr-bootstrap</text><text x="264" y="83" class="tiny">profile → entries → behavior → portal</text><rect class="soft" x="492" y="28" width="226" height="78"/><text x="510" y="58" class="mono">/feature</text><text x="510" y="83" class="tiny">create / close feature</text><rect class="soft" x="738" y="28" width="202" height="78"/><text x="756" y="58" class="mono">/drift-check</text><text x="756" y="83" class="tiny">stale + architecture drift</text></g>
+    </g>
+    <g transform="translate(1040 70)"><rect class="warn" x="0" y="0" width="542" height="320"/><text x="24" y="38" class="label">Command / Skill 边界规则</text><text x="24" y="78" class="small">1. skill 是一块知识域：教 AI 怎么想。</text><text x="24" y="112" class="small">2. capability 是原子 API：由 engine 确定性执行。</text><text x="24" y="146" class="small">3. command 是动词工作流：顺序组合多个 capability。</text><text x="24" y="180" class="small">4. command body 只引用 capability id，不硬编码其他 command。</text><text x="24" y="214" class="small">5. 用户体验优先是 @dapei ...，不是脚本命令。</text><text x="24" y="264" class="tiny">例：想检测漂移时，说“要不要做 drift-check”，而不是要求用户记住内部调用细节。</text></g>
+  </g>
+
+  <g transform="translate(86 1290)">
+    <text x="0" y="0" class="section">三、实现包结构：确定性执行层与扩展包</text><rect class="panel" x="0" y="26" width="1628" height="382"/>
+    <g transform="translate(48 78)"><rect class="soft" x="0" y="0" width="294" height="238"/><text x="22" y="36" class="label">engine/</text><text x="22" y="72" class="mono">dapei-engine.ts</text><text x="22" y="108" class="tiny">CLI shim：run / route</text><text x="22" y="134" class="tiny">维护者与 CI 使用</text><text x="22" y="172" class="tiny">scripts/dapei 是兼容薄适配层</text></g><path class="line" d="M356 196 C392 196 418 196 448 196"/>
+    <g transform="translate(462 78)"><rect class="soft" x="0" y="0" width="326" height="238"/><text x="22" y="36" class="label">packages/router</text><text x="22" y="72" class="mono">routeIntent()</text><text x="22" y="108" class="tiny">英文 + 中文意图匹配</text><text x="22" y="134" class="tiny">extract feature / repo / stage / entity</text><text x="22" y="172" class="tiny">输出 capability + input + confidence</text></g><path class="hot" d="M802 196 C838 196 864 196 894 196"/>
+    <g transform="translate(908 78)"><rect class="ok" x="0" y="0" width="326" height="238"/><text x="22" y="36" class="label">packages/core</text><text x="22" y="72" class="mono">capabilitySpecs[]</text><text x="22" y="108" class="tiny">workspace / repos / feature / workflow</text><text x="22" y="134" class="tiny">validation / cognitive / audit / memory</text><text x="22" y="172" class="tiny">CapabilitySpec input/output schema</text></g><path class="line" d="M1248 156 C1280 128 1308 108 1340 98"/><path class="line" d="M1248 220 C1280 248 1308 272 1340 292"/>
+    <g transform="translate(1352 58)"><rect class="cdr" x="0" y="0" width="230" height="132"/><text x="20" y="36" class="label">packages/cdr</text><text x="20" y="70" class="monoSmall">cdr.* capabilities</text><text x="20" y="98" class="tiny">认知发现、证据校验、漂移检测</text></g>
+    <g transform="translate(1352 234)"><rect class="cdr" x="0" y="0" width="230" height="132"/><text x="20" y="36" class="label">packages/doc-gen</text><text x="20" y="70" class="monoSmall">cdr.doc.generate</text><text x="20" y="98" class="tiny">VitePress + Vue 3 知识门户</text></g>
+  </g>
+
+  <g transform="translate(86 1754)">
+    <text x="0" y="0" class="section">四、Capability Registry：当前 50 个原子能力</text><rect class="panel" x="0" y="26" width="1628" height="412"/>
+    <g transform="translate(38 70)">
+      <rect class="soft" x="0" y="0" width="238" height="140"/><text x="18" y="32" class="label">Workspace</text><text class="monoSmall" x="18" y="62">workspace.init</text><text class="monoSmall" x="18" y="86">workspace.report</text><text class="monoSmall" x="18" y="110">workspace.status</text><text class="monoSmall" x="18" y="134">workspace.validate</text>
+      <rect class="soft" x="262" y="0" width="238" height="188"/><text x="280" y="32" class="label">Repos</text><text class="monoSmall" x="280" y="62">repos.add</text><text class="monoSmall" x="280" y="86">repos.sync</text><text class="monoSmall" x="280" y="110">repos.list</text><text class="monoSmall" x="280" y="134">repos.check</text><text class="monoSmall" x="280" y="158">repos.analyze</text><text class="monoSmall" x="280" y="182">repos.remove</text>
+      <rect class="soft" x="524" y="0" width="256" height="260"/><text x="542" y="32" class="label">Feature</text><text class="monoSmall" x="542" y="62">feature.create</text><text class="monoSmall" x="542" y="86">feature.status</text><text class="monoSmall" x="542" y="110">feature.stage</text><text class="monoSmall" x="542" y="134">feature.tasks</text><text class="monoSmall" x="542" y="158">feature.review</text><text class="monoSmall" x="542" y="182">feature.close</text><text class="monoSmall" x="542" y="206">feature.assign</text><text class="monoSmall" x="542" y="230">feature.handoff</text><text class="monoSmall" x="542" y="254">feature.team-status</text>
+      <rect class="soft" x="804" y="0" width="264" height="212"/><text x="822" y="32" class="label">Workflow / Validation</text><text class="monoSmall" x="822" y="62">context.build</text><text class="monoSmall" x="822" y="86">workflow.runStage</text><text class="monoSmall" x="822" y="110">workflow.status</text><text class="monoSmall" x="822" y="134">validation.run</text><text class="monoSmall" x="822" y="158">validation.detect</text><text class="monoSmall" x="822" y="182">validation.execute</text><text class="monoSmall" x="822" y="206">validation.report</text>
+      <rect class="soft" x="1092" y="0" width="210" height="116"/><text x="1110" y="32" class="label">Reports / Ops</text><text class="monoSmall" x="1110" y="62">feature.guardrail</text><text class="monoSmall" x="1110" y="86">feature.report</text><text class="monoSmall" x="1110" y="110">audit.query</text>
+      <rect class="soft" x="1326" y="0" width="222" height="188"/><text x="1344" y="32" class="label">Cognitive</text><text class="monoSmall" x="1344" y="62">cognitive.discover</text><text class="monoSmall" x="1344" y="86">cognitive.artifact.validate</text><text class="monoSmall" x="1344" y="110">cognitive.artifact.upsert</text><text class="monoSmall" x="1344" y="134">cognitive.artifact.list</text><text class="monoSmall" x="1344" y="158">cognitive.state.suggest</text><text class="monoSmall" x="1344" y="182">cognitive.explore</text>
+      <rect class="cdr" x="0" y="282" width="1548" height="86"/><text x="22" y="34" class="label">CDR / Doc Generation / Memory</text><text class="monoSmall" x="22" y="64">cdr.profile · cdr.entries.candidate · cdr.entries.propose · cdr.entries.prepare · cdr.entries.confirm · cdr.behavior.upsert · cdr.state.derive · cdr.business.compose</text><text class="monoSmall" x="22" y="86">cdr.domain.compose · cdr.capability.map.init · cdr.index.list · cdr.asset.stale-check · cdr.architecture-drift-check · cdr.doc.generate · memory.append</text>
+    </g>
+  </g>
+
+  <g transform="translate(86 2250)">
+    <text x="0" y="0" class="section">五、CDR 知识生产线、Feature 维度边界与证据红线</text><rect class="panel" x="0" y="26" width="1628" height="230"/>
+    <g transform="translate(36 70)">
+      <rect class="cdr" x="0" y="0" width="220" height="82"/><text x="20" y="30" class="label">L0 Profile</text><text x="20" y="58" class="monoSmall">cdr.profile</text><path class="hot" d="M230 41 L286 41"/>
+      <rect class="cdr" x="296" y="0" width="220" height="82"/><text x="316" y="30" class="label">L2 Entries</text><text x="316" y="58" class="monoSmall">candidate → propose → confirm</text><path class="hot" d="M526 41 L582 41"/>
+      <rect class="cdr" x="592" y="0" width="220" height="82"/><text x="612" y="30" class="label">L3 Behavior</text><text x="612" y="58" class="monoSmall">cdr.behavior.upsert</text><path class="hot" d="M822 41 L878 41"/>
+      <rect class="cdr" x="888" y="0" width="220" height="82"/><text x="908" y="30" class="label">L3 State / Rules</text><text x="908" y="58" class="monoSmall">state.derive · business.compose</text><path class="hot" d="M1118 41 L1174 41"/>
+      <rect class="cdr" x="1184" y="0" width="170" height="82"/><text x="1204" y="30" class="label">L2 Domain</text><text x="1204" y="58" class="monoSmall">derived_from[]</text><path class="hot" d="M1364 41 L1420 41"/>
+      <rect class="cdr" x="1430" y="0" width="150" height="82"/><text x="1450" y="30" class="label">L1 Map</text><text x="1450" y="58" class="monoSmall">capability map</text>
+    </g>
+    <g transform="translate(36 172)"><rect class="warn" x="0" y="0" width="506" height="56"/><text x="18" y="34" class="small"><tspan class="pink">Evidence contract：</tspan> fact → sources[]；inference → derived_from[]；unknown → reason。</text><rect class="ok" x="566" y="0" width="464" height="56"/><text x="584" y="34" class="small"><tspan class="accent">Dimension：</tspan> active feature 写 features/&lt;f&gt;；workspace 只由 close 或 cdr.* 写。</text><rect class="soft" x="1070" y="0" width="510" height="56"/><text x="1088" y="34" class="small"><tspan class="gold">Portal：</tspan> docs/as-is/* + .dapei/cognitive/index.yaml → .dapei/docs-portal/</text></g>
+  </g>
+  <g transform="translate(86 2504)"><text x="0" y="0" class="tiny">Source: repository docs, SKILL.md router, packages/core capability registry, packages/router routes, skills/cdr and commands. Generated for dapei.skill architecture overview.</text></g>
+</svg>
