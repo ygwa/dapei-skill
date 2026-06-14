@@ -60,7 +60,7 @@ Call `feature.close`. The engine:
 - Writes `docs/decisions/<feature>-decisions.md`
 - Writes `docs/feature-impact/<feature>.md`
 - Updates the cognitive index with any new behaviors/states from the feature
-- Sets `feature.yaml` status: closed
+- Sets feature.yaml status: closed
 
 Pause for user confirmation before this step (it crosses dimension boundary — feature → workspace).
 

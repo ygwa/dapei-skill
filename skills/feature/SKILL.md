@@ -41,7 +41,7 @@ description: Use when managing feature lifecycle, creating features, or checking
 
 1. 验证 feature name 符合命名规范（`[a-z0-9-]+`）
 2. 创建 `features/<name>/` 目录结构
-3. 初始化 `feature.yaml` 元数据
+3. 初始化 feature.yaml 元数据
 4. 初始化 `context/runtime-context.md`
 5. 创建 `docs/` 目录骨架
 6. 可选：初始化 `agents.md` 协作提示
@@ -75,7 +75,7 @@ stages:
 
 ### Status（状态查看）
 
-读取 `feature.yaml`，输出：
+读取 feature.yaml，输出：
 - 当前 stage 和进度
 - 各 repo 关联的 worktree 状态
 - 待处理项摘要
@@ -100,7 +100,7 @@ stages:
 1. 验证所有 stage 已完成
 2. 生成决策日志 `docs/decisions/<feature>-decisions.md`
 3. 生成影响文档 `docs/feature-impact/<feature>.md`
-4. 更新 `feature.yaml` 状态为 `closed`
+4. 更新 feature.yaml 状态为 closed
 5. 归档 worktree（可选）
 
 ---

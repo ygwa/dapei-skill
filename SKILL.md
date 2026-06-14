@@ -1,7 +1,7 @@
 ---
 name: dapei
 description: AI Native Engineering Context OS - Router Skill
-version: 3.0.0
+version: 3.1.0
 ---
 
 # dapei Router Skill

@@ -86,8 +86,8 @@ test('cdr e2e: vitepress build produces static HTML with all sections', async ()
 
     const dist = join(portal, '.vitepress/dist');
     assert.ok(existsSync(join(dist, 'index.html')));
-    assert.ok(existsSync(join(dist, 'behaviors/sample-app/order-create.html')));
-    assert.ok(existsSync(join(dist, 'states/sample-app/order.html')));
+    assert.ok(existsSync(join(dist, 'behaviors/demo/order-create.html')));
+    assert.ok(existsSync(join(dist, 'states/order.html')));
 
     // Vue components must be referenced in the built JS bundles
     const assetFiles = readdirSync(join(dist, 'assets')).filter((f) => /\.(js|css)$/.test(f));
@@ -100,7 +100,7 @@ test('cdr e2e: vitepress build produces static HTML with all sections', async ()
     const jsFiles = assetFiles.filter((f) => f.endsWith('.js'));
     const orderBundle = jsFiles
       .map((f) => ({ f, content: readFileSync(join(dist, 'assets', f), 'utf8') }))
-      .find((x) => x.f.includes('behaviors_order-create.md'))?.content || '';
+      .find((x) => x.f.includes('behaviors_demo_order-create.md'))?.content || '';
     assert.match(orderBundle, /Validate/, 'step name must be embedded in page bundle');
     assert.match(orderBundle, /check stock/, 'step action must be embedded in page bundle');
   } finally {

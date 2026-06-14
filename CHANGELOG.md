@@ -17,6 +17,14 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
+### Changed
+### Fixed
+### Removed
+
+## [3.1.0] - 2026-06-12
+
+
+### Added
 - **CDR v0.8 — Reverse-cluster to L1** (on `feature/cdr-v0.8-reverse-cluster`)
 - New `cdr.domain.suggest` capability: read-only reverse-cluster of behaviors into suggested domain candidates. Output `docs/as-is/cross-repo/domain-suggestions.yaml`. Edge types: shared-events (weight 4), shared-writes (weight 3), cross-repo-calls (weight 2), business-rule co-apply (weight 1). Naming heuristic takes the most-frequent event-name subject across the cluster and prefixes `Cross-Repo:` when the cluster spans more than one repo. Confidence is `high` (shared-events + cross-repo), `medium` (shared-events OR shared-writes), or `low` (everything else). Hard contract: never calls `cdr.domain.compose`; suggest and commit stay two separate steps.
 - New `cdr.capability.map.synth` capability: engine-driven clustering of *domains* into the L1 capability map. Domain sources in priority order: `input.manual_domains[]` → composed domains → suggestions (only when `use_suggested_domains: true`). Back-fills `spans_repos` / `behavior_count` / `fact_ratio` from the cognitive index for each capability. Two modes: auto-synthesize (one capability per domain, id = `domain.<slug>`) or AI-curated (`capabilities[]` passed; ids validated against the v0.5 multi-segment regex). Empty workspace is a legitimate state and writes `status: empty` plus a clear pointer at the next step.
@@ -34,6 +42,11 @@ Match the language and detail level of the existing release entries.
 - `loadComposedDomains` previously preferred `doc.domain` (the kebab slug used for the filesystem name) over `doc.name` (the human label). AI capability `domains[]` entries write the human label, so the back-fill metrics step failed to find composed domains by name. Now prefers `doc.name`.
 
 ### Added
+- **CDR v0.9 — CodeGraph real-CLI rewrite** (on `feature/cdr-v0.9-codegraph-real-cli`)
+- `packages/runtime-adapters/src/codegraph.ts` rewritten against the real [colbymchenry/codegraph] CLI surface (`files --format=json`, `query --kind=function`, `node`, `callers`, `callees`, `status`). The v0.7 / v0.8 adapter called fictional subcommands (`orient` / `refs` / `impact` / `doctor`) that the real binary never shipped; those calls would have silently no-oped. CDR-facing public API (`orient`, `refs`, `impact`, `fullDoctor`) is preserved so callers in `packages/cdr/src/capabilities.ts` don't need to change.
+- `tests/fixtures/fake-codegraph/codegraph` updated to a shell-script test double that speaks the real CLI subcommand set; existing v0.7 unit tests still pass against it.
+- `docs/cdr-architecture.md` §7 rewritten with the real subcommand mapping, three integration modes (CLI subprocess / MCP server / Node library), zero-config documentation, and the full degradation matrix.
+- `docs/dapei-skill-architecture.svg` added — system-level architecture diagram covering the skill router, engine, cognitive runtime, doc-gen, and runtime adapters.
 - **CDR v0.7 — CodeGraph integration** (on `feature/cdr-v0.7-codegraph`)
 - `packages/runtime-adapters/src/codegraph.ts` ships a `CodeGraphAdapter` class wrapping the [lzehrung/codegraph] CLI. Three operations: `orient` (code file listing), `refs` (call-graph neighbourhood), `impact` (blast radius between two refs). A one-shot `which codegraph` probe at construction; an optional `DAPEI_CODEGRAPH_BIN` env var lets tests inject a fake. When the probe fails, the adapter marks the workspace with `.dapei/graph/.no-codegraph`.
 - `cdr.profile` populates a new `codegraph` block (available / version / backend / files_total / apisurface_count / reason). The dangling `data.codegraph.files_total` reference in `runtime/templates/docs/scripts/build-cognitive-pages.ts` is finally wired.
