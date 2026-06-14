@@ -101,6 +101,7 @@ L3 流程层 — 行为链路 + 状态机 + 业务规则 (Behavior + State + Rul
 | 列出所有资产 | `cdr.index.list` | 不变 |
 | 生成文档门户 | `cdr.doc.generate` | 不变 |
 | 渲染 L1 portal | `cdr.reversecluster.doc.generate` | **新增(v0.8)** — `/l1/` section + cluster-suggestions |
+| 跨仓查询(读) | `cdr.query` | **新增(v0.10)** — 按 event / writes_table / calls_target / target_repo / entity / id_contains / created_by_feature 过滤;read-only |
 
 ## 工作流
 
@@ -343,6 +344,39 @@ cdr.reversecluster.doc.generate
 ```bash
 cd .dapei/docs-portal && npx vitepress dev
 ```
+
+### Phase 7 — Query（跨仓查询）
+
+```
+@dapei query behaviors that emit order.cancelled
+@dapei find behaviors calling PaymentClient in mall-payment
+@dapei list behaviors created by feature payment-refactor
+```
+
+读出端 `cdr.query`,read-only,跨仓/跨能力查找:
+
+- **行为级过滤**:`event` / `writes_table` / `calls_target` / `target_repo`
+  (state-machines 在这类 filter 下自动隐藏——避免语义混淆)
+- **通用过滤**:`entity`(state-machine)/ `id_contains`(子串)/
+  `repo`(精确)/ `created_by_feature`(精确)/ `target`(`behavior` /
+  `state-machine` / `business-rule` / `domain` / `capability-map` / `any`)
+- **结果**:`{ results: [...], total, next_step }`,limit 默认 50,上限 500
+- **永不变更** cognitive index 或 docs/as-is/——纯读
+
+**典型用法**:
+
+```bash
+# 找出所有调用 mall-payment 的行为
+runCapability('cdr.query', { target_repo: 'mall-payment' })
+
+# 找出所有 order-cancel 行为的入口
+runCapability('cdr.query', { id_contains: 'order-cancel', target: 'behavior' })
+
+# 列出某个 feature 创建的所有资产
+runCapability('cdr.query', { created_by_feature: 'payment-refactor' })
+```
+
+**当查询语义模糊时**(比如行为 yaml 里 events 字段缺失),`cdr.query` 会**保守返回空**而不是猜测——这是 P1 红线的延伸。
 
 ## 产物目录结构
 

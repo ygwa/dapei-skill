@@ -922,11 +922,14 @@ export const cdrCapabilityMapInit: AnyCap = {
 
 export const cdrIndexList: AnyCap = {
   id: "cdr.index.list",
-  version: "1.0.0",
+  version: "1.1.0",
   inputSchema: {
     properties: {
       repo: { type: "string" },
-      kind: { type: "string", enum: ["fact", "inference", "unknown"] }
+      kind: { type: "string", enum: ["fact", "inference", "unknown"] },
+      entity: { type: "string" },
+      id_contains: { type: "string" },
+      created_by_feature: { type: "string" }
     },
     additionalProperties: false
   },
@@ -935,16 +938,35 @@ export const cdrIndexList: AnyCap = {
     const cp = cognitivePaths(ctx.rootDir);
     const repoFilter = input.repo ? String(input.repo) : undefined;
     const kindFilter = input.kind ? String(input.kind) : undefined;
+    const entityFilter = input.entity ? String(input.entity) : undefined;
+    const idContainsFilter = input.id_contains ? String(input.id_contains).toLowerCase() : undefined;
+    const createdByFeatureFilter = input.created_by_feature ? String(input.created_by_feature) : undefined;
+
+    function matchesText<T>(entry: T, getText: (e: T) => string | undefined): boolean {
+      if (idContainsFilter) {
+        const haystack = `${getText(entry) ?? ""}`.toLowerCase();
+        if (!haystack.includes(idContainsFilter)) return false;
+      }
+      if (createdByFeatureFilter) {
+        const origin = (entry as unknown as { created_by_feature?: string }).created_by_feature;
+        if (origin !== createdByFeatureFilter) return false;
+      }
+      return true;
+    }
 
     const behaviors = index.behaviors.filter((b) => {
       if (repoFilter && b.repo !== repoFilter) return false;
       if (kindFilter && b.kind !== kindFilter) return false;
+      if (entityFilter && (b as unknown as { entity?: string }).entity !== entityFilter) return false;
+      if (!matchesText(b, () => b.id)) return false;
       return true;
     });
 
     const stateMachines = index.state_machines.filter((s) => {
       if (repoFilter && s.repo !== repoFilter) return false;
       if (kindFilter && s.kind !== kindFilter) return false;
+      if (entityFilter && s.entity !== entityFilter) return false;
+      if (!matchesText(s, () => s.entity)) return false;
       return true;
     });
 
@@ -1054,6 +1076,215 @@ export const cdrIndexList: AnyCap = {
     };
   }
 };
+
+// ---------------------------------------------------------------------------
+// Capability: cdr.query (cross-cut read-only search)
+//
+// Semantic filters: event / writes_table / calls_target / target_repo.
+// Origin filter: created_by_feature. Read-only.
+// ---------------------------------------------------------------------------
+
+export const cdrQuery: AnyCap = {
+  id: "cdr.query",
+  version: "1.0.0",
+  inputSchema: {
+    properties: {
+      target: {
+        type: "string",
+        enum: ["any", "behavior", "state-machine", "business-rule", "domain", "capability-map"]
+      },
+      entity: { type: "string" },
+      id_contains: { type: "string" },
+      event: { type: "string" },
+      writes_table: { type: "string" },
+      calls_target: { type: "string" },
+      target_repo: { type: "string" },
+      created_by_feature: { type: "string" },
+      repo: { type: "string" },
+      limit: { type: "number" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    const index = loadCognitiveIndex(ctx.rootDir);
+    const cp = cognitivePaths(ctx.rootDir);
+    const idContains = input.id_contains ? String(input.id_contains).toLowerCase() : undefined;
+    const eventFilter = input.event ? String(input.event) : undefined;
+    const writesTableFilter = input.writes_table ? String(input.writes_table) : undefined;
+    const callsTargetFilter = input.calls_target ? String(input.calls_target) : undefined;
+    const targetRepoFilter = input.target_repo ? String(input.target_repo) : undefined;
+    const createdByFeatureFilter = input.created_by_feature ? String(input.created_by_feature) : undefined;
+    const repoFilter = input.repo ? String(input.repo) : undefined;
+    const entityFilter = input.entity ? String(input.entity) : undefined;
+    const targetKind = (input.target && input.target !== "any")
+      ? String(input.target)
+      : undefined;
+    const limit = Math.min(Math.max(Number(input.limit) || 50, 1), 500);
+
+    type Result = {
+      kind: string;
+      id: string;
+      repo?: string;
+      path: string;
+      summary: string;
+      sources: Array<{ file?: string; line?: number }>;
+    };
+    const results: Result[] = [];
+
+    const includeBehavior = !targetKind || targetKind === "behavior";
+    const includeState = !targetKind || targetKind === "state-machine";
+    const includeRule = !targetKind || targetKind === "business-rule";
+    const includeDomain = !targetKind || targetKind === "domain";
+    const includeCapMap = !targetKind || targetKind === "capability-map";
+
+    if (includeBehavior) {
+      for (const b of index.behaviors) {
+        if (repoFilter && b.repo !== repoFilter) continue;
+        if (idContains && !(b.id || "").toLowerCase().includes(idContains)) continue;
+        if (createdByFeatureFilter && (b as unknown as { created_by_feature?: string }).created_by_feature !== createdByFeatureFilter) continue;
+        if (eventFilter || writesTableFilter || callsTargetFilter || targetRepoFilter) {
+          const details = readBehaviorDetails(ctx.rootDir, b.path);
+          if (eventFilter && !(details.events || []).some((e) => String(e).includes(eventFilter))) continue;
+          if (writesTableFilter && !(details.writes || []).some((w) => String(w.table || "").includes(writesTableFilter))) continue;
+          if (callsTargetFilter && !(details.calls || []).some((c) => {
+            const t = typeof c === "string" ? c : (c as { target?: string }).target;
+            return t ? String(t).includes(callsTargetFilter) : false;
+          })) continue;
+          if (targetRepoFilter && !(details.calls || []).some((c) => {
+            if (typeof c === "string") return false;
+            return ((c as { target_repo?: string }).target_repo) === targetRepoFilter;
+          })) continue;
+        }
+        const summary = (b as unknown as { description?: string }).description
+          || `Behavior ${b.id} (${b.kind})`;
+        results.push({
+          kind: "behavior",
+          id: b.id,
+          repo: b.repo,
+          path: b.path,
+          summary: String(summary).slice(0, 200),
+          sources: []
+        });
+      }
+    }
+
+// behavior-shaped filters (event / writes_table / calls_target / target_repo)
+// don't apply to state-machines; suppress them when any such filter is set
+    const behaviorShapedFilters = !!(eventFilter || writesTableFilter || callsTargetFilter || targetRepoFilter);
+    const includeStateShaped = (!targetKind || targetKind === "state-machine") && !behaviorShapedFilters;
+
+    if (includeStateShaped) {
+      for (const s of index.state_machines) {
+        if (repoFilter && s.repo !== repoFilter) continue;
+        if (entityFilter && s.entity !== entityFilter) continue;
+        if (idContains && !(s.entity || "").toLowerCase().includes(idContains)) continue;
+        if (createdByFeatureFilter && (s as unknown as { created_by_feature?: string }).created_by_feature !== createdByFeatureFilter) continue;
+        results.push({
+          kind: "state-machine",
+          id: s.entity,
+          repo: s.repo,
+          path: s.path,
+          summary: `State machine for ${s.entity} (${s.kind})`,
+          sources: []
+        });
+      }
+    }
+
+    if (includeRule) {
+      for (const r of index.business_rules) {
+        if (repoFilter && r.repo !== repoFilter) continue;
+        if (idContains && !(r.id || "").toLowerCase().includes(idContains)) continue;
+        if (callsTargetFilter) {
+          const apStr = JSON.stringify((r as unknown as { applies_to?: unknown[] }).applies_to || []);
+          if (!apStr.includes(callsTargetFilter)) continue;
+        }
+        if (createdByFeatureFilter && (r as unknown as { created_by_feature?: string }).created_by_feature !== createdByFeatureFilter) continue;
+        results.push({
+          kind: "business-rule",
+          id: r.id,
+          repo: r.repo,
+          path: r.path,
+          summary: `Rule ${r.id} (${r.kind})`,
+          sources: []
+        });
+      }
+    }
+
+    if (includeDomain) {
+      const domainFiles = listFilesRecursively(cp.domainDir, [".yaml", ".yml"], 200);
+      for (const df of domainFiles) {
+        try {
+          const doc = parseYamlDocument(read(df));
+          const name = String(doc.domain || doc.name || "");
+          if (!name) continue;
+          if (idContains && !name.toLowerCase().includes(idContains)) continue;
+          if (createdByFeatureFilter && (doc as { created_by_feature?: string }).created_by_feature !== createdByFeatureFilter) continue;
+          results.push({
+            kind: "domain",
+            id: name,
+            path: relative(ctx.rootDir, df),
+            summary: String(doc.description || `Domain ${name}`).slice(0, 200),
+            sources: []
+          });
+        } catch {
+          // skip malformed
+        }
+      }
+    }
+
+    if (includeCapMap) {
+      const capFiles = listFilesRecursively(cp.capabilityDir, [".yaml", ".yml"], 50);
+      for (const cf of capFiles) {
+        try {
+          const doc = parseYamlDocument(read(cf));
+          const product = String(doc.product || "");
+          if (idContains && !product.toLowerCase().includes(idContains)) continue;
+          results.push({
+            kind: "capability-map",
+            id: product || basename(cf, ".yaml"),
+            path: relative(ctx.rootDir, cf),
+            summary: `Capability map for ${product || basename(cf, ".yaml")}`,
+            sources: []
+          });
+        } catch {
+          // skip malformed
+        }
+      }
+    }
+
+    const total = results.length;
+    const capped = results.slice(0, limit);
+    return {
+      ok: true,
+      data: {
+        results: capped,
+        total,
+        next_step: total > limit
+          ? `narrow filter or increase limit; matched ${total}, returned ${limit}`
+          : ""
+      },
+      sideEffects: [],
+      reportFragments: [`cdr.query matched ${total} asset(s)`]
+    };
+  }
+};
+
+interface BehaviorDetails {
+  events?: string[];
+  writes?: Array<{ table?: string }>;
+  calls?: Array<string | { target?: string; target_repo?: string }>;
+}
+
+function readBehaviorDetails(rootDir: string, relPath: string): BehaviorDetails {
+  const fullPath = join(rootDir, relPath);
+  if (!existsSync(fullPath)) return {};
+  try {
+    const doc = parseYamlDocument(read(fullPath));
+    return doc as BehaviorDetails;
+  } catch {
+    return {};
+  }
+}
 
 // ---------------------------------------------------------------------------
 // 10. cdr.behavior.upsert
