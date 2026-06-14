@@ -104,7 +104,13 @@ stages:
    - `implementation`: `docs/05-task-breakdown.md` 与 repo worktree
    - `local-validation`: `reports/validation-report.md`
 
-4. **L4: Runtime Context** — 运行时聚合
+4. **Cognitive Assets Summary** (v2.1) — 每个 stage 输出末尾注入的「资产盘点」段
+   - `discover` 阶段(`analyze-current-state` / `gap-analysis`): 显示 profiles / confirmed / candidate entries 计数
+   - `design` 阶段(`solution-design` / `task-breakdown` / `implementation`): 显示 behaviors / state machines / business rules 计数
+   - `ship` 阶段(`local-validation` / `architecture-review` / `acceptance`): 显示 domains / capability map / docs portal 状态
+   - 空 workspace 时: 给 `@dapei cdr bootstrap <repo>` 的引导
+
+5. **L4: Runtime Context** — 运行时聚合
    - `context/runtime-context.md`（最终输出）
 
 ### Memory（记忆持久化）
