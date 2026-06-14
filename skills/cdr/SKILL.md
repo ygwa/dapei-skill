@@ -102,6 +102,7 @@ L3 流程层 — 行为链路 + 状态机 + 业务规则 (Behavior + State + Rul
 | 生成文档门户 | `cdr.doc.generate` | 不变 |
 | 渲染 L1 portal | `cdr.reversecluster.doc.generate` | **新增(v0.8)** — `/l1/` section + cluster-suggestions |
 | 跨仓查询(读) | `cdr.query` | **新增(v0.10)** — 按 event / writes_table / calls_target / target_repo / entity / id_contains / created_by_feature 过滤;read-only |
+| 查询 pipeline 状态 | `cdr.pipeline.status` | **新增(v0.10)** — 8 阶段 status + next_action(input_template) |
 
 ## 工作流
 
@@ -344,6 +345,45 @@ cdr.reversecluster.doc.generate
 ```bash
 cd .dapei/docs-portal && npx vitepress dev
 ```
+
+### Phase 8 — Pipeline Status（编排状态查询）
+
+```
+@dapei what is the cdr pipeline status for mall-order
+```
+
+读出端 `cdr.pipeline.status`,read-only。给定 repo 后返回 8 阶段
+(profile / entries / behavior / state / domain / rule / capability-map / doc)
+的 status + artifacts_count + 下一个该调的能力和 input 形状。
+
+- **status 取值**:
+  - `done` — 阶段产物已存在
+  - `blocked` — 还没产物,且下一步依赖未完成
+  - `skipped` — 阶段可选(rule 默认 skipped)
+- **`next_action`**:每个未完成阶段的 `capability` / `input_template` /
+  `hint`。AI 应该把 `next_action.capability` 当作下次必调,
+  `input_template.required_fields` 列出必填字段。
+- **`up_to_phase`** 参数:截断报告(如只关心 `entries` 之前)。
+- **`overall_status`**: `empty` / `partial` / `complete`
+  (skip 算 complete 的一部分)
+
+**典型用法**:
+
+```bash
+# 完整跑过 profile 后,问下一步
+runCapability('cdr.pipeline.status', { repo: 'mall-order' })
+# next_action: cdr.entries.candidate
+
+# 已跑完 entries,只关心 state 之后
+runCapability('cdr.pipeline.status', {
+  repo: 'mall-order',
+  up_to_phase: 'state'
+})
+```
+
+**`rule` 阶段**:在用户未显式声明 `business-rule` 知识时默认 skipped。
+AI 决定"这个 repo 确实没有跨仓 SLA / 授权规则"时,可直接跳过到
+`capability-map`。
 
 ### Phase 7 — Query（跨仓查询）
 
