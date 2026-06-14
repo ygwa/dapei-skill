@@ -307,7 +307,7 @@ export const featureReview: AnyCap = {
 
 export const featureClose: AnyCap = {
   id: "feature.close",
-  version: "1.0.0",
+  version: "2.0.0",
   inputSchema: { required: ["feature"], properties: { feature: { type: "string", minLength: 1 }, confirmed: { type: "boolean" }, force: { type: "boolean" } }, additionalProperties: false },
   confirmGate: "acceptance",
   async execute(ctx, input) {
@@ -334,8 +334,22 @@ export const featureClose: AnyCap = {
         runSafe("git", ["-C", repoPath, "worktree", "prune"], p.rootDir);
       }
     }
+    // v2.0 — link every CDR asset touched during this feature's
+    // lifetime to the feature name. Idempotent: re-running
+    // cdr.feature.link on the same feature is a no-op.
+    const { runCapability } = await import("../../index.ts");
+    const linkResult = await runCapability("cdr.feature.link", { feature }, ctx);
+    const linkData = linkResult.result.data as { assets_tagged: number };
     write(join(featureDir, "reports", "stage-acceptance.completed"), `stage: acceptance\ncompleted-at: ${new Date().toISOString()}\nnote: archived and closed\n`);
-    return { ok: true, data: { feature }, sideEffects: ["archive docs", "worktree remove"], reportFragments: ["feature closed"] };
+    return {
+      ok: true,
+      data: { feature, cdr_assets_tagged: linkData.assets_tagged },
+      sideEffects: ["archive docs", "worktree remove", "cdr.feature.link"],
+      reportFragments: [
+        "feature closed",
+        `linked ${linkData.assets_tagged} CDR asset(s) to feature ${feature}`
+      ]
+    };
   }
 };
 

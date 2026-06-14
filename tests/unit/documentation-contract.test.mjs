@@ -47,7 +47,7 @@ test('documentation-contract: SKILL.md references match capability implementatio
     'repos.add', 'repos.analyze', 'repos.sync', 'repos.list', 'repos.check', 'repos.remove',
     'context.build', 'cognitive.discover', 'cognitive.artifact.list', 'cognitive.artifact.upsert',
     'validation.run', 'validation.detect', 'validation.execute', 'validation.report', 'workflow.runStage', 'workflow.status', 'memory.append', 'audit.query',
-    'cdr.profile', 'cdr.entries', 'cdr.domain', 'cdr.capability', 'cdr.index', 'cdr.doc', 'cdr.behavior', 'cdr.state', 'cdr.business', 'cdr.query', 'cdr.pipeline'
+    'cdr.profile', 'cdr.entries', 'cdr.domain', 'cdr.capability', 'cdr.index', 'cdr.doc', 'cdr.behavior', 'cdr.state', 'cdr.business', 'cdr.query', 'cdr.pipeline', 'cdr.feature'
   ]);
 
   for (const skillName of readdirSync(SKILLS_DIR)) {

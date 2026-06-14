@@ -1506,6 +1506,109 @@ export const cdrPipelineStatus: AnyCap = {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Capability: cdr.feature.link
+//
+// Tag every CDR asset touched by a feature with `created_by_feature =
+// <feature>` so that `cdr.query --created_by_feature <feature>` can
+// surface them later, and so the closeout backfill to
+// `docs/decisions/<feature>.md` can list what the feature actually
+// produced. Idempotent: re-running on the same feature is a no-op
+// (the field is overwritten with the same value).
+//
+// `feature.close` calls this on the way out. It is also callable
+// from `feature.review` if a team wants to surface the link before
+// the feature is closed.
+// ---------------------------------------------------------------------------
+
+export const cdrFeatureLink: AnyCap = {
+  id: "cdr.feature.link",
+  version: "1.0.0",
+  inputSchema: {
+    required: ["feature"],
+    properties: {
+      feature: { type: "string", minLength: 1 },
+      repo: { type: "string" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    requireFields(input, ["feature"]);
+    const feature = String(input.feature);
+    const repo = input.repo ? String(input.repo) : undefined;
+    const now = ctx.now.toISOString();
+
+    const index = loadCognitiveIndex(ctx.rootDir);
+    const cp = cognitivePaths(ctx.rootDir);
+    let tagged = 0;
+
+    const tagInList = <T extends { created_by_feature?: string; created_at?: string; path: string; repo?: string }>(list: T[]): T[] => {
+      let touched = 0;
+      const out = list.map((entry) => {
+        if (repo && entry.repo && entry.repo !== repo) return entry;
+        if (entry.created_by_feature === feature) return entry;
+        touched++;
+        return { ...entry, created_by_feature: feature, created_at: now };
+      });
+      tagged += touched;
+      return out;
+    };
+
+    index.behaviors = tagInList(index.behaviors);
+    index.state_machines = tagInList(index.state_machines);
+    index.business_rules = tagInList(index.business_rules);
+
+    if (existsSync(cp.domainDir)) {
+      const domainFiles = listFilesRecursively(cp.domainDir, [".yaml", ".yml"], 200);
+      for (const df of domainFiles) {
+        try {
+          const doc = parseYamlDocument(read(df));
+          if (repo) {
+            const docRepo = String((doc as { repo?: string }).repo || "");
+            if (docRepo && docRepo !== repo) continue;
+          }
+          if ((doc as { created_by_feature?: string }).created_by_feature === feature) continue;
+          (doc as Record<string, unknown>).created_by_feature = feature;
+          (doc as Record<string, unknown>).created_at = now;
+          write(df, stringifyYamlDocument(doc));
+          tagged++;
+        } catch {
+          // skip malformed
+        }
+      }
+    }
+
+    if (existsSync(cp.capabilityDir)) {
+      const capFiles = listFilesRecursively(cp.capabilityDir, [".yaml", ".yml"], 50);
+      for (const cf of capFiles) {
+        try {
+          const doc = parseYamlDocument(read(cf));
+          if ((doc as { created_by_feature?: string }).created_by_feature === feature) continue;
+          (doc as Record<string, unknown>).created_by_feature = feature;
+          (doc as Record<string, unknown>).created_at = now;
+          write(cf, stringifyYamlDocument(doc));
+          tagged++;
+        } catch {
+          // skip malformed
+        }
+      }
+    }
+
+    saveCognitiveIndex(ctx.rootDir, index);
+
+    return {
+      ok: true,
+      data: {
+        feature,
+        repo: repo || "*",
+        assets_tagged: tagged
+      },
+      sideEffects: ["cognitive index updated", "docs/as-is tagged"],
+      reportFragments: [`linked ${tagged} asset(s) to feature ${feature}`]
+    };
+  }
+};
+
 function parseYamlDocumentSafe(content: string): Record<string, unknown> | null {
   try {
     return parseYamlDocument(content);

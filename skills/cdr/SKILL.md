@@ -103,6 +103,7 @@ L3 流程层 — 行为链路 + 状态机 + 业务规则 (Behavior + State + Rul
 | 渲染 L1 portal | `cdr.reversecluster.doc.generate` | **新增(v0.8)** — `/l1/` section + cluster-suggestions |
 | 跨仓查询(读) | `cdr.query` | **新增(v0.10)** — 按 event / writes_table / calls_target / target_repo / entity / id_contains / created_by_feature 过滤;read-only |
 | 查询 pipeline 状态 | `cdr.pipeline.status` | **新增(v0.10)** — 8 阶段 status + next_action(input_template) |
+| 把 feature 链到 CDR 资产 | `cdr.feature.link` | **新增(v0.10)** — 给所有 cognitive index / domain / capability-map 资产打 `created_by_feature` 标签;`feature.close` 自动调 |
 
 ## 工作流
 
@@ -415,6 +416,11 @@ runCapability('cdr.query', { id_contains: 'order-cancel', target: 'behavior' })
 # 列出某个 feature 创建的所有资产
 runCapability('cdr.query', { created_by_feature: 'payment-refactor' })
 ```
+
+**`created_by_feature` 来源**:`feature.close` 自动调 `cdr.feature.link`
+给本次 feature 接触到的所有 cognitive index / domain / capability-map 资产
+打上 `created_by_feature: <feature>` 标签(也支持 `feature.review` 显式调)。
+pre-v0.10 资产无该字段——filter 会**保守返回空**而不是 error。
 
 **当查询语义模糊时**(比如行为 yaml 里 events 字段缺失),`cdr.query` 会**保守返回空**而不是猜测——这是 P1 红线的延伸。
 
