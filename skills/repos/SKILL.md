@@ -38,6 +38,9 @@ description: Manage the repo registry — add/sync/list/check/analyze/remove rep
 3. 更新 `.dapei/repos.yaml` 注册信息
 4. 对齐默认分支并 fast-forward 到 `origin/<default>`
 5. 后续 feature 创建时再映射 `features/<feature>/repos/<repo>` worktree
+6. **可选**:传入 `auto_profile: true`,克隆完成后立即调 `cdr.profile`,
+   写入 `docs/as-is/profiles/<name>.yaml`,返回 `profile_path`。
+   默认 `false`(与 v1.0 行为一致)。
 
 **repo.yaml 示例**：
 ```yaml
@@ -141,6 +144,13 @@ codegraph:
 ```
 @dapei repos add payment-service git@github.com:org/payment-service.git
 ```
+
+```
+@dapei repos add payment-service git@github.com:org/payment-service.git --auto-profile
+```
+
+(auto-profile: 在 add 完成后立即调 cdr.profile,等价于先 add 再调
+`@dapei bootstrap payment-service`。)
 
 ```
 @dapei repos sync payment-service
