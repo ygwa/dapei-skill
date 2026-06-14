@@ -70,7 +70,10 @@ DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" repos add sample-app "$FIXTURE_REPO" >
 DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" repos list >/dev/null 2>&1
 DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" repos check --all >/dev/null 2>&1
 DAPEI_WORKSPACE_ROOT="$TEST_DIR" "$DAPEI" repos analyze --all >/dev/null 2>&1
-[[ -f "$TEST_DIR/docs/as-is/repo-inventory.md" ]] || { echo "FAIL"; exit 1; }
+# v2.0 (BREAKING): repos.analyze defaults to use_cdr=true and writes
+# docs/as-is/profiles/<repo>.yaml (via cdr.profile) instead of the
+# legacy docs/as-is/repo-inventory.md.
+[[ -f "$TEST_DIR/docs/as-is/profiles/sample-app.yaml" ]] || { echo "FAIL"; exit 1; }
 echo "PASS"
 
 echo -n "test 7 - feature context: "
