@@ -17,6 +17,21 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
+- `context.build` now injects a stage-aware Cognitive Assets Summary
+  section into `runtime-context.md`. Summary content depends on the
+  feature stage:
+  - discover stages (`analyze-current-state`, `gap-analysis`): counts
+    of profiles, confirmed entries, candidate entries
+  - design stages (`solution-design`, `task-breakdown`,
+    `implementation`): counts of behaviors, state machines, business
+    rules
+  - ship stages (`local-validation`, `architecture-review`,
+    `acceptance`): counts of domains, capability-map presence,
+    docs-portal generation status
+  - empty workspace: hint pointing at `@dapei cdr bootstrap <repo>`
+  - unknown stage: no summary section is emitted. Capability version
+    bumped from `2.0.0` to `2.1.0`.
+
 ### Changed
 ### Fixed
 ### Removed
