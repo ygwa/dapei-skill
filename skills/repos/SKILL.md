@@ -73,31 +73,65 @@ repos:
 
 ### Analyze（分析）
 
-1. 扫描 repo 目录结构
-2. 读取 manifest 文件（package.json, go.mod, pom.xml 等）
-3. 检测测试命令和验证方式
-4. 收集架构证据（目录结构、入口点）
-5. 输出 `docs/as-is/repo-inventory.md`
-6. 可选：生成 `docs/architecture/technical-current-state.md`
+> **v2.0 BREAKING**: `repos.analyze` now defaults to `use_cdr: true`. The
+> capability delegates to `cdr.profile` and writes a structured YAML
+> profile to `docs/as-is/profiles/<repo>.yaml`. The legacy grep-style
+> shape (with `repos[]`, `structure[]`, `apiEndpoints[]`, …) is still
+> available via `{ use_cdr: false }` and will be removed in a future
+> release. Existing callers must either accept the new shape or
+> explicitly opt in to the legacy path.
 
-**分析产出示例**：
+**CDR-backed mode (`use_cdr: true`, default)**:
+
+1. Resolve target repos (`--all` reads `repos.yaml`).
+2. For each repo, call `cdr.profile` and capture the per-repo profile
+   yaml path, language, manifest files, test commands, and CodeGraph
+   block.
+3. Return shape:
+   ```ts
+   {
+     target: string,
+     use_cdr: true,
+     profiles: [{
+       name: string,
+       profile_path: string,      // relative to workspace root
+       language: string | null,
+       manifest_files: string[],
+       test_commands: string[],
+       codegraph: { available, version, backend, files_total?, apisurface_count?, reason? }
+     }],
+     next_step: string            // hint for the AI
+   }
+   ```
+4. Side effect: `docs/as-is/profiles/<repo>.yaml` written per repo.
+
+**Legacy mode (`use_cdr: false`, deprecated)**:
+
+1. Run grep-style scan (find / grep over the repo).
+2. Write `docs/as-is/repo-inventory.md`.
+3. Return shape includes `repos[]`, `report`, plus `deprecated: true`
+   so downstream consumers can detect the legacy path.
+
+**分析产出示例** (CDR-backed):
 ```yaml
+# docs/as-is/profiles/payment-service.yaml
 repo: payment-service
-stack: node
-language: typescript
-frameworks:
-  - express (web framework)
-  - typeorm (ORM)
+language: nodejs
+manifest_files:
+  - package.json
+  - tsconfig.json
 test_commands:
-  - npm test (unit)
-  - npm run test:e2e (e2e)
-entry_points:
-  - src/index.ts (HTTP server)
-  - src/workers/payment.ts (message consumer)
-directories:
-  - src/controllers (HTTP handlers)
-  - src/services (business logic)
-  - src/entities (typeorm models)
+  - npm test
+directory_tree:
+  - src
+  - src/controllers
+  - src/services
+  - src/entities
+codegraph:
+  available: true
+  version: 0.4.1
+  backend: native
+  files_total: 142
 ```
 
 ---
