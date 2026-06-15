@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
@@ -62,9 +62,73 @@ function buildStateMachineSummary(rootDir: string, repos: string[]): string {
   return lines.join("\n") + "\n";
 }
 
+const STAGE_PROFILES: Record<string, "discover" | "design" | "ship"> = {
+  "analyze-current-state": "discover",
+  "gap-analysis": "discover",
+  "solution-design": "design",
+  "task-breakdown": "design",
+  "implementation": "design",
+  "local-validation": "ship",
+  "architecture-review": "ship",
+  "acceptance": "ship"
+};
+
+function buildStageSummary(stage: string, rootDir: string): string {
+  const profile = STAGE_PROFILES[stage];
+  if (!profile) return "";
+
+  const index = loadCognitiveIndex(rootDir);
+  const profilesDir = join(rootDir, "docs", "as-is", "profiles");
+  const entriesDir = join(rootDir, "docs", "as-is", "entries");
+  const profileCount = existsSync(profilesDir) ? readdirSync(profilesDir).filter((f) => f.endsWith(".yaml")).length : 0;
+
+  let confirmedEntryCount = 0;
+  let candidateEntryCount = 0;
+  if (existsSync(entriesDir)) {
+    for (const f of readdirSync(entriesDir)) {
+      if (!f.endsWith(".yaml")) continue;
+      const content = read(join(entriesDir, f));
+      if (/^\s*status:\s*confirmed/m.test(content)) confirmedEntryCount++;
+      else candidateEntryCount++;
+    }
+  }
+
+  const behaviorCount = index.behaviors?.length ?? 0;
+  const stateCount = index.state_machines?.length ?? 0;
+  const domainCount = index.domains?.length ?? 0;
+  const businessRuleCount = index.business_rules?.length ?? 0;
+  const capabilityMapExists = existsSync(join(rootDir, "docs", "as-is", "capabilities", "product-map.yaml"));
+  const portalExists = existsSync(join(rootDir, ".dapei", "docs-portal", "index.md"));
+
+  if (profileCount === 0 && confirmedEntryCount === 0 && candidateEntryCount === 0
+      && behaviorCount === 0 && stateCount === 0
+      && domainCount === 0 && businessRuleCount === 0 && !capabilityMapExists) {
+    return [
+      `## Cognitive Assets Available\n\n`,
+      `- No cognitive assets yet. Run \`@dapei cdr bootstrap <repo>\` to start, or \`@dapei profile repo <repo>\` for a single repo.\n\n`
+    ].join("");
+  }
+
+  const lines: string[] = [`## Cognitive Assets Available\n\n`];
+  if (profile === "discover") {
+    lines.push(`- profiles: ${profileCount}`);
+    lines.push(`- confirmed entries: ${confirmedEntryCount}`);
+    lines.push(`- candidate entries: ${candidateEntryCount}`);
+  } else if (profile === "design") {
+    lines.push(`- behaviors: ${behaviorCount}`);
+    lines.push(`- state machines: ${stateCount}`);
+    lines.push(`- business rules: ${businessRuleCount}`);
+  } else {
+    lines.push(`- domains: ${domainCount}`);
+    lines.push(`- capability map: ${capabilityMapExists ? "docs/as-is/capabilities/product-map.yaml" : "not generated"}`);
+    lines.push(`- docs portal: ${portalExists ? "generated" : "not generated"}`);
+  }
+  return lines.join("\n") + "\n\n";
+}
+
 export const contextBuild: AnyCap = {
   id: "context.build",
-  version: "2.0.0",
+  version: "2.1.0",
   inputSchema: { required: ["feature", "stage"], properties: { feature: { type: "string", minLength: 1 }, stage: { type: "string", minLength: 1 } }, additionalProperties: false },
   async execute(ctx, input) {
     requireFields(input, ["feature", "stage"]);
@@ -78,7 +142,7 @@ export const contextBuild: AnyCap = {
     const featureYaml = read(join(featureDir, "feature.yaml"));
     const repos = featureRepoNames(featureYaml);
 
-    let content = `# Runtime Context\n\n` +
+let content = `# Runtime Context\n\n` +
       `## Workspace & Boundary Guidelines\n\n` +
       `- **Current Workspace**: ${p.workspaceName} (Path: ${p.rootDir})\n` +
       `- **Current Feature**: ${feature} (Stage: ${stage})\n` +
@@ -91,6 +155,8 @@ export const contextBuild: AnyCap = {
       `> 4. Syncing local designs and behaviors back to the workspace root is performed automatically during the **Feature Close** workflow stage.\n\n` +
       `---\n\n` +
       `- Generated At: ${new Date().toISOString()}\n\n`;
+
+    content += buildStageSummary(stage, p.rootDir);
 
     // L0/L1 workspace standards
     const sources = [join(p.docsDir, "standards"), join(p.runtimeDir, "ai-rules"), join(featureDir, "context"), join(featureDir, "docs"), join(featureDir, "tasks")];
