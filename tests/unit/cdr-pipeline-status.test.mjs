@@ -205,6 +205,12 @@ test('cdr.pipeline.status: domain composed + capability map + doc.gen yields com
       if (p.id === 'rule') continue;
       assert.equal(p.status, 'done', `phase ${p.id} expected done, was ${p.status}`);
     }
+    // I4 fix: when overall_status is complete, next_step must not
+    // surface a stale hint from a skipped phase. The "rule" phase
+    // has a next_action but its status is "skipped" — the engine
+    // should skip it and report the clean complete message.
+    assert.equal(result.data.next_step, 'all phases done; portal generated',
+      `next_step leaked a skipped phase hint: ${result.data.next_step}`);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

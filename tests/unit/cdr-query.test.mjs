@@ -229,11 +229,40 @@ test('cdr.index.list: new entity filter narrows state-machines', async () => {
   }
 });
 
-test('cdr.index.list: created_by_feature filter is backward-compatible (pre-tag assets return empty)', async () => {
+test('cdr.index.list: created_by_feature filter yields empty on pre-tag workspace (backward compat)', async () => {
   const tmp = await setupWorkspaceWithBehavior();
   try {
-    const { result } = await core.runCapability('cdr.index.list', { created_by_feature: 'payment-refactor' }, c(tmp));
-    assert.equal(result.data.behaviors.length, 0);
+    // No cdr.feature.link has run, so no entry has the tag yet.
+    const { result } = await core.runCapability(
+      'cdr.index.list',
+      { created_by_feature: 'payment-refactor' },
+      c(tmp)
+    );
+    assert.equal(result.data.behaviors.length, 0,
+      'pre-tag workspace: filter yields empty rather than error');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('cdr.index.list: created_by_feature filter narrows behaviors after cdr.feature.link', async () => {
+  const tmp = await setupWorkspaceWithBehavior();
+  try {
+    await core.runCapability(
+      'cdr.feature.link',
+      { feature: 'payment-refactor' },
+      c(tmp)
+    );
+    const { result } = await core.runCapability(
+      'cdr.index.list',
+      { created_by_feature: 'payment-refactor' },
+      c(tmp)
+    );
+    const ids = result.data.behaviors.map((b) => b.id);
+    assert.ok(ids.includes('order-create'),
+      'tagged behavior should be findable via cdr.index.list filter');
+    assert.ok(ids.includes('order-cancel'),
+      'both tagged behaviors should be findable');
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

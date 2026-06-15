@@ -1490,7 +1490,8 @@ export const cdrPipelineStatus: AnyCap = {
       ? "all phases done; portal generated"
       : overall === "empty"
         ? `start with ${phases[0].next_action?.capability || "cdr.profile"}`
-        : (filtered.find((p) => p.status !== "done")?.next_action?.hint || "continue with the next unfinished phase");
+        : (filtered.find((p) => p.status !== "done" && p.status !== "skipped")?.next_action?.hint
+            || "continue with the next unfinished phase");
 
     return {
       ok: true,
@@ -1587,6 +1588,29 @@ export const cdrFeatureLink: AnyCap = {
           (doc as Record<string, unknown>).created_by_feature = feature;
           (doc as Record<string, unknown>).created_at = now;
           write(cf, stringifyYamlDocument(doc));
+          tagged++;
+        } catch {
+          // skip malformed
+        }
+      }
+    }
+
+    // Tag on-disk business-rule files for index/disk consistency.
+    // v0.5 per-repo layout: docs/as-is/business-rules/<repo>/<id>.yaml.
+    if (existsSync(cp.businessRulesDir)) {
+      const ruleFiles = listFilesRecursively(cp.businessRulesDir, [".yaml", ".yml"], 200);
+      for (const rf of ruleFiles) {
+        try {
+          const doc = parseYamlDocument(read(rf));
+          if (repo) {
+            // Per-repo: only tag the files for this repo.
+            const docRepo = String((doc as { repo?: string }).repo || "");
+            if (docRepo && docRepo !== repo) continue;
+          }
+          if ((doc as { created_by_feature?: string }).created_by_feature === feature) continue;
+          (doc as Record<string, unknown>).created_by_feature = feature;
+          (doc as Record<string, unknown>).created_at = now;
+          write(rf, stringifyYamlDocument(doc));
           tagged++;
         } catch {
           // skip malformed

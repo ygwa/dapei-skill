@@ -62,18 +62,15 @@ Match the language and detail level of the existing release entries.
 
 ### Changed (BREAKING)
 - `feature.close` version bumped 1.0.0 → 2.0.0. The capability now
-  auto-invokes `cdr.feature.link` on the way out, before tearing
+  auto-invokes `cdr.feature.link` on the way out, after writing
+  `docs/decisions/<feature>-decisions.md` and before tearing
   down the worktree. The result data gains `cdr_assets_tagged: <n>`
   and a new `reportFragment` reports the link count. The input
-  schema is unchanged; the new side effect is purely additive. To
-  bypass the link (e.g. dry-run closes during testing), pass
-  `feature.close` directly without a feature; an unparameterized
-  close will skip the link step.
-- The `cdr.doc.generate` portal's behavior page now omits
-  state-machine cards when the behavior filter is engaged
-  (carried over from the v0.6 structured-calls cleanup, but
-  `cdr.query` is the first user-facing capability to take advantage
-  of it).
+  schema is unchanged. **The pre-existing `confirmGate: "acceptance"`
+  still applies** — callers (including `feature.close` itself in
+  tests) must pass `confirmed: true` or the capability throws
+  `CONFIRMATION_REQUIRED` *before* the link runs. The new side
+  effect is purely additive on top of the existing gate.
 
 ### Fixed
 ### Removed

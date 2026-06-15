@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'url';
@@ -85,7 +85,7 @@ test('cdr.feature.link: tags a behavior that already exists in the index', async
   }
 });
 
-test('cdr.feature.link: tags domain + capability-map files on disk', async () => {
+test('cdr.feature.link: tags domain + capability-map + business-rule files on disk', async () => {
   const tmp = await setupWorkspaceWithFeature();
   try {
     await core.runCapability('cdr.behavior.upsert', {
@@ -106,17 +106,28 @@ test('cdr.feature.link: tags domain + capability-map files on disk', async () =>
       product: 'E-Commerce Mall',
       capabilities: [{ id: 'cap.orders', name: 'Orders', spans_repos: ['sample-app'] }]
     }, c(tmp));
+    await core.runCapability('cdr.business.compose', {
+      id: 'order-amount-positive',
+      kind: 'invariant',
+      repo: 'sample-app',
+      applies_to: ['order-create'],
+      confidence: { level: 'high', kind: 'fact' },
+      sources: [{ file: 'src/routes/orders.ts', line: 6, repo: 'sample-app' }]
+    }, c(tmp));
     const { result } = await core.runCapability(
       'cdr.feature.link',
       { feature: 'payment-refactor' },
       c(tmp)
     );
-    // domain file should have created_by_feature written
     const domainYaml = readFileSync(join(tmp, 'docs/as-is/domains/transaction.yaml'), 'utf8');
     assert.match(domainYaml, /created_by_feature: payment-refactor/);
-    // capability-map file should have created_by_feature written
     const capYaml = readFileSync(join(tmp, 'docs/as-is/capabilities/product-map.yaml'), 'utf8');
     assert.match(capYaml, /created_by_feature: payment-refactor/);
+    // business-rule file: walk the per-repo layout
+    const ruleFiles = readdirSync(join(tmp, 'docs/as-is/business-rules/sample-app'));
+    assert.ok(ruleFiles.some((f) => f.endsWith('order-amount-positive.yaml')));
+    const ruleYaml = readFileSync(join(tmp, 'docs/as-is/business-rules/sample-app/order-amount-positive.yaml'), 'utf8');
+    assert.match(ruleYaml, /created_by_feature: payment-refactor/);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
