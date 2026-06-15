@@ -50,8 +50,16 @@ function fastForwardDefaultBranch(repoPath: string, rootDir: string): { ok: bool
 
 export const reposAdd: AnyCap = {
   id: "repos.add",
-  version: "1.0.0",
-  inputSchema: { required: ["name", "url"], properties: { name: { type: "string", minLength: 1 }, url: { type: "string", minLength: 1 } }, additionalProperties: false },
+  version: "1.1.0",
+  inputSchema: {
+    required: ["name", "url"],
+    properties: {
+      name: { type: "string", minLength: 1 },
+      url: { type: "string", minLength: 1 },
+      auto_profile: { type: "boolean" }
+    },
+    additionalProperties: false
+  },
   async execute(ctx, input) {
     requireFields(input, ["name", "url"]);
     const p = workspacePaths(ctx.rootDir);
@@ -60,6 +68,7 @@ export const reposAdd: AnyCap = {
     const target = join(p.reposDir, name);
     ensureDir(p.reposDir);
     ensureDir(p.dapeiDir);
+    const autoProfile = input.auto_profile === true;
 
     let managementMode: "submodule" | "clone" = "clone";
     const workspaceYaml = join(p.dapeiDir, "workspace.yaml");
@@ -104,7 +113,24 @@ export const reposAdd: AnyCap = {
     if (!content.includes(`name: ${name}`) && !content.includes(`name: "${name}"`)) {
       write(registry, content + `  - name: ${name}\n    path: repos/${name}\n    url: ${url}\n    added-at: ${new Date().toISOString()}\n    default-branch: ${defaultBranch(target)}\n    test-commands: []\n`);
     }
-    return { ok: true, data: { name, url }, sideEffects: [managementMode === "submodule" ? "git submodule add" : "git clone", "repos registry"], reportFragments: ["repos add done"] };
+
+    const sideEffects: string[] = [managementMode === "submodule" ? "git submodule add" : "git clone", "repos registry"];
+    const data: Record<string, unknown> = { name, url };
+    if (autoProfile) {
+      const { cdrProfile } = await import("./cdr.ts");
+      const r = await cdrProfile.execute(ctx, { repo: name });
+      const d = r.data as { path: string };
+      data.profile_path = d.path;
+      sideEffects.push(`cdr.profile: ${d.path}`);
+    }
+    return {
+      ok: true,
+      data,
+      sideEffects,
+      reportFragments: autoProfile
+        ? ["repos add done; profile generated"]
+        : ["repos add done"]
+    };
   }
 };
 
@@ -219,16 +245,74 @@ export const reposList: AnyCap = {
 
 export const reposAnalyze: AnyCap = {
   id: "repos.analyze",
-  version: "1.0.0",
-  inputSchema: { required: ["target"], properties: { target: { type: "string", minLength: 1 } }, additionalProperties: false },
+  version: "2.0.0",
+  inputSchema: {
+    required: ["target"],
+    properties: {
+      target: { type: "string", minLength: 1 },
+      use_cdr: { type: "boolean" }
+    },
+    additionalProperties: false
+  },
   async execute(ctx, input) {
     requireFields(input, ["target"]);
     const p = workspacePaths(ctx.rootDir);
     const target = String(input.target);
+    // v2.0 (BREAKING): default `use_cdr` to true. To keep the legacy
+    // grep-style summary + repo-inventory.md report, pass `use_cdr: false`.
+    const useCdr = input.use_cdr === undefined ? true : Boolean(input.use_cdr);
     const names = target === "--all" && existsSync(join(p.dapeiDir, "repos.yaml"))
       ? parseReposYamlNames(read(join(p.dapeiDir, "repos.yaml")))
       : [target];
 
+    // ---- CDR-backed path (default) ----
+    if (useCdr) {
+      const { cdrProfile } = await import("./cdr.ts");
+      const profiles: Array<{
+        name: string;
+        profile_path: string;
+        language: string | null;
+        manifest_files: string[];
+        test_commands: string[];
+        codegraph: Record<string, unknown>;
+      }> = [];
+      for (const name of names) {
+        const rp = join(p.reposDir, name);
+        if (!existsSync(join(rp, ".git"))) continue;
+        const r = await cdrProfile.execute(ctx, { repo: name });
+        const d = r.data as {
+          repo: string;
+          path: string;
+          language: string | null;
+          manifest_files: string[];
+          test_commands: string[];
+          codegraph: Record<string, unknown>;
+        };
+        profiles.push({
+          name: d.repo,
+          profile_path: d.path,
+          language: d.language,
+          manifest_files: d.manifest_files,
+          test_commands: d.test_commands,
+          codegraph: d.codegraph
+        });
+      }
+      return {
+        ok: true,
+        data: {
+          target,
+          use_cdr: true,
+          profiles,
+          next_step: profiles.length === 0
+            ? "no repos found; check `repos list`"
+            : "review each profile_path; next: `@dapei discover entries for <repo>`"
+        },
+        sideEffects: ["cdr.profile per repo"],
+        reportFragments: [`repos analyzed via cdr.profile (${profiles.length})`]
+      };
+    }
+
+    // ---- Legacy grep-style path (deprecated) ----
     const results: Array<{
       name: string;
       branch: string;
@@ -266,6 +350,7 @@ export const reposAnalyze: AnyCap = {
       `- Generated At: ${new Date().toISOString()}`,
       `- Target: ${target}`,
       `- Repos: ${results.length}`,
+      `- Mode: legacy (use_cdr=false; deprecated)`,
       ""
     ];
     for (const r of results) {
@@ -296,7 +381,18 @@ export const reposAnalyze: AnyCap = {
     }
     write(report, lines.join("\n"));
 
-    return { ok: true, data: { repos: results, report: relative(p.rootDir, report) }, sideEffects: ["repo inventory report"], reportFragments: ["repos scanned"] };
+    return {
+      ok: true,
+      data: {
+        target,
+        use_cdr: false,
+        repos: results,
+        report: relative(p.rootDir, report),
+        deprecated: true
+      },
+      sideEffects: ["repo inventory report (legacy)"],
+      reportFragments: ["repos scanned (legacy mode; pass use_cdr:true to use cdr.profile)"]
+    };
   }
 };
 

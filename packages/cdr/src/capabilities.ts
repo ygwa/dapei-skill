@@ -3901,3 +3901,76 @@ title: Cluster Suggestions
     };
   }
 };
+
+// ---------------------------------------------------------------------------
+// Capability: cdr.bootstrap (one-shot repos→docs bootstrap)
+//
+// Runs the engine-side phase 0 + phase 1 in a single call so the AI does
+// not have to orchestrate them manually. The AI still owns phase 1b
+// (reading code, proposing entries with evidence) — see P3 red line in
+// skills/cdr/SKILL.md.
+// ---------------------------------------------------------------------------
+
+export const cdrBootstrap: AnyCap = {
+  id: "cdr.bootstrap",
+  version: "1.0.0",
+  inputSchema: {
+    required: ["repo"],
+    properties: {
+      repo: { type: "string", minLength: 1 },
+      profile: { type: "boolean" },
+      entry_discovery: { type: "boolean" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    requireFields(input, ["repo"]);
+    const p = workspacePaths(ctx.rootDir);
+    const repo = String(input.repo);
+    const wantProfile = input.profile === undefined ? true : Boolean(input.profile);
+    const wantEntryDiscovery = input.entry_discovery === undefined ? true : Boolean(input.entry_discovery);
+
+    if (!existsSync(p.dapeiDir)) {
+      throw new CapabilityError("WORKSPACE_MISSING", `workspace not initialized at ${p.rootDir}`);
+    }
+    const repoPath = join(p.reposDir, repo);
+    if (!existsSync(join(repoPath, ".git"))) {
+      throw new CapabilityError("REPO_MISSING", `repos/${repo} not found in workspace`);
+    }
+
+    let profilePath: string | null = null;
+    if (wantProfile) {
+      const r = await cdrProfile.execute(ctx, { repo });
+      const d = r.data as { path: string };
+      profilePath = d.path;
+    }
+
+    let fileCount = 0;
+    if (wantEntryDiscovery) {
+      const r = await cdrEntriesCandidate.execute(ctx, { repo });
+      const d = r.data as { file_count?: number; files?: unknown[] };
+      fileCount = typeof d.file_count === "number" ? d.file_count : Array.isArray(d.files) ? d.files.length : 0;
+    }
+
+    const nextStep = wantEntryDiscovery
+      ? `AI: read candidate files, then call cdr.entries.propose with sources[] for each entry`
+      : "done; next: cdr.entries.candidate or skip to behavior mining";
+
+    return {
+      ok: true,
+      data: {
+        repo,
+        profile_path: profilePath,
+        candidate_files_count: fileCount,
+        next_step: nextStep
+      },
+      sideEffects: [
+        ...(wantProfile ? [`profile written: ${profilePath}`] : []),
+        ...(wantEntryDiscovery ? [`entry discovery: ${fileCount} files`] : [])
+      ],
+      reportFragments: [
+        `bootstrap ${repo} ${wantProfile ? "+ profile" : ""} ${wantEntryDiscovery ? "+ entry discovery" : ""}`.trim()
+      ]
+    };
+  }
+};
