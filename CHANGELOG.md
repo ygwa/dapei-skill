@@ -17,7 +17,20 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
-### Changed
+- `cdr.bootstrap` capability: one-shot repos→docs bootstrap that runs
+  `cdr.profile` + `cdr.entries.candidate` in a single call. The AI still
+  owns `cdr.entries.propose` / `confirm` (P3 evidence red line). Router
+  patterns: `@dapei bootstrap <repo>` and 中文 `引导 <repo>`.
+- `repos.add` accepts `auto_profile: bool` flag. When true, the add
+  pipeline calls `cdr.profile` after clone and returns `profile_path`.
+
+### Changed (BREAKING)
+- `repos.analyze` now defaults to `use_cdr: true`. The capability
+  delegates to `cdr.profile` and writes a structured YAML profile at
+  `docs/as-is/profiles/<repo>.yaml` instead of `repo-inventory.md`. To
+  keep the legacy grep-style shape, pass `{ use_cdr: false }`. Capability
+  version bumped to `2.0.0` to signal the shape change.
+
 ### Fixed
 ### Removed
 
