@@ -117,6 +117,19 @@ const routes: Route[] = [
   // map" needs to win over "init capability map", and "render L1 portal"
   // needs to win over "generate documentation portal".
   {
+    // "bootstrap <repo>" / "引导 <repo>" — one-shot repos→docs pipeline
+    // (profile + entry discovery). The noun "repo" or trailing identifier
+    // is what the AI passes; bootstrap must run before any deeper work.
+    pattern: /^(?:bootstrap|引导)\s+(?:repo\s+)?([a-z0-9][a-z0-9._-]*)/i,
+    capability: "cdr.bootstrap",
+    inputBuilder: (t, ctx) => {
+      const m = t.match(/(?:bootstrap|引导)\s+(?:repo\s+)?([a-z0-9][a-z0-9._-]*)/i);
+      return { repo: (m && m[1]) || ctx.repo || "" };
+    },
+    reason: "cdr.bootstrap one-shot intent",
+    confidence: 0.9
+  },
+  {
     // "suggest domains" / "cluster domains" — verb is the cluster signal,
     // noun (domains) is the unique key. Keeps "compose domain X" (v0.3)
     // and "synth capability map" (this version) cleanly separate.
