@@ -101,6 +101,9 @@ L3 流程层 — 行为链路 + 状态机 + 业务规则 (Behavior + State + Rul
 | 列出所有资产 | `cdr.index.list` | 不变 |
 | 生成文档门户 | `cdr.doc.generate` | 不变 |
 | 渲染 L1 portal | `cdr.reversecluster.doc.generate` | **新增(v0.8)** — `/l1/` section + cluster-suggestions |
+| 跨仓查询(读) | `cdr.query` | **新增(v0.10)** — 按 event / writes_table / calls_target / target_repo / entity / id_contains / created_by_feature 过滤;read-only |
+| 查询 pipeline 状态 | `cdr.pipeline.status` | **新增(v0.10)** — 8 阶段 status + next_action(input_template) |
+| 把 feature 链到 CDR 资产 | `cdr.feature.link` | **新增(v0.10)** — 给所有 cognitive index / domain / capability-map 资产打 `created_by_feature` 标签;`feature.close` 自动调 |
 
 ## 工作流
 
@@ -343,6 +346,83 @@ cdr.reversecluster.doc.generate
 ```bash
 cd .dapei/docs-portal && npx vitepress dev
 ```
+
+### Phase 8 — Pipeline Status（编排状态查询）
+
+```
+@dapei what is the cdr pipeline status for mall-order
+```
+
+读出端 `cdr.pipeline.status`,read-only。给定 repo 后返回 8 阶段
+(profile / entries / behavior / state / domain / rule / capability-map / doc)
+的 status + artifacts_count + 下一个该调的能力和 input 形状。
+
+- **status 取值**:
+  - `done` — 阶段产物已存在
+  - `blocked` — 还没产物,且下一步依赖未完成
+  - `skipped` — 阶段可选(rule 默认 skipped)
+- **`next_action`**:每个未完成阶段的 `capability` / `input_template` /
+  `hint`。AI 应该把 `next_action.capability` 当作下次必调,
+  `input_template.required_fields` 列出必填字段。
+- **`up_to_phase`** 参数:截断报告(如只关心 `entries` 之前)。
+- **`overall_status`**: `empty` / `partial` / `complete`
+  (skip 算 complete 的一部分)
+
+**典型用法**:
+
+```bash
+# 完整跑过 profile 后,问下一步
+runCapability('cdr.pipeline.status', { repo: 'mall-order' })
+# next_action: cdr.entries.candidate
+
+# 已跑完 entries,只关心 state 之后
+runCapability('cdr.pipeline.status', {
+  repo: 'mall-order',
+  up_to_phase: 'state'
+})
+```
+
+**`rule` 阶段**:在用户未显式声明 `business-rule` 知识时默认 skipped。
+AI 决定"这个 repo 确实没有跨仓 SLA / 授权规则"时,可直接跳过到
+`capability-map`。
+
+### Phase 7 — Query（跨仓查询）
+
+```
+@dapei query behaviors that emit order.cancelled
+@dapei find behaviors calling PaymentClient in mall-payment
+@dapei list behaviors created by feature payment-refactor
+```
+
+读出端 `cdr.query`,read-only,跨仓/跨能力查找:
+
+- **行为级过滤**:`event` / `writes_table` / `calls_target` / `target_repo`
+  (state-machines 在这类 filter 下自动隐藏——避免语义混淆)
+- **通用过滤**:`entity`(state-machine)/ `id_contains`(子串)/
+  `repo`(精确)/ `created_by_feature`(精确)/ `target`(`behavior` /
+  `state-machine` / `business-rule` / `domain` / `capability-map` / `any`)
+- **结果**:`{ results: [...], total, next_step }`,limit 默认 50,上限 500
+- **永不变更** cognitive index 或 docs/as-is/——纯读
+
+**典型用法**:
+
+```bash
+# 找出所有调用 mall-payment 的行为
+runCapability('cdr.query', { target_repo: 'mall-payment' })
+
+# 找出所有 order-cancel 行为的入口
+runCapability('cdr.query', { id_contains: 'order-cancel', target: 'behavior' })
+
+# 列出某个 feature 创建的所有资产
+runCapability('cdr.query', { created_by_feature: 'payment-refactor' })
+```
+
+**`created_by_feature` 来源**:`feature.close` 自动调 `cdr.feature.link`
+给本次 feature 接触到的所有 cognitive index / domain / capability-map 资产
+打上 `created_by_feature: <feature>` 标签(也支持 `feature.review` 显式调)。
+pre-v0.10 资产无该字段——filter 会**保守返回空**而不是 error。
+
+**当查询语义模糊时**(比如行为 yaml 里 events 字段缺失),`cdr.query` 会**保守返回空**而不是猜测——这是 P1 红线的延伸。
 
 ## 产物目录结构
 
