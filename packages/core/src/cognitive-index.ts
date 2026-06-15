@@ -44,6 +44,17 @@ export interface IndexBehaviorEntry extends StaleFields {
    * Optional.
    */
   writes?: string[];
+  /**
+   * v0.10 — feature that produced this asset. Set by
+   * `cdr.feature.link` (or `feature.close` which calls it on the
+   * way out). Drives the `cdr.query` `created_by_feature` filter
+   * and the closeout backfill to `docs/decisions/<feature>.md`.
+   * Optional; pre-v0.10 entries without the field keep working
+   * (the query filter yields empty rather than error).
+   */
+  created_by_feature?: string;
+  /** ISO timestamp at which the asset was created or last tagged. */
+  created_at?: string;
 }
 
 export interface IndexStateMachineEntry extends StaleFields {
@@ -52,6 +63,8 @@ export interface IndexStateMachineEntry extends StaleFields {
   repo?: string;
   kind: string;
   level: string;
+  created_by_feature?: string;
+  created_at?: string;
 }
 
 export interface IndexDomainEntry extends StaleFields {
@@ -59,12 +72,16 @@ export interface IndexDomainEntry extends StaleFields {
   path: string;
   repo?: string;
   derived_from: string[];
+  created_by_feature?: string;
+  created_at?: string;
 }
 
 export interface IndexCapabilityMapEntry extends StaleFields {
   product: string;
   path: string;
   capability_count: number;
+  created_by_feature?: string;
+  created_at?: string;
 }
 
 export interface IndexBusinessRuleEntry extends StaleFields {
@@ -74,6 +91,8 @@ export interface IndexBusinessRuleEntry extends StaleFields {
   repo?: string;
   evidence_kind: string;
   evidence_level: string;
+  created_by_feature?: string;
+  created_at?: string;
 }
 
 export interface RepoSnapshot {
