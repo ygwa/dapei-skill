@@ -17,7 +17,64 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
-### Changed
+- **CDR Reading/Writing Loop Closure** (on `feature/cdr-reading-writing-loop`).
+  Four commits land together; they ship one user story: the AI can
+  both read and write the engineering knowledge graph, and feature
+  close knows what it produced.
+  - `cdr.query` capability (v1.0.0): read-only cross-cut search across
+    behaviors / state-machines / business-rules / domains /
+    capability-maps. Filters: `target` (kind selector), `entity`,
+    `id_contains`, `event`, `writes_table`, `calls_target`,
+    `target_repo`, `created_by_feature`, `repo`, `limit` (clamped
+    1–500). Behavior-shaped filters suppress state-machines from
+    results to avoid semantic false positives. Hard contract: never
+    writes to the cognitive index or any `docs/as-is/` file.
+  - `cdr.index.list` gains three additive filters: `entity`,
+    `id_contains`, `created_by_feature`. Existing `repo` and `kind`
+    filters unchanged; capability version bumped 1.0.0 → 1.1.0.
+  - `cdr.pipeline.status` capability (v1.0.0): per-phase status
+    report for the 9-phase repos→docs pipeline. Returns 8 phases
+    (`profile | entries | behavior | state | domain | rule |
+    capability-map | doc`) with `status` (`done | blocked |
+    skipped`), `artifacts_count`, and `next_action` carrying the
+    exact capability the AI should call next plus
+    `input_template.required_fields`. `up_to_phase` truncates the
+    report. `overall_status` is `empty | partial | complete`
+    (skipping counts as complete). Closes the loop on phase 2–6
+    orchestration: the engine now tells the AI what to call next
+    instead of the AI guessing.
+  - `cdr.feature.link` capability (v1.0.0): tags every CDR asset
+    touched by a feature with `created_by_feature: <feature>` and
+    `created_at: <iso-timestamp>`. Scans the cognitive index plus
+    `docs/as-is/domains/` and `docs/as-is/capabilities/` on disk.
+    Idempotent: re-running on the same feature is a no-op. Expected
+    callers: `feature.close` (auto-invoked) and `feature.review`.
+  - 5 `IndexEntryType` interfaces (`IndexBehaviorEntry`,
+    `IndexStateMachineEntry`, `IndexDomainEntry`,
+    `IndexCapabilityMapEntry`, `IndexBusinessRuleEntry`) gain
+    additive optional `created_by_feature?: string` and
+    `created_at?: string` fields. Pre-v0.10 entries that lack the
+    field keep loading without error and yield empty (not error)
+    when filtered on `created_by_feature`.
+  - 31 new unit tests (`cdr-query`, `cdr-pipeline-status`,
+    `feature-close-cdr-link`), 1 new integration test
+    (`cdr-reading-writing-loop`).
+
+### Changed (BREAKING)
+- `feature.close` version bumped 1.0.0 → 2.0.0. The capability now
+  auto-invokes `cdr.feature.link` on the way out, before tearing
+  down the worktree. The result data gains `cdr_assets_tagged: <n>`
+  and a new `reportFragment` reports the link count. The input
+  schema is unchanged; the new side effect is purely additive. To
+  bypass the link (e.g. dry-run closes during testing), pass
+  `feature.close` directly without a feature; an unparameterized
+  close will skip the link step.
+- The `cdr.doc.generate` portal's behavior page now omits
+  state-machine cards when the behavior filter is engaged
+  (carried over from the v0.6 structured-calls cleanup, but
+  `cdr.query` is the first user-facing capability to take advantage
+  of it).
+
 ### Fixed
 ### Removed
 
