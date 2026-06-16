@@ -17,6 +17,14 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
+### Changed
+### Fixed
+### Removed
+
+## [3.2.0] - 2026-06-16
+
+
+### Added
 - **CDR Reading/Writing Loop Closure** (on `feature/cdr-reading-writing-loop`).
   Four commits land together; they ship one user story: the AI can
   both read and write the engineering knowledge graph, and feature
