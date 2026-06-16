@@ -107,9 +107,9 @@ log "    on branch '$current_branch'"
 if ! node "$LIB" check >/dev/null; then
   die "version sources are out of sync. Run 'node $LIB check' to see drift."
 fi
-current_version="$(node --input-type=module -e "
-  import { readAllVersions } from '$LIB';
-  process.stdout.write(readAllVersions().root);
+current_version="$(node -e "
+  const pkg = JSON.parse(require('fs').readFileSync('${SCRIPT_ROOT}/package.json', 'utf8'));
+  process.stdout.write(pkg.version);
 ")"
 log "    current version $current_version"
 
