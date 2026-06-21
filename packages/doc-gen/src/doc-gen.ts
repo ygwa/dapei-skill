@@ -32,6 +32,112 @@ function confidenceBadge(doc: Record<string, unknown>): string {
   return "🔴 unknown";
 }
 
+/**
+ * Escape a string for safe inclusion in a Markdown table cell.
+ *
+ * Why this exists: VitePress runs the Vue SFC compiler over every Markdown
+ * file. If a table cell contains `<` followed by what looks like a tag name
+ * (e.g. `<repo>` from a behavior's writes.target), the HTML parser latches
+ * onto it as an unclosed element and refuses to recover — which then trips
+ * every subsequent Vue component tag in the file (`<CodeLink>`,
+ * `<BehaviorFlow>`, `<StateMachine>`) with the misleading error
+ * "Element is missing end tag." Replacing `<` and `>` with HTML entities
+ * keeps the rendered output identical to the user while satisfying the HTML
+ * tokenizer. The original cell value is preserved via character references,
+ * which Markdown readers (including VitePress) render as `<repo>`.
+ */
+function mdCell(value: unknown): string {
+  return String(value ?? "—")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\|/g, "\\|")
+    .replace(/\n/g, " ");
+}
+
+/**
+ * Escape `<` and `>` in a string for free-form Markdown prose (descriptions,
+ * summaries, etc.). Same rationale as mdCell — VitePress's HTML tokenizer
+ * latches onto `<name>` shaped text as an unclosed element — but no table
+ * `\|` or newline collapsing.
+ */
+function mdText(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * Sanitize a generated Markdown page so that VitePress's HTML tokenizer does
+ * not choke on stray `<name>` text in free-form prose. We only leave intact
+ * the Vue component tags we explicitly emit — `<BehaviorFlow>`, `<CodeLink>`,
+ * `<StateMachine>` — and HTML comments / fenced-code regions. Everything else
+ * gets its `<` and `>` replaced with `&lt;` / `&gt;`. The page is still
+ * rendered identically because Markdown → HTML treats the entity references
+ * as the original characters.
+ *
+ * This is a file-level post-pass because the offending prose can come from
+ * any of {description, summary, entry.method, writes.target, domain.modules,
+ * risk.description, …} and chasing every writer is brittle.
+ */
+function sanitizeMarkdownPage(md: string): string {
+  const lines = md.split("\n");
+  const out: string[] = [];
+  let inFence = false;
+  const VUE_TAG_RE = /<\/?(?:BehaviorFlow|CodeLink|StateMachine)(?:\s|\/|>)/;
+  for (const line of lines) {
+    // Track fenced code blocks (``` or ~~~) and skip them entirely.
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      out.push(line);
+      continue;
+    }
+    if (inFence) {
+      out.push(line);
+      continue;
+    }
+    // Allow our known Vue component tags through untouched.
+    if (VUE_TAG_RE.test(line)) {
+      out.push(line);
+      continue;
+    }
+    // If a writer (e.g. mdCell on a table cell) has already escaped this
+    // content to HTML entities, leave it alone — re-escaping `&` would
+    // double-escape to `&amp;lt;`.
+    if (/&(?:lt|gt|amp|quot|#39);/.test(line)) {
+      out.push(line);
+      continue;
+    }
+    // Otherwise, escape any < that is not part of a recognized HTML entity
+    // or attribute-style tag we have already handled.
+    out.push(
+      line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    );
+  }
+  // Restore our Vue component tags. The previous loop escaped `<BehaviorFlow`
+    // to `&lt;BehaviorFlow` along with everything else; flip it back so the
+    // Vue SFC compiler can register the component.
+  return out
+    .join("\n")
+    .replace(/&lt;(\/?(?:BehaviorFlow|CodeLink|StateMachine))(?=\s|\/|&gt;)/g, "<$1")
+    .replace(/&lt;(\/?(?:BehaviorFlow|CodeLink|StateMachine))&gt;/g, "<$1>");
+}
+
+function sanitizePortalDir(portalDir: string): void {
+  const subDirs = ["behaviors", "states", "domains", "capabilities", "profiles", "business-rules"];
+  for (const sub of subDirs) {
+    const dir = join(portalDir, sub);
+    if (!existsSync(dir)) continue;
+    const files = listFilesRecursively(dir, [".md", ".markdown"], 500);
+    for (const f of files) {
+      const original = read(f);
+      const sanitized = sanitizeMarkdownPage(original);
+      if (sanitized !== original) write(f, sanitized);
+    }
+  }
+}
+
 function safeId(name: string): string {
   return name
     .toLowerCase()
@@ -351,7 +457,7 @@ title: "${id}"
     for (const w of writes) {
       const wr = w as Record<string, unknown>;
       const fields = Array.isArray(wr.fields) ? (wr.fields as string[]).join(", ") : String(wr.fields || "—");
-      md += `| ${String(wr.target || wr.table || "—")} | ${String(wr.operation || "—")} | ${fields} |\n`;
+      md += `| ${mdCell(wr.target || wr.table || "—")} | ${mdCell(wr.operation || "—")} | ${mdCell(fields)} |\n`;
     }
   }
 
@@ -410,7 +516,7 @@ title: "${id}"
           ? `\`${c.evidenceFile}:${c.evidenceLine}\``
           : `\`${c.evidenceFile}\``
         : "—";
-      md += `| \`${c.target}\` | ${c.protocol || "—"} | \`${c.targetRepo}\` | ${evCell} |\n`;
+      md += `| ${mdCell(c.target)} | ${mdCell(c.protocol || "—")} | ${mdCell(c.targetRepo)} | ${evCell} |\n`;
     }
   }
 
@@ -577,7 +683,9 @@ title: Business Rules
     const id = String(r.doc.id || basename(r.file, ".yaml"));
     const kind = String(r.doc.kind || "—");
     const desc = String(r.doc.description || r.doc.expr || "—");
-    md += `| [${id}](/business-rules/${safeId(id)}) | \`${kind}\` | ${confidenceBadge(r.doc)} | ${desc} |\n`;
+    const slug = safeId(id);
+    const linkPath = r.repo ? `/business-rules/${safeId(r.repo)}/${slug}` : `/business-rules/${slug}`;
+    md += `| [${id}](${linkPath}) | \`${kind}\` | ${confidenceBadge(r.doc)} | ${mdCell(desc)} |\n`;
   }
   return md;
 }
@@ -713,7 +821,7 @@ function copyThemeTemplates(portalDir: string): { themeFile: string; componentFi
 
 export const docGenerate: AnyCap = {
   id: "cdr.doc.generate",
-  version: "1.0.0",
+  version: "1.1.0",
   inputSchema: {
     properties: {
       output_dir: { type: "string" }
@@ -933,6 +1041,7 @@ export const docGenerate: AnyCap = {
     ];
     write(join(outputDir, ".vitepress", "config.mts"), generateVitepressConfig(productName, sidebarConfig, allPages));
     copyThemeTemplates(outputDir);
+    sanitizePortalDir(outputDir);
 
     return {
       ok: true,

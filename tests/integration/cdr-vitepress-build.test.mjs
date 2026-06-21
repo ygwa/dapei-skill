@@ -107,3 +107,70 @@ test('cdr e2e: vitepress build produces static HTML with all sections', async ()
     rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+// v0.10 — the sanitizeMarkdownPage post-pass escapes raw `<name>` text in
+// free-form prose (descriptions, summaries, entry values, table cells) so
+// that VitePress's HTML tokenizer does not latch onto it as an unclosed
+// element. Without this, vitepress build fails with "Element is missing end
+// tag" the moment a description contains something like `<feature>` or a
+// writes.target contains `<repo>`. This regression test exercises the path
+// end-to-end: upsert a behavior whose writes.target contains `<repo>`,
+// generate the portal, and require vitepress build to succeed.
+test('cdr e2e: portal sanitizes angle-bracket text in prose + still builds', async () => {
+  if (!existsSync(VP_BIN)) return; // skip silently if vitepress not installed
+
+  const tmp = mkdtempSync(join(tmpdir(), 'dapei-vp-sanitize-'));
+  await core.runCapability('workspace.init', {}, { rootDir: tmp, now: new Date() });
+  const repoDir = join(tmp, 'repos', 'demo');
+  mkdirSync(join(repoDir, 'src'), { recursive: true });
+  const ordersContent = [
+    "import { Router } from 'express';",
+    "const router = Router();",
+    "",
+    "router.post('/orders', async (req, res) => {",
+    "  res.json({});",
+    "});",
+    "export default router;",
+    ""
+  ].join("\n");
+  writeFileSync(join(repoDir, 'src', 'orders.ts'), ordersContent);
+  writeFileSync(join(repoDir, 'package.json'), JSON.stringify({ name: 'demo', version: '1.0.0' }));
+
+  // The schema only accepts writes/events/calls as free-text carriers.
+  // writes.target containing `<repo>` is the realistic angle-bracket
+  // exposure path that previously tripped vitepress build when followed by
+  // a `<CodeLink>` tag in another section.
+  await core.runCapability('cdr.behavior.upsert', {
+    id: 'feature-gate',
+    repo: 'demo',
+    entry: { type: 'api', method: 'POST', path: '/orders' },
+    writes: [{ table: 'docs/decisions/<repo>-decisions.md', operation: 'insert' }],
+    calls: [{ target: 'commit', protocol: 'http' }],
+    confidence: { level: 'high', kind: 'fact' },
+    sources: [{ file: 'src/orders.ts', line: 5, repo: 'demo' }]
+  }, { rootDir: tmp, now: new Date() });
+  await core.runCapability('cdr.doc.generate', {}, { rootDir: tmp, now: new Date() });
+
+  const portal = join(tmp, '.dapei/docs-portal');
+  const behaviorMdPath = join(portal, 'behaviors/demo/feature-gate.md');
+  const behaviorMd = readFileSync(behaviorMdPath, 'utf8');
+
+  // After sanitize, the raw <repo> prose must be entity-escaped.
+  assert.match(behaviorMd, /&lt;repo&gt;/, '<repo> text must be escaped');
+
+  // The Vue component tags we deliberately emit must remain intact so the
+  // VitePress build can still register them.
+  assert.match(behaviorMd, /<CodeLink\b/, 'CodeLink tag must remain un-escaped');
+
+  // And the whole portal must actually build without "Element is missing end tag".
+  symlinkSync(DOC_GEN_NM, join(portal, 'node_modules'), 'dir');
+  let buildError = null;
+  try {
+    execFileSync('node', [VP_BIN, 'build', portal], { encoding: 'utf8', stdio: 'pipe' });
+  } catch (e) {
+    buildError = (e.stderr || e.stdout || '').toString();
+  }
+  assert.equal(buildError, null, `vitepress build failed:\n${buildError}`);
+
+  rmSync(tmp, { recursive: true, force: true });
+});
