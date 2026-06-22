@@ -50,6 +50,28 @@ Match the language and detail level of the existing release entries.
   behaviors + 2 rules + 2 domains + L1 map + portal generation) and
   documents three issues found by dogfooding (the vitepress bug above, a
   parallel-call race in `cdr.entries.propose`, and a `WRITE_OPS` doc gap).
+- **SKILL Router — Tool Delegation Protocol**. Two skill documents now
+  teach AI clients how to invoke their native sub-agent and todo
+  primitives for context-budget control on multi-repo workspaces:
+  - `SKILL.md` (Router) gains a `## Tool Delegation Protocol` section
+    with a sub-agent pattern table mapping each read-heavy capability
+    (`repos.analyze --all`, `context.build`, `cdr.doc.generate`,
+    `validate feature`) to the structured summary the main agent
+    should expect back (≤ 1KB), a native-todo convention for stage
+    tracking, and a `## Tool Support Matrix` documenting per-client
+    coverage (OpenCode / Claude Code / Cursor / Copilot / Windsurf).
+  - `skills/cognitive/SKILL.md` gains a new Phase 1.5 — Sub-agent
+    Delegation that fires whenever a workspace has ≥ 3 repos or any
+    single repo > 1000 files. Phase 1-3 then run inside an Explore
+    sub-agent's context; main agent only ever sees a structured
+    candidate summary and writes the schema-validated artifacts
+    itself. 80-repo workspaces fan-out Phase 4 (deep-dive) across N
+    parallel sub-agents.
+  - No engine code change. No new capabilities. No new schema.
+    dapei intentionally does not grow a sub-agent scheduler or a
+    todo capability; clients use their native primitives and the
+    main agent's context only ever holds the structured summaries
+    sub-agents return.
 
 ### Changed
 ### Fixed
