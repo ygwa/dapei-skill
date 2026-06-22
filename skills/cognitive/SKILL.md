@@ -48,6 +48,33 @@ Engineering Cognitive Runtime 行为认知工作流。**只提供流程方法，
 
 `cognitive.discover` 仅提供 `directory_tree` + `manifest_files` 路径，**不**替 Agent 下结论。
 
+### Phase 1.5 — Sub-agent 委派（多 repo 时）
+
+**当 workspace 含 ≥ 3 个 repo 或单个 repo > 1000 文件时**，Phase 1-3 不应在主 agent context 内串行执行 —— 读代码量会把主 context 撑爆。正确做法：
+
+1. **主 agent** 用 AI 客户端的 sub-agent 原语（OpenCode `task(subagent_type="explore", run_in_background=true)` / Claude Code `Task tool` / Cursor `Explore`）唤起一个**专门做"读代码 + 写候选"的 explore sub-agent**。
+2. **Sub-agent** 在自己的 context 里跑 Phase 1-3 全部工作：
+   - 读 `directory_tree` + `manifest_files`
+   - 决定入口策略（HTTP/RPC/事件/定时）
+   - 列出候选清单到 `docs/as-is/behavior/_candidates.yaml`
+3. **Sub-agent 回主 agent 一份 ≤ 1KB 的结构化摘要**（不要回代码原文）：
+   ```yaml
+   repo: <name>
+   language: <lang>
+   candidates_count: <n>
+   top_candidates:
+     - id: <entry-id>
+       file: <path>
+       why: "<一句话描述它做什么>"
+       evidence_quality: high|medium|low
+   risks_to_confirm: [<risk-id>, ...]
+   ```
+4. **主 agent** 拿到摘要后逐个调 `cognitive.artifact.upsert` / `cdr.entries.propose` —— 这是 schema-validated 的小写入，留在主 context 是必要的。
+
+**80 repo workspace 的特殊模式**：用一个 explore sub-agent 跑 `repos.analyze --all`，主 agent 只收汇总；如果其中有 ≥ 5 个 repo 触发 Phase 4（deep dive），**按 repo 分组 fan-out 到 N 个 parallel sub-agent**，每个负责一个 repo 的 Phase 4，主 agent 在收到所有 sub-agent 摘要后再统一生成 cross-repo 视图（domain.compose / capability.map.synth）。
+
+**工具映射**：见 Router SKILL.md 的 `## Tool Delegation Protocol` 与 `## Tool Support Matrix`。本 skill 不重复定义工具调用约定，只声明 **Phase 1-3 / 80+ repo 场景必须走 sub-agent**。
+
 ### Phase 2 — Strategy（入口策略）
 
 **目标**：决定如何在本栈中定位行为入口。
@@ -158,3 +185,9 @@ Evidence 规则：`fact` → `sources[]`；`inference` → `derived_from[]`；`u
 - **validation**：当 `validation.run` 发现未覆盖行为时,触发 `cognitive.artifact.upsert` 补全 behavior 文档
 - **workflow**：`context.build` 在 L3 阶段注入 cognitive 索引摘要到 `runtime-context.md`
 - **workspace**：`workspace.init` 创建 `docs/as-is/behavior` 与 `docs/as-is/state-machines` 目录,cognitive artifact 落盘位置
+
+## 工具调用
+
+- Phase 1-3 在多 repo 场景必须用 AI 客户端的 sub-agent（详见 Phase 1.5）。
+- 全局约定见 Router SKILL.md `## Tool Delegation Protocol`。
+- dapei 不提供 todo capability —— 用 AI 客户端原生的 TodoWrite / todowrite / Todo 工具。
