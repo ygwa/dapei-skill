@@ -165,6 +165,158 @@ function loadYamlDir(dirPath: string): ParsedDoc[] {
   return results;
 }
 
+// ---------------------------------------------------------------------------
+// Cross-artifact index (cdr-portal-aggregation Round 1)
+// Round 1 design: docs/04-technical-design.md § C1.
+// Round 1 decisions: D1 (behaviorsByDomain join key), D2 (missing-id handled
+// at page-generator level, not here), D3 (capability-map data source).
+// Forward indexes (id → doc): behaviorsById / domainsByName /
+// statesByEntity / rulesById. Inverted indexes: statesByBehavior /
+// behaviorsByDomain (D1) / rulesByBehavior / rulesByDomain /
+// capabilitiesByDomain. Built once per cdr.doc.generate invocation,
+// shared by every page generator downstream.
+// ---------------------------------------------------------------------------
+
+interface CrossArtifactIndex {
+  behaviorsById: Map<string, ParsedDoc>;
+  domainsByName: Map<string, ParsedDoc>;
+  statesByEntity: Map<string, ParsedDoc>;
+  rulesById: Map<string, ParsedDoc>;
+  statesByBehavior: Map<string, ParsedDoc[]>;
+  behaviorsByDomain: Map<string, ParsedDoc[]>;
+  rulesByBehavior: Map<string, ParsedDoc[]>;
+  rulesByDomain: Map<string, ParsedDoc[]>;
+  capabilitiesByDomain: Map<string, ParsedDoc[]>;
+  entriesByBehaviorId: Map<string, { repo: string; id: string }>;
+}
+
+function buildCrossArtifactIndex(
+  behaviorDocs: ParsedDoc[],
+  domainDocs: ParsedDoc[],
+  stateDocs: ParsedDoc[],
+  ruleDocs: ParsedDoc[],
+  capabilityDocs: ParsedDoc[],
+  entryDocs: ParsedDoc[] = []
+): CrossArtifactIndex {
+  const behaviorsById = new Map<string, ParsedDoc>();
+  for (const b of behaviorDocs) {
+    const id = String(b.doc.id || basename(b.file, ".yaml"));
+    if (id) behaviorsById.set(id, b);
+  }
+
+  const domainsByName = new Map<string, ParsedDoc>();
+  for (const d of domainDocs) {
+    const name = String(d.doc.name || d.doc.domain || basename(d.file, ".yaml"));
+    if (name) domainsByName.set(name, d);
+  }
+
+  const statesByEntity = new Map<string, ParsedDoc>();
+  for (const s of stateDocs) {
+    const entity = String(s.doc.entity || basename(s.file, ".yaml"));
+    if (entity) statesByEntity.set(entity, s);
+  }
+
+  const rulesById = new Map<string, ParsedDoc>();
+  for (const r of ruleDocs) {
+    const id = String(r.doc.id || basename(r.file, ".yaml"));
+    if (id) rulesById.set(id, r);
+  }
+
+  const statesByBehavior = new Map<string, ParsedDoc[]>();
+  for (const s of stateDocs) {
+    const transitions = s.doc.transitions;
+    if (!Array.isArray(transitions)) continue;
+    for (const t of transitions) {
+      const behaviorId = (t as Record<string, unknown>)?.behavior_id;
+      if (typeof behaviorId === "string" && behaviorId) {
+        const arr = statesByBehavior.get(behaviorId) || [];
+        arr.push(s);
+        statesByBehavior.set(behaviorId, arr);
+      }
+    }
+  }
+
+  // D1 — behaviorsByDomain via behavior.derived_from (no schema change)
+  const behaviorsByDomain = new Map<string, ParsedDoc[]>();
+  for (const b of behaviorDocs) {
+    const df = b.doc.derived_from;
+    if (!Array.isArray(df)) continue;
+    for (const name of df) {
+      if (typeof name !== "string" || !name) continue;
+      if (domainsByName.has(name)) {
+        const arr = behaviorsByDomain.get(name) || [];
+        arr.push(b);
+        behaviorsByDomain.set(name, arr);
+      }
+    }
+  }
+
+  const rulesByBehavior = new Map<string, ParsedDoc[]>();
+  for (const r of ruleDocs) {
+    const appliesTo = r.doc.applies_to;
+    if (!Array.isArray(appliesTo)) continue;
+    for (const id of appliesTo) {
+      if (typeof id !== "string" || !id) continue;
+      const arr = rulesByBehavior.get(id) || [];
+      arr.push(r);
+      rulesByBehavior.set(id, arr);
+    }
+  }
+
+  const rulesByDomain = new Map<string, ParsedDoc[]>();
+  for (const r of ruleDocs) {
+    const df = r.doc.derived_from;
+    if (!Array.isArray(df)) continue;
+    for (const name of df) {
+      if (typeof name !== "string" || !name) continue;
+      if (domainsByName.has(name)) {
+        const arr = rulesByDomain.get(name) || [];
+        arr.push(r);
+        rulesByDomain.set(name, arr);
+      }
+    }
+  }
+
+  const capabilitiesByDomain = new Map<string, ParsedDoc[]>();
+  for (const c of capabilityDocs) {
+    const capabilities = c.doc.capabilities;
+    if (!Array.isArray(capabilities)) continue;
+    for (const cap of capabilities) {
+      const domains = (cap as Record<string, unknown>)?.domains;
+      if (!Array.isArray(domains)) continue;
+      for (const name of domains) {
+        if (typeof name !== "string" || !name) continue;
+        const arr = capabilitiesByDomain.get(name) || [];
+        arr.push(cap as ParsedDoc);
+        capabilitiesByDomain.set(name, arr);
+      }
+    }
+  }
+
+  const entriesByBehaviorId = new Map<string, { repo: string; id: string }>();
+  for (const entryDoc of entryDocs) {
+    const repo = String(entryDoc.doc.repo || entryDoc.repo || "");
+    const entries = Array.isArray(entryDoc.doc.entries) ? (entryDoc.doc.entries as Array<Record<string, unknown>>) : [];
+    for (const e of entries) {
+      const id = typeof e.id === "string" && e.id ? e.id : "";
+      if (id) entriesByBehaviorId.set(id, { repo, id });
+    }
+  }
+
+  return {
+    behaviorsById,
+    domainsByName,
+    statesByEntity,
+    rulesById,
+    statesByBehavior,
+    behaviorsByDomain,
+    rulesByBehavior,
+    rulesByDomain,
+    capabilitiesByDomain,
+    entriesByBehaviorId,
+  };
+}
+
 function sourcesSection(doc: Record<string, unknown>, rootDir: string): string {
   const sources = doc.sources as unknown[] | undefined;
   if (!Array.isArray(sources) || sources.length === 0) return "";
@@ -289,6 +441,96 @@ title: ${productName} - Knowledge Portal
 `;
 }
 
+// cdr-portal-aggregation Round 1 T3.1 (BG-1, D4, see docs/04-technical-design.md).
+function generateBusinessModulesPage(domainDocs: ParsedDoc[], ctx: CrossArtifactIndex): string {
+  let md = `---
+title: Business Modules
+---
+
+# Business Modules — L2 Domain Roll-Up
+
+> Auto-generated business-module abstraction. Each section corresponds to one composed domain, with its behaviors, business rules, and the state machines those behaviors drive.
+
+`;
+  if (domainDocs.length === 0) {
+    md += "*No domain documents found.*\n";
+    return md;
+  }
+
+  for (const d of domainDocs) {
+    const name = String(d.doc.name || d.doc.domain || basename(d.file, ".yaml"));
+    const drepo = String(d.doc.repo || "—");
+    const domLinkPath = drepo !== "—"
+      ? `/domains/${safeId(drepo)}/${safeId(name)}`
+      : `/domains/${safeId(name)}`;
+
+    md += `## [${mdCell(name)}](${domLinkPath})\n\n`;
+    md += `- **Repo:** ${mdCell(drepo)}\n`;
+    md += `- **Domain page:** [${mdCell(name)}](${domLinkPath})\n`;
+
+    const behaviors = ctx.behaviorsByDomain.get(name) || [];
+    md += `- **Behaviors in this domain:** ${behaviors.length}\n`;
+
+    const rules = ctx.rulesByDomain.get(name) || [];
+    md += `- **Business rules applying to this domain:** ${rules.length}\n`;
+
+    if (behaviors.length > 0) {
+      md += "\n### Behaviors\n\n";
+      for (const b of behaviors) {
+        const bid = String(b.doc.id || basename(b.file, ".yaml"));
+        const brepo = String(b.doc.repo || "—");
+        const linkPath = brepo !== "—"
+          ? `/behaviors/${safeId(brepo)}/${safeId(bid)}`
+          : `/behaviors/${safeId(bid)}`;
+        md += `- [${mdCell(bid)}](${linkPath}) _(repo: ${mdCell(brepo)})_\n`;
+      }
+    }
+
+    if (rules.length > 0) {
+      md += "\n### Business rules\n\n";
+      for (const r of rules) {
+        const rid = String(r.doc.id || basename(r.file, ".yaml"));
+        const kind = String(r.doc.kind || "—");
+        const rrepo = String(r.doc.repo || "—");
+        const linkPath = rrepo !== "—"
+          ? `/business-rules/${safeId(rrepo)}/${safeId(rid)}`
+          : `/business-rules/${safeId(rid)}`;
+        md += `- [${mdCell(rid)}](${linkPath}) _(${mdCell(kind)}, repo: ${mdCell(rrepo)})_\n`;
+      }
+    }
+
+    // State machines driven by behaviors in this domain — chain via behaviors -> transitions.
+    const statesSeen = new Set<string>();
+    const statesList: ParsedDoc[] = [];
+    for (const b of behaviors) {
+      const bid = String(b.doc.id || basename(b.file, ".yaml"));
+      const sms = ctx.statesByBehavior.get(bid) || [];
+      for (const s of sms) {
+        const key = s.file;
+        if (!statesSeen.has(key)) {
+          statesSeen.add(key);
+          statesList.push(s);
+        }
+      }
+    }
+    if (statesList.length > 0) {
+      md += "\n### State machines driven by these behaviors\n\n";
+      for (const s of statesList) {
+        const entity = String(s.doc.entity || basename(s.file, ".yaml"));
+        const srepo = String(s.doc.repo || "—");
+        const linkPath = srepo !== "—"
+          ? `/states/${safeId(srepo)}/${safeId(entity)}`
+          : `/states/${safeId(entity)}`;
+        md += `- [${mdCell(entity)}](${linkPath}) _(repo: ${mdCell(srepo)})_\n`;
+      }
+    }
+
+    md += "\n";
+  }
+
+  return md;
+}
+
 function generateCapabilityIndex(caps: ParsedDoc[]): string {
   let md = `---
 title: Capabilities
@@ -311,7 +553,7 @@ title: Capabilities
   return md;
 }
 
-function generateCapabilityPage(cap: ParsedDoc, rootDir: string): string {
+function generateCapabilityPage(cap: ParsedDoc, rootDir: string, ctx?: CrossArtifactIndex): string {
   const id = String(cap.doc.id || cap.doc.name || "unknown");
   const desc = String(cap.doc.description || cap.doc.summary || "");
   let md = `---
@@ -329,6 +571,38 @@ title: "${id}"
       md += `- **${String(sub.id || sub.name || "?")}** — ${String(sub.description || "")}\n`;
     }
   }
+
+  // cdr-portal-aggregation Round 1 T2.2 (BG-3, see docs/04-technical-design.md).
+  if (ctx) {
+    const domains = (cap.doc.domains as unknown[] | undefined) || [];
+    if (domains.length > 0) {
+      md += "\n## Contributing domains\n\n";
+      md += "| Domain |\n";
+      md += "|--------|\n";
+      for (const raw of domains) {
+        const name = String(raw);
+        const dom = ctx.domainsByName.get(name);
+        const linkPath = dom?.repo
+          ? `/domains/${safeId(dom.repo)}/${safeId(name)}`
+          : `/domains/${safeId(name)}`;
+        md += `| [${mdCell(name)}](${linkPath}) |\n`;
+      }
+      md += "\n";
+    }
+
+    const repos = (cap.doc.spans_repos as unknown[] | undefined) || [];
+    if (repos.length > 0) {
+      md += "\n## Spans repos\n\n";
+      md += "| Repo |\n";
+      md += "|------|\n";
+      for (const raw of repos) {
+        const rname = String(raw);
+        md += `| [${mdCell(rname)}](/profiles/${safeId(rname)}) |\n`;
+      }
+      md += "\n";
+    }
+  }
+
   md += sourcesSection(cap.doc, rootDir);
   return md;
 }
@@ -355,7 +629,7 @@ title: Domains
   return md;
 }
 
-function generateDomainPage(domain: ParsedDoc, rootDir: string): string {
+function generateDomainPage(domain: ParsedDoc, rootDir: string, ctx?: CrossArtifactIndex): string {
   const name = String(domain.doc.name || domain.doc.domain || "unknown");
   const desc = String(domain.doc.description || domain.doc.summary || "");
   let md = `---
@@ -387,6 +661,72 @@ title: "${name}"
     md += domainModulesToMermaid(modules);
     md += "\n";
   }
+
+  // cdr-portal-aggregation Round 1 T2.1 (BG-2, see docs/04-technical-design.md).
+  if (ctx) {
+    const behaviors = ctx.behaviorsByDomain.get(name) || [];
+    if (behaviors.length > 0) {
+      md += "\n## Behaviors in this domain\n\n";
+      md += "| Behavior | Repo | Confidence |\n";
+      md += "|----------|------|------------|\n";
+      for (const b of behaviors) {
+        const bid = String(b.doc.id || basename(b.file, ".yaml"));
+        const brepo = String(b.doc.repo || "—");
+        const linkPath = brepo !== "—"
+          ? `/behaviors/${safeId(brepo)}/${safeId(bid)}`
+          : `/behaviors/${safeId(bid)}`;
+        md += `| [${mdCell(bid)}](${linkPath}) | ${mdCell(brepo)} | ${confidenceBadge(b.doc)} |\n`;
+      }
+      md += "\n";
+    }
+
+    // State machines driven by these behaviors — chain via behaviors -> transitions.
+    const statesSeen = new Set<string>();
+    const statesList: ParsedDoc[] = [];
+    for (const b of behaviors) {
+      const bid = String(b.doc.id || basename(b.file, ".yaml"));
+      const sms = ctx.statesByBehavior.get(bid) || [];
+      for (const s of sms) {
+        const key = s.file;
+        if (!statesSeen.has(key)) {
+          statesSeen.add(key);
+          statesList.push(s);
+        }
+      }
+    }
+    if (statesList.length > 0) {
+      md += "\n## State machines driven by these behaviors\n\n";
+      md += "| Entity | Repo | Confidence |\n";
+      md += "|--------|------|------------|\n";
+      for (const s of statesList) {
+        const entity = String(s.doc.entity || basename(s.file, ".yaml"));
+        const srepo = String(s.doc.repo || "—");
+        const linkPath = srepo !== "—"
+          ? `/states/${safeId(srepo)}/${safeId(entity)}`
+          : `/states/${safeId(entity)}`;
+        md += `| [${mdCell(entity)}](${linkPath}) | ${mdCell(srepo)} | ${confidenceBadge(s.doc)} |\n`;
+      }
+      md += "\n";
+    }
+
+    const rules = ctx.rulesByDomain.get(name) || [];
+    if (rules.length > 0) {
+      md += "\n## Business rules applying to this domain\n\n";
+      md += "| Rule | Kind | Confidence |\n";
+      md += "|------|------|------------|\n";
+      for (const r of rules) {
+        const rid = String(r.doc.id || basename(r.file, ".yaml"));
+        const kind = String(r.doc.kind || "—");
+        const rrepo = String(r.doc.repo || "—");
+        const linkPath = rrepo !== "—"
+          ? `/business-rules/${safeId(rrepo)}/${safeId(rid)}`
+          : `/business-rules/${safeId(rid)}`;
+        md += `| [${mdCell(rid)}](${linkPath}) | \`${mdCell(kind)}\` | ${confidenceBadge(r.doc)} |\n`;
+      }
+      md += "\n";
+    }
+  }
+
   md += sourcesSection(domain.doc, rootDir);
   return md;
 }
@@ -418,7 +758,128 @@ title: Behaviors
   return md;
 }
 
-function generateBehaviorPage(behavior: ParsedDoc, rootDir: string): string {
+// cdr-portal-aggregation Round 1 T3.2 (BG-7, D5, see docs/04-technical-design.md).
+function groupBehaviorsByEntryType(behaviors: ParsedDoc[]): Map<string, ParsedDoc[]> {
+  const groups = new Map<string, ParsedDoc[]>();
+  for (const b of behaviors) {
+    const entry = b.doc.entry as Record<string, unknown> | undefined;
+    const type = entry && typeof entry.type === "string" && entry.type ? entry.type : "other";
+    const arr = groups.get(type) || [];
+    arr.push(b);
+    groups.set(type, arr);
+  }
+  return groups;
+}
+
+function generateBehaviorByEntryTypeIndex(behaviors: ParsedDoc[]): string {
+  let md = `---
+title: Behaviors by Entry Type
+---
+
+# Behaviors by Entry Type
+
+> Cross-cut view: behaviors grouped by their entry surface (api / mq / cron / rpc / cache / search / other).
+
+`;
+  const groups = groupBehaviorsByEntryType(behaviors);
+  if (groups.size === 0) {
+    md += "*No behavior documents found.*\n";
+    return md;
+  }
+  md += "| Entry type | Behavior count |\n";
+  md += "|------------|----------------|\n";
+  const types = [...groups.keys()].sort();
+  for (const t of types) {
+    md += `| [${mdCell(t)}](/behaviors/by-entry-type/${safeId(t)}) | ${groups.get(t)!.length} |\n`;
+  }
+  return md;
+}
+
+function generateBehaviorByEntryTypePage(type: string, behaviors: ParsedDoc[]): string {
+  let md = `---
+title: "Behaviors — entry type: ${type}"
+---
+
+# Behaviors — entry type: \`${type}\`
+
+> Back to [Behaviors by Entry Type index](/behaviors/by-entry-type/) · [All behaviors](/behaviors/)
+
+`;
+  if (behaviors.length === 0) {
+    md += "*No behaviors of this entry type.*\n";
+    return md;
+  }
+  md += "| Behavior | Repo | Path | Summary |\n";
+  md += "|----------|------|------|---------|\n";
+  for (const b of behaviors) {
+    const id = String(b.doc.id || basename(b.file, ".yaml"));
+    const repo = String(b.doc.repo || "—");
+    const entry = b.doc.entry as Record<string, unknown> | undefined;
+    const path = entry ? String(entry.path || entry.handler || "—") : "—";
+    const summary = String(b.doc.description || b.doc.summary || "—");
+    const linkPath = repo !== "—"
+      ? `/behaviors/${safeId(repo)}/${safeId(id)}`
+      : `/behaviors/${safeId(id)}`;
+    md += `| [${mdCell(id)}](${linkPath}) | ${mdCell(repo)} | \`${mdCell(path)}\` | ${mdCell(summary)} |\n`;
+  }
+  return md;
+}
+
+// cdr-portal-aggregation Round 1 T3.4 (BG-9, see docs/04-technical-design.md).
+// Renders /entries/<repo>/index.md for each repo with confirmed entries.
+// Uses the real cdr.entries.propose schema (see packages/core/src/capabilities/domains/cdr.ts):
+// each entries/<repo>.yaml has shape { repo, generated_at, entry_count, entries: [...] }
+// and each entry inside has { id, type, status, anchor, line, method?, path?, summary?, sources }.
+function generateEntriesPage(entryDoc: ParsedDoc): string {
+  const repo = String(entryDoc.doc.repo || entryDoc.repo || basename(entryDoc.file, ".yaml"));
+  const entries = Array.isArray(entryDoc.doc.entries) ? (entryDoc.doc.entries as Array<Record<string, unknown>>) : [];
+  let md = `---
+title: "Entries — ${repo}"
+---
+
+# Confirmed Entries — ${repo}
+
+> Back to [Behaviors index](/behaviors/) · [All behaviors](/behaviors/)
+
+- **Repo:** ${mdCell(repo)}
+- **Total entries:** ${entries.length}
+
+`;
+  if (entries.length === 0) {
+    md += "*No entries recorded for this repo.*\n";
+    return md;
+  }
+
+  md += "| Entry | Type | Method | Path | Anchor | Line | Status | Summary |\n";
+  md += "|-------|------|--------|------|--------|------|--------|---------|\n";
+  for (const e of entries) {
+    const id = String(e.id || "?");
+    const type = String(e.type || "—");
+    const method = e.method ? String(e.method) : "—";
+    const path = e.path ? String(e.path) : "—";
+    const anchor = String(e.anchor || "—");
+    const line = typeof e.line === "number" ? String(e.line) : "—";
+    const status = String(e.status || "—");
+    const summary = String(e.summary || "—");
+    md += `| \`${mdCell(id)}\` | \`${mdCell(type)}\` | \`${mdCell(method)}\` | \`${mdCell(path)}\` | \`${mdCell(anchor)}\` | ${mdCell(line)} | \`${mdCell(status)}\` | ${mdCell(summary)} |\n`;
+  }
+  return md;
+}
+
+function buildEntriesByBehaviorId(entryDocs: ParsedDoc[]): { byBehaviorId: Map<string, { repo: string; id: string }> } {
+  const byBehaviorId = new Map<string, { repo: string; id: string }>();
+  for (const entryDoc of entryDocs) {
+    const repo = String(entryDoc.doc.repo || entryDoc.repo || "");
+    const entries = Array.isArray(entryDoc.doc.entries) ? (entryDoc.doc.entries as Array<Record<string, unknown>>) : [];
+    for (const e of entries) {
+      const id = String(e.id || "");
+      if (id) byBehaviorId.set(id, { repo, id });
+    }
+  }
+  return { byBehaviorId };
+}
+
+function generateBehaviorPage(behavior: ParsedDoc, rootDir: string, ctx?: CrossArtifactIndex): string {
   const id = String(behavior.doc.id || "unknown");
   const desc = String(behavior.doc.description || behavior.doc.summary || "");
   const entry = behavior.doc.entry as Record<string, unknown> | undefined;
@@ -433,7 +894,12 @@ title: "${id}"
 - **Repo:** ${String(behavior.doc.repo || "—")}
 `;
   if (entry) {
-    md += `- **Entry:** ${String(entry.type || "")} ${String(entry.method || "")} ${String(entry.path || entry.handler || "")}\n`;
+    md += `- **Entry:** ${String(entry.type || "")} ${String(entry.method || "")} ${String(entry.path || entry.handler || "")}`;
+    if (ctx && ctx.entriesByBehaviorId.has(id)) {
+      const ref = ctx.entriesByBehaviorId.get(id)!;
+      md += ` — see [entry catalog](/entries/${safeId(ref.repo)}#${safeId(ref.id)})`;
+    }
+    md += "\n";
   }
   if (desc) md += `\n${desc}\n`;
 
@@ -520,6 +986,26 @@ title: "${id}"
     }
   }
 
+  // cdr-portal-aggregation Round 1 T2.3 (BG-4, see docs/04-technical-design.md).
+  if (ctx) {
+    const drives = ctx.statesByBehavior.get(id) || [];
+    if (drives.length > 0) {
+      md += "\n## Drives transitions\n\n";
+      md += "This behavior drives state transitions in:\n\n";
+      md += "| State machine | Repo |\n";
+      md += "|---------------|------|\n";
+      for (const s of drives) {
+        const entity = String(s.doc.entity || basename(s.file, ".yaml"));
+        const srepo = String(s.doc.repo || "—");
+        const linkPath = srepo !== "—"
+          ? `/states/${safeId(srepo)}/${safeId(entity)}`
+          : `/states/${safeId(entity)}`;
+        md += `| [${mdCell(entity)}](${linkPath}) | ${mdCell(srepo)} |\n`;
+      }
+      md += "\n";
+    }
+  }
+
   // Risks
   const risks = behavior.doc.risks as unknown[] | undefined;
   if (Array.isArray(risks) && risks.length > 0) {
@@ -563,8 +1049,9 @@ title: State Machines
   return md;
 }
 
-function generateStatePage(sm: ParsedDoc, rootDir: string): string {
+function generateStatePage(sm: ParsedDoc, rootDir: string, ctx?: CrossArtifactIndex): string {
   const entity = String(sm.doc.entity || "unknown");
+  const smRepo = String(sm.doc.repo || "—");
   let md = `---
 title: "${entity}"
 ---
@@ -572,7 +1059,7 @@ title: "${entity}"
 # State Machine: ${entity}
 
 - **Confidence:** ${confidenceBadge(sm.doc)}
-- **Repo:** ${String(sm.doc.repo || "—")}
+- **Repo:** ${smRepo}
 `;
 
   const states = Array.isArray(sm.doc.states) ? (sm.doc.states as unknown[]) : [];
@@ -587,11 +1074,33 @@ title: "${entity}"
 
   if (transitions.length > 0) {
     md += "\n## Transitions\n\n";
-    md += "| From | To | Trigger |\n";
-    md += "|------|----|---------|\n";
+    md += "| From | To | Trigger | Behavior |\n";
+    md += "|------|----|---------|----------|\n";
     for (const t of transitions) {
       const tr = t as Record<string, unknown>;
-      md += `| ${String(tr.from || "—")} | ${String(tr.to || "—")} | ${String(tr.trigger || "—")} |\n`;
+      const fromCell = String(tr.from || "—");
+      const toCell = String(tr.to || "—");
+      const triggerCell = String(tr.trigger || "—");
+      const behaviorId = typeof tr.behavior_id === "string" ? tr.behavior_id : null;
+
+      // cdr-portal-aggregation Round 1 T2.4 (BG-4 + D2). D2: missing
+      // behavior_id renders as strikethrough + tooltip, never silently
+      // hidden — see docs/04-technical-design.md § D2.
+      let behaviorCell = "—";
+      if (behaviorId) {
+        const matched = ctx?.behaviorsById.get(behaviorId);
+        if (matched) {
+          const brepo = String(matched.doc.repo || "—");
+          const linkPath = brepo !== "—"
+            ? `/behaviors/${safeId(brepo)}/${safeId(behaviorId)}`
+            : `/behaviors/${safeId(behaviorId)}`;
+          behaviorCell = `[${mdCell(behaviorId)}](${linkPath})`;
+        } else {
+          behaviorCell = `~~${mdCell(behaviorId)}~~ _(no behavior document)_`;
+        }
+      }
+
+      md += `| ${mdCell(fromCell)} | ${mdCell(toCell)} | ${mdCell(triggerCell)} | ${behaviorCell} |\n`;
     }
   }
 
@@ -690,7 +1199,73 @@ title: Business Rules
   return md;
 }
 
-function generateBusinessRulePage(rule: ParsedDoc, rootDir: string): string {
+// cdr-portal-aggregation Round 1 T3.3 (BG-6, see docs/04-technical-design.md).
+function groupBusinessRulesByKind(rules: ParsedDoc[]): Map<string, ParsedDoc[]> {
+  const groups = new Map<string, ParsedDoc[]>();
+  for (const r of rules) {
+    const kind = typeof r.doc.kind === "string" && r.doc.kind ? r.doc.kind : "other";
+    const arr = groups.get(kind) || [];
+    arr.push(r);
+    groups.set(kind, arr);
+  }
+  return groups;
+}
+
+function generateBusinessRulesByKindIndex(rules: ParsedDoc[]): string {
+  let md = `---
+title: Business Rules by Kind
+---
+
+# Business Rules by Kind
+
+> Cross-cut view: business rules grouped by their semantic kind (invariant / constraint / authorization / sla / compensation).
+
+`;
+  const groups = groupBusinessRulesByKind(rules);
+  if (groups.size === 0) {
+    md += "*No business rule documents found.*\n";
+    return md;
+  }
+  md += "| Kind | Rule count |\n";
+  md += "|------|-----------|\n";
+  const kinds = [...groups.keys()].sort();
+  for (const k of kinds) {
+    md += `| [${mdCell(k)}](/business-rules/by-kind/${safeId(k)}) | ${groups.get(k)!.length} |\n`;
+  }
+  return md;
+}
+
+function generateBusinessRulesByKindPage(kind: string, rules: ParsedDoc[]): string {
+  let md = `---
+title: "Business Rules — kind: ${kind}"
+---
+
+# Business Rules — kind: \`${kind}\`
+
+> Back to [Business Rules by Kind index](/business-rules/by-kind/) · [All business rules](/business-rules/)
+
+`;
+  if (rules.length === 0) {
+    md += "*No rules of this kind.*\n";
+    return md;
+  }
+  md += "| Rule | Repo | Applies to | Derived from | Description |\n";
+  md += "|------|------|-----------|--------------|-------------|\n";
+  for (const r of rules) {
+    const id = String(r.doc.id || basename(r.file, ".yaml"));
+    const repo = String(r.doc.repo || "—");
+    const appliesTo = Array.isArray(r.doc.applies_to) ? (r.doc.applies_to as unknown[]).map((x) => String(x)).join(", ") : "—";
+    const derivedFrom = Array.isArray(r.doc.derived_from) ? (r.doc.derived_from as unknown[]).map((x) => String(x)).join(", ") : "—";
+    const desc = String(r.doc.description || r.doc.expr || "—");
+    const linkPath = repo !== "—"
+      ? `/business-rules/${safeId(repo)}/${safeId(id)}`
+      : `/business-rules/${safeId(id)}`;
+    md += `| [${mdCell(id)}](${linkPath}) | ${mdCell(repo)} | ${mdCell(appliesTo)} | ${mdCell(derivedFrom)} | ${mdCell(desc)} |\n`;
+  }
+  return md;
+}
+
+function generateBusinessRulePage(rule: ParsedDoc, rootDir: string, ctx?: CrossArtifactIndex): string {
   const id = String(rule.doc.id || "unknown");
   const kind = String(rule.doc.kind || "unknown");
   const desc = String(rule.doc.description || "");
@@ -717,7 +1292,19 @@ title: "${id}"
   if (Array.isArray(appliesTo) && appliesTo.length > 0) {
     md += "\n## Applies To\n\n";
     for (const a of appliesTo) {
-      md += `- \`${String(a)}\`\n`;
+      const name = String(a);
+      if (ctx) {
+        const matched = ctx.behaviorsById.get(name);
+        if (matched) {
+          const brepo = String(matched.doc.repo || "—");
+          const linkPath = brepo !== "—"
+            ? `/behaviors/${safeId(brepo)}/${safeId(name)}`
+            : `/behaviors/${safeId(name)}`;
+          md += `- [${mdCell(name)}](${linkPath})\n`;
+          continue;
+        }
+      }
+      md += `- \`${mdCell(name)}\`\n`;
     }
   }
 
@@ -725,7 +1312,19 @@ title: "${id}"
   if (Array.isArray(derivedFrom) && derivedFrom.length > 0) {
     md += "\n## Derived From\n\n";
     for (const d of derivedFrom) {
-      md += `- \`${String(d)}\`\n`;
+      const name = String(d);
+      if (ctx) {
+        const matched = ctx.domainsByName.get(name);
+        if (matched) {
+          const drepo = String(matched.doc.repo || "—");
+          const linkPath = drepo !== "—"
+            ? `/domains/${safeId(drepo)}/${safeId(name)}`
+            : `/domains/${safeId(name)}`;
+          md += `- [${mdCell(name)}](${linkPath})\n`;
+          continue;
+        }
+      }
+      md += `- \`${mdCell(name)}\`\n`;
     }
   }
 
@@ -733,10 +1332,20 @@ title: "${id}"
   return md;
 }
 
+// cdr-portal-aggregation Round 1 T4.1 (BG-8, D3, see docs/04-technical-design.md).
+function detectExistingPortalSections(portalDir: string): { l1: boolean; crossRepo: boolean; businessModules: boolean } {
+  return {
+    l1: existsSync(join(portalDir, "l1", "index.md")),
+    crossRepo: existsSync(join(portalDir, "cross-repo", "index.md")),
+    businessModules: existsSync(join(portalDir, "business-modules", "index.md"))
+  };
+}
+
 function generateVitepressConfig(
   productName: string,
   sidebarConfig: Record<string, Array<{ text: string; link: string; items: Array<{ text: string; link?: string; items?: Array<{ text: string; link: string }> }> }>>,
-  allPages: string[]
+  allPages: string[],
+  nav?: Array<{ text: string; link: string }>
 ): string {
   // v0.4 — VitePress only builds HTML for pages it can discover. The sidebar
   // config works for top-level and per-repo pages that are reachable from
@@ -745,14 +1354,8 @@ function generateVitepressConfig(
   // register every page in the `pages` config (a flat list of source
   // paths) — VitePress builds HTML for each one regardless of sidebar.
   const pagesJson = JSON.stringify(allPages, null, 6);
-  return `import { defineConfig } from 'vitepress'
-
-export default defineConfig({
-  title: '${productName} - Knowledge Portal',
-  description: 'Auto-generated living documentation from code analysis',
-  pages: ${pagesJson},
-  themeConfig: {
-    nav: [
+  const navJson = JSON.stringify(
+    nav || [
       { text: 'Home', link: '/' },
       { text: 'Capabilities', link: '/capabilities/' },
       { text: 'Domains', link: '/domains/' },
@@ -761,6 +1364,17 @@ export default defineConfig({
       { text: 'Business Rules', link: '/business-rules/' },
       { text: 'Profiles', link: '/profiles/' }
     ],
+    null,
+    6
+  );
+  return `import { defineConfig } from 'vitepress'
+
+export default defineConfig({
+  title: '${productName} - Knowledge Portal',
+  description: 'Auto-generated living documentation from code analysis',
+  pages: ${pagesJson},
+  themeConfig: {
+    nav: ${navJson},
     sidebar: ${JSON.stringify(sidebarConfig, null, 6)},
     search: { provider: 'local' }
   }
@@ -824,7 +1438,8 @@ export const docGenerate: AnyCap = {
   version: "1.1.0",
   inputSchema: {
     properties: {
-      output_dir: { type: "string" }
+      output_dir: { type: "string" },
+      fold_v08_sections: { type: "boolean" }
     },
     additionalProperties: false
   },
@@ -835,7 +1450,7 @@ export const docGenerate: AnyCap = {
     const outputDir = join(p.rootDir, outputDirRel);
 
     // Ensure output directories
-    const subDirs = ["capabilities", "domains", "behaviors", "states", "profiles", "business-rules", ".vitepress"];
+    const subDirs = ["capabilities", "domains", "behaviors", "states", "profiles", "business-rules", "business-modules", ".vitepress"];
     for (const sub of subDirs) {
       ensureDir(join(outputDir, sub));
     }
@@ -865,6 +1480,16 @@ export const docGenerate: AnyCap = {
     const entryDocs = loadYamlDir(join(p.docsDir, "as-is", "entries"));
     const businessRuleDocs = loadYamlDir(cp.businessRulesDir);
 
+    // cdr-portal-aggregation Round 1 — build cross-artifact index (T1.1).
+    const crossArtifactIndex = buildCrossArtifactIndex(
+      behaviorDocs,
+      domainDocs,
+      stateDocs,
+      businessRuleDocs,
+      capDocs,
+      entryDocs
+    );
+
     // Track page counts
     let totalPages = 0;
     const sections = {
@@ -886,7 +1511,7 @@ export const docGenerate: AnyCap = {
     for (const cap of capDocs) {
       const id = String(cap.doc.id || cap.doc.name || basename(cap.file, ".yaml"));
       const slug = safeId(id);
-      write(join(outputDir, "capabilities", `${slug}.md`), generateCapabilityPage(cap, p.rootDir));
+      write(join(outputDir, "capabilities", `${slug}.md`), generateCapabilityPage(cap, p.rootDir, crossArtifactIndex));
       capItems.push({ text: id, link: `/capabilities/${slug}` });
       totalPages++;
       sections.capabilities++;
@@ -907,7 +1532,7 @@ export const docGenerate: AnyCap = {
       const pagePath = d.repo
         ? join(outputDir, "domains", safeId(d.repo), `${slug}.md`)
         : join(outputDir, "domains", `${slug}.md`);
-      write(pagePath, generateDomainPage(d, p.rootDir));
+      write(pagePath, generateDomainPage(d, p.rootDir, crossArtifactIndex));
       domainItems.push({ text: d.repo ? `${name} (${d.repo})` : name, link: urlPath });
       totalPages++;
       sections.domains++;
@@ -917,6 +1542,19 @@ export const docGenerate: AnyCap = {
     // --- Behaviors ---
     write(join(outputDir, "behaviors", "index.md"), generateBehaviorIndex(behaviorDocs));
     totalPages++;
+
+    // cdr-portal-aggregation Round 1 T3.2 — group behaviors by entry.type.
+    // Only render entry-type pages that have at least one behavior.
+    ensureDir(join(outputDir, "behaviors", "by-entry-type"));
+    write(join(outputDir, "behaviors", "by-entry-type", "index.md"), generateBehaviorByEntryTypeIndex(behaviorDocs));
+    totalPages++;
+    {
+      const groups = groupBehaviorsByEntryType(behaviorDocs);
+      for (const [type, bs] of groups) {
+        write(join(outputDir, "behaviors", "by-entry-type", `${safeId(type)}.md`), generateBehaviorByEntryTypePage(type, bs));
+        totalPages++;
+      }
+    }
     // v0.4 — group behavior sidebar items by repo. VitePress only
     // builds pages that are reachable from the sidebar (or pages
     // config), and nested directory pages need a nested sidebar
@@ -929,7 +1567,7 @@ export const docGenerate: AnyCap = {
       const pagePath = b.repo
         ? join(outputDir, "behaviors", safeId(b.repo), `${slug}.md`)
         : join(outputDir, "behaviors", `${slug}.md`);
-      write(pagePath, generateBehaviorPage(b, p.rootDir));
+      write(pagePath, generateBehaviorPage(b, p.rootDir, crossArtifactIndex));
       const repoKey = b.repo ? safeId(b.repo) : "_norepo";
       (behaviorGroups[repoKey] ||= []).push({ text: id, link: urlPath });
       totalPages++;
@@ -958,7 +1596,7 @@ export const docGenerate: AnyCap = {
       const pagePath = s.repo
         ? join(outputDir, "states", safeId(s.repo), `${slug}.md`)
         : join(outputDir, "states", `${slug}.md`);
-      write(pagePath, generateStatePage(s, p.rootDir));
+      write(pagePath, generateStatePage(s, p.rootDir, crossArtifactIndex));
       const repoKey = s.repo ? safeId(s.repo) : "_norepo";
       (stateGroups[repoKey] ||= []).push({ text: entity, link: urlPath });
       totalPages++;
@@ -983,7 +1621,7 @@ export const docGenerate: AnyCap = {
     for (const pr of profileDocs) {
       const repo = String(pr.doc.repo || pr.doc.name || basename(pr.file, ".yaml"));
       const slug = safeId(repo);
-      write(join(outputDir, "profiles", `${slug}.md`), generateProfilePage(pr, p.rootDir));
+      write(join(outputDir, "profiles", `${slug}.md`), generateProfilePage(pr, p.rootDir, crossArtifactIndex));
       profileItems.push({ text: repo, link: `/profiles/${slug}` });
       totalPages++;
       sections.profiles++;
@@ -993,6 +1631,18 @@ export const docGenerate: AnyCap = {
     // --- Business Rules ---
     write(join(outputDir, "business-rules", "index.md"), generateBusinessRuleIndex(businessRuleDocs));
     totalPages++;
+    // cdr-portal-aggregation Round 1 T3.3 — group business rules by kind.
+    // Only render kind pages that have at least one rule.
+    ensureDir(join(outputDir, "business-rules", "by-kind"));
+    write(join(outputDir, "business-rules", "by-kind", "index.md"), generateBusinessRulesByKindIndex(businessRuleDocs));
+    totalPages++;
+    {
+      const kindGroups = groupBusinessRulesByKind(businessRuleDocs);
+      for (const [kind, rs] of kindGroups) {
+        write(join(outputDir, "business-rules", "by-kind", `${safeId(kind)}.md`), generateBusinessRulesByKindPage(kind, rs));
+        totalPages++;
+      }
+    }
     const ruleItems: Array<{ text: string; link: string }> = [];
     for (const r of businessRuleDocs) {
       const id = String(r.doc.id || basename(r.file, ".yaml"));
@@ -1001,12 +1651,26 @@ export const docGenerate: AnyCap = {
       const pagePath = r.repo
         ? join(outputDir, "business-rules", safeId(r.repo), `${slug}.md`)
         : join(outputDir, "business-rules", `${slug}.md`);
-      write(pagePath, generateBusinessRulePage(r, p.rootDir));
+      write(pagePath, generateBusinessRulePage(r, p.rootDir, crossArtifactIndex));
       ruleItems.push({ text: r.repo ? `${id} (${r.repo})` : id, link: urlPath });
       totalPages++;
       sections.business_rules++;
     }
     sidebarConfig["/business-rules/"] = [{ text: "Business Rules", link: "/business-rules/", items: [{ text: "Overview", link: "/business-rules/" }, ...ruleItems] }];
+
+    // --- Business Modules (T3.1) ---
+    write(join(outputDir, "business-modules", "index.md"), generateBusinessModulesPage(domainDocs, crossArtifactIndex));
+    totalPages++;
+
+    // cdr-portal-aggregation Round 1 T3.4 (BG-9) — /entries/<repo>/index.md per repo.
+    if (entryDocs.length > 0) {
+      ensureDir(join(outputDir, "entries"));
+      for (const entryDoc of entryDocs) {
+        const repo = String(entryDoc.doc.repo || entryDoc.repo || basename(entryDoc.file, ".yaml"));
+        write(join(outputDir, "entries", `${safeId(repo)}.md`), generateEntriesPage(entryDoc));
+        totalPages++;
+      }
+    }
 
     // --- Homepage ---
     write(join(outputDir, "index.md"), generateHomepage(productName, index, sections));
@@ -1014,32 +1678,55 @@ export const docGenerate: AnyCap = {
 
     // --- VitePress config + custom theme (Vue components: BehaviorFlow / StateMachine / CodeLink) ---
     write(join(outputDir, "package.json"), generatePortalPackageJson());
-    // v0.4 — collect every page we wrote so VitePress builds HTML for
-    // all of them, including per-repo pages that the sidebar nesting
-    // alone doesn't reliably trigger. Path is relative to the portal
-    // root (outputDir), with a leading slash and no .md extension.
-    const allPages: string[] = [
-      "/index.md",
-      "/capabilities/index.md",
-      ...capItems.map((c) => c.link + ".md"),
-      "/domains/index.md",
-      ...domainItems.map((d) => d.link + ".md"),
-      "/behaviors/index.md",
-      ...behaviorGroups["_norepo"] ? behaviorGroups["_norepo"].map((b) => b.link + ".md") : [],
-      ...Object.entries(behaviorGroups).filter(([k]) => k !== "_norepo").flatMap(([, items]) =>
-        items.map((b) => b.link + ".md")
-      ),
-      "/states/index.md",
-      ...stateGroups["_norepo"] ? stateGroups["_norepo"].map((s) => s.link + ".md") : [],
-      ...Object.entries(stateGroups).filter(([k]) => k !== "_norepo").flatMap(([, items]) =>
-        items.map((s) => s.link + ".md")
-      ),
-      "/profiles/index.md",
-      ...profileItems.map((p) => p.link + ".md"),
-      "/business-rules/index.md",
-      ...ruleItems.map((r) => r.link + ".md")
+    // cdr-portal-aggregation Round 1 T1.2 — replace hand-written page list
+    // (root cause of BG-8, see docs/02-gap-analysis.md). Enumerate .md on disk
+    // so /l1/ and /cross-repo/ are auto-registered alongside main sections.
+    const allPages: string[] = listFilesRecursively(outputDir, [".md"], 500)
+      .map((abs) => "/" + relative(outputDir, abs).split(join("\\")).join("/"))
+      .filter((p) => p !== "/.vitepress/dist")
+      .sort();
+
+    // cdr-portal-aggregation Round 1 T4.1 (BG-8, D3, see docs/04-technical-design.md).
+    const foldV08 = input.fold_v08_sections === undefined ? true : Boolean(input.fold_v08_sections);
+    const detected = foldV08 ? detectExistingPortalSections(outputDir) : { l1: false, crossRepo: false, businessModules: false };
+
+    if (detected.l1) {
+      const l1Pages = listFilesRecursively(join(outputDir, "l1"), [".md"], 50)
+        .map((abs) => "/" + relative(outputDir, abs).split(join("\\")).join("/"))
+        .sort();
+      sidebarConfig["/l1/"] = [{
+        text: "L1 Map",
+        link: "/l1/",
+        items: l1Pages.map((p) => ({ text: p.replace(/^\/l1\//, "").replace(/\.md$/, "") || "Overview", link: p }))
+      }];
+    }
+    if (detected.crossRepo) {
+      const crPages = listFilesRecursively(join(outputDir, "cross-repo"), [".md"], 50)
+        .map((abs) => "/" + relative(outputDir, abs).split(join("\\")).join("/"))
+        .sort();
+      sidebarConfig["/cross-repo/"] = [{
+        text: "Cross-repo",
+        link: "/cross-repo/",
+        items: crPages.map((p) => ({ text: p.replace(/^\/cross-repo\//, "").replace(/\.md$/, "") || "Overview", link: p }))
+      }];
+    }
+    if (detected.businessModules) {
+      sidebarConfig["/business-modules/"] = [{ text: "Business Modules", link: "/business-modules/", items: [{ text: "Overview", link: "/business-modules/" }] }];
+    }
+
+    const nav: Array<{ text: string; link: string }> = [
+      { text: 'Home', link: '/' },
+      { text: 'Capabilities', link: '/capabilities/' },
+      { text: 'Domains', link: '/domains/' },
+      { text: 'Behaviors', link: '/behaviors/' },
+      { text: 'States', link: '/states/' },
+      { text: 'Business Rules', link: '/business-rules/' },
+      { text: 'Profiles', link: '/profiles/' }
     ];
-    write(join(outputDir, ".vitepress", "config.mts"), generateVitepressConfig(productName, sidebarConfig, allPages));
+    if (detected.l1) nav.push({ text: 'L1 Map', link: '/l1/' });
+    if (detected.crossRepo) nav.push({ text: 'Cross-repo', link: '/cross-repo/' });
+
+    write(join(outputDir, ".vitepress", "config.mts"), generateVitepressConfig(productName, sidebarConfig, allPages, nav));
     copyThemeTemplates(outputDir);
     sanitizePortalDir(outputDir);
 
