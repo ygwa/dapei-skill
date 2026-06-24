@@ -72,6 +72,60 @@ Match the language and detail level of the existing release entries.
     todo capability; clients use their native primitives and the
     main agent's context only ever holds the structured summaries
     sub-agents return.
+- **CDR portal aggregation — business-module abstraction**
+  (on `feature/cdr-portal-aggregation`). `cdr.doc.generate` (still
+  v1.1.0; additive) now emits cross-artifact aggregation pages and
+  cross-link sections so the portal stops being a 1-yaml-per-page
+  mirror and starts forming a navigable business view:
+  - New `buildCrossArtifactIndex` helper joins behaviors, domains,
+    state machines, business rules, and capability-map entries into
+    9 Map-based indexes (4 forward + 5 inverted) built once per
+    invocation. D1: behavior → domain join reuses the existing
+    `behavior.derived_from[]` field — no schema change, no validator
+    change. D2: state-machine transitions whose `behavior_id` does
+    not resolve in the index render as `~~id~~ (no behavior
+    document)` instead of silently hiding.
+  - 5 existing page generators gain cross-link sections from the
+    index: `generateDomainPage` (Behaviors in this domain / State
+    machines driven by these behaviors / Business rules applying to
+    this domain — BG-2), `generateCapabilityPage` (Contributing
+    domains / Spans repos — BG-3), `generateBehaviorPage` (Drives
+    transitions — BG-4), `generateStatePage` (Behavior column in
+    transitions table with D2 strikethrough — BG-4), and
+    `generateBusinessRulePage` (Applies to behaviors / Derived from
+    — BG-5). Backward-compatible: ctx is optional, legacy callers
+    without ctx get the legacy page with fields only.
+  - 4 new aggregation page sets: `/business-modules/index.md` rolls
+    up domains + their behaviors + rules + state machines + repos
+    (BG-1, D4); `/behaviors/by-entry-type/<type>.md` (7 type pages
+    + index) groups behaviors by entry surface api/mq/cron/rpc/
+    cache/search/other (BG-7, D5); `/business-rules/by-kind/<kind>.md`
+    (5 kind pages + index) groups rules by invariant/constraint/
+    authorization/sla/compensation (BG-6); `/entries/<repo>/index.md`
+    renders each repo's confirmed entries catalog (BG-9), and
+    behavior pages gain a back-link to the entry page when a
+    matching entry exists. Empty kinds / entry-types / no entries
+    produce no page (zero-noise).
+  - v0.5 (`/cross-repo/`) and v0.8 (`/l1/`) portal sections are no
+    longer orphaned. `detectExistingPortalSections` scans the
+    portal dir on disk and folds them into `pages[]`, the sidebar,
+    and the top nav whenever `cdr.reversecluster.doc.generate` /
+    `cdr.crossrepo.doc.generate` ran first (D3 default-on, opt-out
+    via `fold_v08_sections: false`). Replaces the hand-written
+    page-list in `generateVitepressConfig` with a
+    `listFilesRecursively`-based enumeration (T1.2) so any future
+    capability that writes `.md` under the portal root is
+    auto-registered.
+  - `inputSchema` of `cdr.doc.generate` gains one optional field:
+    `fold_v08_sections: { type: "boolean" }`. Default behavior
+    identical to v1.1.0 for callers that don't pass it.
+  - 1 new integration test: `tests/integration/cdr-portal-aggregation.test.mjs`
+    (D7, ~325 lines, 10 assertions covering BG-1 through BG-9 plus
+    TstG-2 and a BG-8 opt-out subtest). All 10 pass; 7 P1 red-line
+    + schema-evolution fixes were applied during the test loop
+    (see commits on the feature branch). Existing
+    `cdr-vitepress-build.test.mjs` (3 tests) and
+    `cdr-v0.8-reverse-cluster.test.mjs` continue to pass.
 
 ### Changed
 ### Fixed

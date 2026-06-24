@@ -1,0 +1,33 @@
+version: "0.2"
+feature:
+  name: cdr-portal-aggregation
+  objective: "Make the CDR documentation portal show business-module abstractions instead of one yaml-per-page mirror; aggregate domains/capabilities/state-machines/business-rules across artifacts and integrate the v0.8 /l1/ and v0.5 /cross-repo/ sections into the main portal."
+  owner: "unassigned"
+  isolation: "symlink"
+  repos:
+    - name: dapei-skill
+      branch: feature/cdr-portal-aggregation
+      base-ref: main
+      base-time: 2026-06-22T22:48:00Z
+      path: repos/dapei-skill
+  scope:
+    in:
+      - "packages/doc-gen/**"
+      - "tests/integration/cdr-vitepress-build.test.mjs"
+      - "tests/integration/cdr-v0.8-reverse-cluster.test.mjs"
+      - "tests/fixtures/sample-node-repo/docs/as-is/**"
+      - "runtime/templates/docs/scripts/build-cognitive-pages.ts"
+      - "features/cdr-portal-aggregation/**"
+    out:
+      - "packages/core/src/capabilities/**"
+      - "packages/router/**"
+      - "packages/runtime-adapters/**"
+  acceptance:
+    - "Round 1: portal pages surface cross-artifact aggregation (domain members / capability→behaviors / state→behavior links / rules-by-kind / entry-type grouping / per-repo behavior index)"
+    - "Round 1: doc-gen integrates v0.8 /l1/ and v0.5 /cross-repo/ sections into the main portal sidebar + VitePress pages list"
+    - "Round 1: existing cdr-vitepress-build.test.mjs and cdr-v0.8-reverse-cluster.test.mjs still pass unchanged"
+    - "Round 2: portal home + capability pages render entry-coverage / behavior-coverage / fact-ratio / stale-queue quality signals"
+    - "Round 3: tests/fixtures/sample-node-repo/docs/as-is/ carries a current-schema sample with behaviors + state machines + domain + capability map + business rules"
+  risk_level: medium
+  dependencies: []
+  last-review-at: null
