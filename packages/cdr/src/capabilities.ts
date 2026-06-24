@@ -643,13 +643,14 @@ export const cdrEntriesConfirm: AnyCap = {
             throw new CapabilityError("INVALID_EVIDENCE", evidenceErrors.join("; "));
           }
 
+          const updatedFields = updated as unknown as Record<string, unknown>;
           e.status = updated.status as unknown as YamlValue;
           e.summary = updated.summary as unknown as YamlValue;
           e.sources = updated.sources as unknown as YamlValue;
-          if (updated.created_by_feature) e.created_by_feature = updated.created_by_feature as unknown as YamlValue;
-          if (updated.updated_by_feature) e.updated_by_feature = updated.updated_by_feature as unknown as YamlValue;
-          if (updated.created_at) e.created_at = updated.created_at as unknown as YamlValue;
-          if (updated.updated_at) e.updated_at = updated.updated_at as unknown as YamlValue;
+          if (updatedFields.created_by_feature) e.created_by_feature = updatedFields.created_by_feature as unknown as YamlValue;
+          if (updatedFields.updated_by_feature) e.updated_by_feature = updatedFields.updated_by_feature as unknown as YamlValue;
+          if (updatedFields.created_at) e.created_at = updatedFields.created_at as unknown as YamlValue;
+          if (updatedFields.updated_at) e.updated_at = updatedFields.updated_at as unknown as YamlValue;
           if (priority) e.priority = priority;
           found = true;
           break;
@@ -1744,7 +1745,7 @@ function tagBackfill(
     if ((doc as { created_by_feature?: string }).created_by_feature === feature) return;
     (doc as Record<string, unknown>).created_by_feature = feature;
     (doc as Record<string, unknown>).created_at = now;
-    write(abs, stringifyYamlDocument(doc));
+    write(abs, stringifyYamlDocument(doc as unknown as Record<string, YamlValue>));
     tagged++;
   });
 
@@ -1752,7 +1753,7 @@ function tagBackfill(
     if ((doc as { created_by_feature?: string }).created_by_feature === feature) return;
     (doc as Record<string, unknown>).created_by_feature = feature;
     (doc as Record<string, unknown>).created_at = now;
-    write(abs, stringifyYamlDocument(doc));
+    write(abs, stringifyYamlDocument(doc as unknown as Record<string, YamlValue>));
     tagged++;
   });
 
@@ -1764,7 +1765,7 @@ function tagBackfill(
     if ((doc as { created_by_feature?: string }).created_by_feature === feature) return;
     (doc as Record<string, unknown>).created_by_feature = feature;
     (doc as Record<string, unknown>).created_at = now;
-    write(abs, stringifyYamlDocument(doc));
+    write(abs, stringifyYamlDocument(doc as unknown as Record<string, YamlValue>));
     tagged++;
   });
 
@@ -1776,7 +1777,7 @@ function tagBackfill(
     if ((doc as { created_by_feature?: string }).created_by_feature === feature) return;
     (doc as Record<string, unknown>).created_by_feature = feature;
     (doc as Record<string, unknown>).created_at = now;
-    write(abs, stringifyYamlDocument(doc));
+    write(abs, stringifyYamlDocument(doc as unknown as Record<string, YamlValue>));
     tagged++;
   });
 
@@ -1927,11 +1928,11 @@ export const cdrBehaviorUpsert: AnyCap = {
     const relPath = artifactRelativePath("behavior", doc as Record<string, unknown>);
     const absPath = join(ctx.rootDir, relPath);
     const finalDoc = applyProvenance(doc as Record<string, unknown>, provenanceFromContext(ctx, "create"));
-    const content = stringifyYamlDocument(finalDoc);
+    const content = stringifyYamlDocument(finalDoc as unknown as Record<string, YamlValue>);
     write(absPath, content.endsWith("\n") ? content : `${content}\n`);
 
     const index = loadCognitiveIndex(ctx.rootDir);
-    upsertIndexEntry(index, "behavior", relPath, finalDoc);
+    upsertIndexEntry(index, "behavior", relPath, finalDoc as unknown as Record<string, YamlValue>);
     saveCognitiveIndex(ctx.rootDir, index);
 
     return {
@@ -2087,10 +2088,10 @@ export const cdrStateDerive: AnyCap = {
     const relPath = artifactRelativePath("state-machine", draft as Record<string, unknown>);
     const absPath = join(ctx.rootDir, relPath);
     const finalDraft = applyProvenance(draft as Record<string, unknown>, provenanceFromContext(ctx, "create"));
-    write(absPath, stringifyYamlDocument(finalDraft));
+    write(absPath, stringifyYamlDocument(finalDraft as unknown as Record<string, YamlValue>));
 
     const index = loadCognitiveIndex(ctx.rootDir);
-    upsertIndexEntry(index, "state-machine", relPath, finalDraft);
+    upsertIndexEntry(index, "state-machine", relPath, finalDraft as unknown as Record<string, YamlValue>);
     saveCognitiveIndex(ctx.rootDir, index);
 
     return {

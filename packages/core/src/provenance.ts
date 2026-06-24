@@ -51,7 +51,7 @@ export function applyProvenance<T extends Record<string, unknown>>(
   fields: ProvenanceFields
 ): T {
   if (!fields.feature) return doc;
-  const result = { ...doc };
+  const result = { ...doc } as Record<string, unknown>;
   const feature = fields.feature;
   const now = fields.now;
   if (fields.mode === "create") {
@@ -69,7 +69,7 @@ export function applyProvenance<T extends Record<string, unknown>>(
       result.created_at = now;
     }
   }
-  return result;
+  return result as T;
 }
 
 export function provenanceFromContext(

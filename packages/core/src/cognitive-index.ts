@@ -53,8 +53,9 @@ export interface IndexBehaviorEntry extends StaleFields {
    * (the query filter yields empty rather than error).
    */
   created_by_feature?: string;
-  /** ISO timestamp at which the asset was created or last tagged. */
+  updated_by_feature?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface IndexStateMachineEntry extends StaleFields {
@@ -64,7 +65,9 @@ export interface IndexStateMachineEntry extends StaleFields {
   kind: string;
   level: string;
   created_by_feature?: string;
+  updated_by_feature?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface IndexDomainEntry extends StaleFields {
@@ -73,7 +76,9 @@ export interface IndexDomainEntry extends StaleFields {
   repo?: string;
   derived_from: string[];
   created_by_feature?: string;
+  updated_by_feature?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface IndexCapabilityMapEntry extends StaleFields {
@@ -81,7 +86,9 @@ export interface IndexCapabilityMapEntry extends StaleFields {
   path: string;
   capability_count: number;
   created_by_feature?: string;
+  updated_by_feature?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface IndexBusinessRuleEntry extends StaleFields {
@@ -92,7 +99,9 @@ export interface IndexBusinessRuleEntry extends StaleFields {
   evidence_kind: string;
   evidence_level: string;
   created_by_feature?: string;
+  updated_by_feature?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface RepoSnapshot {
