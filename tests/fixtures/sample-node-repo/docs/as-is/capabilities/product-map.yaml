@@ -1,0 +1,16 @@
+id: place-order
+repo: sample-node-repo
+title: "Place order capability"
+description: "End-to-end capability: create order, process payment, settle"
+domains:
+  - checkout
+spans_repos:
+  - sample-node-repo
+behaviors:
+  - order-create
+business_rules:
+  - order-amount-positive
+  - order-cancel-allowed
+state_machines:
+  - order-state-machine
+last_verified: "2026-06-23"

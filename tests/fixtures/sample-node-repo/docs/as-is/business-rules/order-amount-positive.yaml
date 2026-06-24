@@ -1,0 +1,15 @@
+id: order-amount-positive
+repo: sample-node-repo
+title: "Order amount must be positive"
+kind: invariant
+rule: "amount > 0 for any order creation or modification"
+category: invariant
+sources:
+  - file: src/api/services/orderService.ts
+    line: 35
+    symbol: validateAmount
+  - file: tests/unit/orderService.test.ts
+    line: 12
+    symbol: rejects negative amounts
+violation_behavior: "reject"
+last_verified: "2026-06-23"

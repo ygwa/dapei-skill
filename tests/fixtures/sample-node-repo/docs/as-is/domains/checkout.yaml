@@ -1,0 +1,13 @@
+id: checkout
+repo: sample-node-repo
+title: "Checkout domain"
+description: "Domain cluster covering order creation, payment, and cancellation flows"
+derived_from:
+  - order-create
+tags:
+  - checkout
+  - order-lifecycle
+confidence:
+  kind: medium
+  reason: "Single behavior currently; expect additional behaviors (order-pay, order-cancel) as fixture grows"
+last_verified: "2026-06-23"

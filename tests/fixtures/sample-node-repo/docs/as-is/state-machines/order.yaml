@@ -1,0 +1,36 @@
+id: order-state-machine
+entity: order
+repo: sample-node-repo
+title: "Order entity lifecycle"
+description: "Tracks order from creation through payment to final state (paid or cancelled)"
+states:
+  - id: CREATED
+    description: "Order persisted but not yet paid"
+    initial: true
+  - id: PAID
+    description: "Payment confirmed"
+  - id: CANCELLED
+    description: "Order cancelled by user or system"
+    terminal: true
+transitions:
+  - from: CREATED
+    to: PAID
+    trigger: "payment.success"
+    behavior_id: order-create
+    description: "Successful payment confirmation transitions order to PAID"
+  - from: CREATED
+    to: CANCELLED
+    trigger: "user.cancel"
+    description: "User-initiated cancellation before payment"
+  - from: PAID
+    to: CANCELLED
+    trigger: "refund.complete"
+    description: "Refund flow transitions paid order to CANCELLED"
+sources:
+  - file: src/api/services/orderService.ts
+    line: 120
+    symbol: transitionState
+  - file: src/api/state-machines/order.machine.ts
+    line: 15
+    symbol: orderMachine
+last_verified: "2026-06-23"
