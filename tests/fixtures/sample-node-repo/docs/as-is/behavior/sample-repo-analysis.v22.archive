@@ -1,3 +1,11 @@
+# sample-repo-analysis.v22.archive
+#
+# This file is archived for historical reference only.
+# Its schema is dapei-skill v2.2 (predates CDR v0.1) and is **unsupported**
+# by current dapei-skill >= 3.3.0 — see KNOWN_ISSUES.md ("Schema migration (v2.2 unsupported)").
+# v2.2 fields: phases_completed, behavior.entry_points, behavior.core_flow, confidence.level, confidence.evidence_type
+# Current schema requires: entry, steps, confidence.kind, sources[]
+#
 id: sample-repo-analysis
 repo: sample-node-repo
 analysis_date: "2026-06-02"

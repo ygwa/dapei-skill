@@ -7,6 +7,7 @@
     "node": ">=22.6.0"
   },
   "scripts": {
+    "first-run": "node scripts/first-run.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "validate:skills": "node scripts/validate-skills.mjs",
     "build": "esbuild engine/dapei-engine.ts --bundle --platform=node --format=esm --outfile=dist/dapei-engine.js --external:node:* --minify",

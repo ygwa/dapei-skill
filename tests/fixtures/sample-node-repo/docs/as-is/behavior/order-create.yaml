@@ -1,0 +1,43 @@
+id: order-create
+repo: sample-node-repo
+title: "Create order via REST POST /orders"
+entry:
+  file: src/api/routes/orders.ts
+  line: 42
+  symbol: POST /orders handler
+kind: fact
+status: active
+steps:
+  - order: 1
+    description: "Validate request body against order schema"
+    sources:
+      - file: src/api/routes/orders.ts
+        line: 45
+        symbol: validateOrder
+  - order: 2
+    description: "Persist order to database"
+    sources:
+      - file: src/api/services/orderService.ts
+        line: 88
+        symbol: createOrder
+  - order: 3
+    description: "Return 201 with order id"
+    sources:
+      - file: src/api/routes/orders.ts
+        line: 58
+        symbol: POST /orders handler
+confidence:
+  kind: high
+  reason: "3-step flow observed; all evidence files present in fixture repo"
+sources:
+  - file: src/api/routes/orders.ts
+    line: 42
+    symbol: POST /orders handler
+  - file: src/api/services/orderService.ts
+    line: 88
+    symbol: createOrder
+tags:
+  - checkout
+  - rest-api
+  - node-express
+last_verified: "2026-06-23"

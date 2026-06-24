@@ -1,0 +1,39 @@
+version: "0.2"
+feature:
+  name: cdr-fixture-modernization
+  objective: "Modernize tests/fixtures/sample-node-repo/docs/as-is/ from v2.2 schema (single-file analysis) to current CDR schema (per-artifact YAML files), add missing artifact types so `cdr.bootstrap` produces a non-empty portal against the fixture, fix scope-drift between feature.yaml.scope.in and the actual implementation surface, and add first-time-user onboarding infrastructure so a fresh checkout can run `npm run first-run` and get a usable portal in under 10 minutes."
+  owner: "unassigned"
+  isolation: "symlink"
+  repos:
+    - name: dapei-skill
+      branch: feature/cdr-fixture-modernization
+      base-ref: main
+      base-time: 2026-06-23T00:00:00Z
+      path: repos/dapei-skill
+  scope:
+    in:
+      - "tests/fixtures/sample-node-repo/docs/as-is/**"
+      - "runtime/templates/docs/scripts/build-cognitive-pages.ts"   # verified ACTIVE (workspace.ts:68 ships it); round 3 makes no code change, logs as KI-02
+      - "scripts/first-run.mjs"                 # new first-time-user script
+      - "KNOWN_ISSUES_DRAFT.md"                 # new feature-dim file (workspace-dim KNOWN_ISSUES.md lands via feature.close per D2)
+      - "package.json"                          # to add first-run script
+      - "tests/integration/cdr-bootstrap.test.mjs"  # new integration test
+      - "features/cdr-fixture-modernization/**"
+    out:
+      - "packages/core/**"
+      - "packages/cdr/**"
+      - "packages/doc-gen/**"                   # round 1 owns this; round 3 only validates round 1 didn't break
+      - "packages/router/**"
+      - "packages/runtime-adapters/**"
+      - "runtime/templates/docs/scripts/**" except build-cognitive-pages.ts   # avoid scope creep
+  acceptance:
+    - "Round 3a — fixture modernization: tests/fixtures/sample-node-repo/docs/as-is/ contains at least 1 behavior + 1 state machine + 1 domain + 1 business rule + 1 capability map entry, all current CDR schema, all `kind=fact` with sources[]"
+    - "Round 3a — fixture validation: a fresh checkout running `npm run first-run` against the fixture produces a non-empty portal (≥ 5 pages: 1 behavior + 1 state machine + 1 domain + 1 business rule + 1 capability)"
+    - "Round 3a — schema-validate CI pass: `npm run typecheck` and any existing schema-validate step pass on the new fixture"
+    - "Round 3a — first-run script: `npm run first-run` is idempotent (re-runnable), completes in < 60 seconds on a fresh checkout, exits non-zero if any step fails"
+    - "Round 3a — KNOWN_ISSUES.md populated with at least 7 entries (the round 1-discovered issues), each with workaround + fix status"
+    - "Round 3b — build-cognitive-pages.ts: verified ACTIVE or removed (no zombie state), and if ACTIVE, produces output equivalent to the round-1 portal when given current-schema fixtures"
+    - "Round 3 — backward compat: existing tests (cdr-vitepress-build, cdr-portal-aggregation, cdr-v0.4..v0.8) still pass unchanged (≥ 22/22)"
+  risk_level: high
+  dependencies: []
+  last-review-at: 2026-06-23

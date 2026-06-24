@@ -1,0 +1,12 @@
+id: order-cancel-allowed
+repo: sample-node-repo
+title: "Order cancellation allowed only for CREATED or PAID orders"
+kind: rule
+rule: "CANCELLED transition permitted from CREATED or PAID; never from CANCELLED"
+category: authorization
+sources:
+  - file: src/api/services/orderService.ts
+    line: 140
+    symbol: canCancel
+violation_behavior: "reject"
+last_verified: "2026-06-23"
