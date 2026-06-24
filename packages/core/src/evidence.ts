@@ -24,6 +24,21 @@ export interface EvidenceFields {
   derived_from?: string[];
   reason?: string;
   investigation_hint?: string;
+  /**
+   * v0.10 — feature name that produced this artifact. Set at write
+   * time by `cdr.behavior.upsert` / `cdr.state.derive` /
+   * `cdr.domain.compose` / `cdr.business.compose` when invoked from a
+   * feature workflow (via `feature.create`). Drives the `cdr.query
+   * --created_by_feature` filter and the closeout backfill to
+   * `docs/decisions/<feature>.md`. Optional; artifacts created
+   * outside any feature (workspace indexing, agent exploration) leave
+   * this unset. `updated_by_feature` follows the same contract for
+   * last-modified; `created_at` and `updated_at` are ISO timestamps.
+   */
+  created_by_feature?: string;
+  updated_by_feature?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 const ID_PATTERN = /^[a-z0-9-]+$/;

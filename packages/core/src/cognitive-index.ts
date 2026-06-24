@@ -246,6 +246,22 @@ export function upsertIndexEntry(
     ? { level: "unknown" as const, kind: "unknown" as const }
     : parseConfidence(doc.confidence);
   const repo = doc.repo ? String(doc.repo) : undefined;
+  // v0.10 — lift provenance fields from the artifact doc onto the
+  // index entry. The capability layer applies `applyProvenance` to the
+  // doc before calling `upsertIndexEntry`; we just propagate the four
+  // fields so the index stays in sync with the artifact file.
+  const createdByFeature = typeof doc.created_by_feature === "string" && doc.created_by_feature.trim()
+    ? doc.created_by_feature.trim()
+    : undefined;
+  const updatedByFeature = typeof doc.updated_by_feature === "string" && doc.updated_by_feature.trim()
+    ? doc.updated_by_feature.trim()
+    : undefined;
+  const createdAt = typeof doc.created_at === "string" && doc.created_at.trim()
+    ? doc.created_at.trim()
+    : undefined;
+  const updatedAt = typeof doc.updated_at === "string" && doc.updated_at.trim()
+    ? doc.updated_at.trim()
+    : undefined;
 
   if (type === "behavior") {
     const id = String(doc.id);
@@ -302,6 +318,10 @@ export function upsertIndexEntry(
     if (targetRepos) entry.target_repos = targetRepos;
     if (events) entry.events = events;
     if (writes) entry.writes = writes;
+    if (createdByFeature) entry.created_by_feature = createdByFeature;
+    if (updatedByFeature) entry.updated_by_feature = updatedByFeature;
+    if (createdAt) entry.created_at = createdAt;
+    if (updatedAt) entry.updated_at = updatedAt;
     index.behaviors.push(entry);
     if (confidence.kind === "unknown" && doc.reason) {
       index.unknowns = index.unknowns.filter((u) => u.id !== id);
@@ -316,7 +336,12 @@ export function upsertIndexEntry(
     const entity = String(doc.entity);
     // v0.4 — same per-repo dedup rule for state machines.
     index.state_machines = index.state_machines.filter((s) => !(s.entity === entity && (s.repo || "") === (repo || "")));
-    index.state_machines.push({ entity, path: relPath, repo, kind: confidence.kind, level: confidence.level });
+    const smEntry: IndexStateMachineEntry = { entity, path: relPath, repo, kind: confidence.kind, level: confidence.level };
+    if (createdByFeature) smEntry.created_by_feature = createdByFeature;
+    if (updatedByFeature) smEntry.updated_by_feature = updatedByFeature;
+    if (createdAt) smEntry.created_at = createdAt;
+    if (updatedAt) smEntry.updated_at = updatedAt;
+    index.state_machines.push(smEntry);
     if (confidence.kind === "unknown" && doc.reason) {
       index.unknowns = index.unknowns.filter((u) => u.id !== entity);
       index.unknowns.push({
@@ -335,25 +360,40 @@ export function upsertIndexEntry(
     const derived_from = Array.isArray(doc.derived_from)
       ? doc.derived_from.map((x: unknown) => String(x))
       : [];
-    index.domains.push({ domain, path: relPath, repo, derived_from });
+    const domainEntry: IndexDomainEntry = { domain, path: relPath, repo, derived_from };
+    if (createdByFeature) domainEntry.created_by_feature = createdByFeature;
+    if (updatedByFeature) domainEntry.updated_by_feature = updatedByFeature;
+    if (createdAt) domainEntry.created_at = createdAt;
+    if (updatedAt) domainEntry.updated_at = updatedAt;
+    index.domains.push(domainEntry);
   } else if (type === "capability-map") {
     const product = String(doc.product);
     const capCount = Array.isArray(doc.capabilities) ? doc.capabilities.length : 0;
     index.capability_maps = index.capability_maps.filter((c) => c.product !== product);
-    index.capability_maps.push({ product, path: relPath, capability_count: capCount });
+    const capEntry: IndexCapabilityMapEntry = { product, path: relPath, capability_count: capCount };
+    if (createdByFeature) capEntry.created_by_feature = createdByFeature;
+    if (updatedByFeature) capEntry.updated_by_feature = updatedByFeature;
+    if (createdAt) capEntry.created_at = createdAt;
+    if (updatedAt) capEntry.updated_at = updatedAt;
+    index.capability_maps.push(capEntry);
   } else if (type === "business-rule") {
     const id = String(doc.id);
     const kind = optionalString(doc.kind) || "unknown";
     // v0.4 — per-repo dedup for business rules.
     index.business_rules = index.business_rules.filter((b) => !(b.id === id && (b.repo || "") === (repo || "")));
-    index.business_rules.push({
+    const ruleEntry: IndexBusinessRuleEntry = {
       id,
       kind,
       path: relPath,
       repo,
       evidence_kind: confidence.kind,
       evidence_level: confidence.level
-    });
+    };
+    if (createdByFeature) ruleEntry.created_by_feature = createdByFeature;
+    if (updatedByFeature) ruleEntry.updated_by_feature = updatedByFeature;
+    if (createdAt) ruleEntry.created_at = createdAt;
+    if (updatedAt) ruleEntry.updated_at = updatedAt;
+    index.business_rules.push(ruleEntry);
   }
 
   return index;

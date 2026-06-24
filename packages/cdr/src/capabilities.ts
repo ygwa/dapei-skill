@@ -23,6 +23,7 @@ import { parseYamlDocument, stringifyYamlDocument, type YamlValue } from "../../
 import { requireFields, detectRepoLanguage, detectTestCommands, parseReposYamlNames, featureRepoNames } from "../../core/src/capabilities/shared.ts";
 import { ensureDir, read, write, runSafe, workspacePaths, listFilesRecursively } from "../../runtime-adapters/src/system.ts";
 import { CodeGraphAdapter } from "../../runtime-adapters/src/codegraph.ts";
+import { applyProvenance, provenanceFromContext } from "../../core/src/provenance.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
 
@@ -241,7 +242,7 @@ export const cdrProfile: AnyCap = {
     // v0.3: removed `frameworks` field. The engine no longer prescribes which
     // frameworks a repo uses — the AI reads manifest_files + directory_tree
     // and decides. See cdr-architecture.md "AI as scanner" principle.
-    const profileData: Record<string, YamlValue> = {
+    const profileData: Record<string, YamlValue> = applyProvenance({
       repo,
       generated_at: ctx.now.toISOString(),
       language,
@@ -249,7 +250,7 @@ export const cdrProfile: AnyCap = {
       directory_tree: directoryTree,
       test_commands: testCommands,
       codegraph: codegraphBlock as YamlValue
-    };
+    }, provenanceFromContext(ctx, "create"));
 
     const outDir = profilesDir(ctx.rootDir);
     ensureDir(outDir);
@@ -443,7 +444,7 @@ export const cdrEntriesPropose: AnyCap = {
       throw new CapabilityError("REPO_MISSING", `repos/${repo} not found`);
     }
 
-    const entryDoc: Record<string, unknown> = {
+    const entryDoc: Record<string, unknown> = applyProvenance({
       id,
       type,
       status: "candidate",
@@ -451,7 +452,7 @@ export const cdrEntriesPropose: AnyCap = {
       anchor: file,
       line,
       sources
-    };
+    }, provenanceFromContext(ctx, "create"));
     if (method) entryDoc.method = method;
     if (path) entryDoc.path = path;
     if (summary) entryDoc.summary = summary;
@@ -615,21 +616,28 @@ export const cdrEntriesConfirm: AnyCap = {
       if (entry && typeof entry === "object" && !Array.isArray(entry)) {
         const e = entry as Record<string, YamlValue>;
         if (String(e.id) === entryId) {
-          // Validate the new sources[] before allowing confirmation
-          const updated = {
+          // Build the post-update shape (with provenance) once and reuse
+          // it for both validation and persistence. Mutating `e`
+          // directly after validating a copy would silently drop the
+          // provenance fields from the written YAML.
+          const updated = applyProvenance({
             ...(e as Record<string, unknown>),
             status: "confirmed",
             summary,
             sources
-          };
+          }, provenanceFromContext(ctx, "update"));
           const evidenceErrors = validateEvidencePoints(ctx, updated);
           if (evidenceErrors.length) {
             throw new CapabilityError("INVALID_EVIDENCE", evidenceErrors.join("; "));
           }
 
-          e.status = "confirmed";
-          e.summary = summary;
-          e.sources = sources as unknown as YamlValue;
+          e.status = updated.status as unknown as YamlValue;
+          e.summary = updated.summary as unknown as YamlValue;
+          e.sources = updated.sources as unknown as YamlValue;
+          if (updated.created_by_feature) e.created_by_feature = updated.created_by_feature as unknown as YamlValue;
+          if (updated.updated_by_feature) e.updated_by_feature = updated.updated_by_feature as unknown as YamlValue;
+          if (updated.created_at) e.created_at = updated.created_at as unknown as YamlValue;
+          if (updated.updated_at) e.updated_at = updated.updated_at as unknown as YamlValue;
           if (priority) e.priority = priority;
           found = true;
           break;
@@ -730,7 +738,7 @@ export const cdrDomainCompose: AnyCap = {
 
     const domainSlug = toKebab(domainName);
 
-    const domainDoc: Record<string, YamlValue> = {
+    const domainDoc: Record<string, YamlValue> = applyProvenance({
       domain: domainSlug,
       name: domainName,
       description,
@@ -742,7 +750,7 @@ export const cdrDomainCompose: AnyCap = {
         kind: "inference",
         evidence_type: "composed_from_behaviors"
       }
-    };
+    }, provenanceFromContext(ctx, "create"));
     if (repo) domainDoc.repo = repo;
     if (Array.isArray(input.sources)) domainDoc.sources = input.sources as unknown as YamlValue;
 
@@ -803,7 +811,7 @@ export const cdrBusinessCompose: AnyCap = {
   async execute(ctx, input) {
     const id = String(input.id);
     const kind = String(input.kind);
-    const doc: Record<string, YamlValue> = { id, kind };
+    const doc: Record<string, YamlValue> = applyProvenance({ id, kind }, provenanceFromContext(ctx, "create"));
     if (input.description) doc.description = String(input.description);
     if (input.expr) doc.expr = String(input.expr);
     if (Array.isArray(input.applies_to)) doc.applies_to = input.applies_to.map((x: unknown) => String(x)) as unknown as YamlValue;
@@ -887,11 +895,11 @@ export const cdrCapabilityMapInit: AnyCap = {
       return entry;
     });
 
-    const mapDoc: Record<string, YamlValue> = {
+    const mapDoc: Record<string, YamlValue> = applyProvenance({
       product,
       generated_at: ctx.now.toISOString(),
       capabilities: capEntries as unknown as YamlValue
-    };
+    }, provenanceFromContext(ctx, "create"));
 
     const errors = validateArtifact("capability-map", mapDoc as Record<string, unknown>);
     if (errors.length) {
@@ -1776,11 +1784,12 @@ export const cdrBehaviorUpsert: AnyCap = {
     ensureDir(cp.behaviorDir);
     const relPath = artifactRelativePath("behavior", doc as Record<string, unknown>);
     const absPath = join(ctx.rootDir, relPath);
-    const content = stringifyYamlDocument(doc);
+    const finalDoc = applyProvenance(doc as Record<string, unknown>, provenanceFromContext(ctx, "create"));
+    const content = stringifyYamlDocument(finalDoc);
     write(absPath, content.endsWith("\n") ? content : `${content}\n`);
 
     const index = loadCognitiveIndex(ctx.rootDir);
-    upsertIndexEntry(index, "behavior", relPath, doc as Record<string, unknown>);
+    upsertIndexEntry(index, "behavior", relPath, finalDoc);
     saveCognitiveIndex(ctx.rootDir, index);
 
     return {
@@ -1934,10 +1943,11 @@ export const cdrStateDerive: AnyCap = {
 
     const relPath = artifactRelativePath("state-machine", draft as Record<string, unknown>);
     const absPath = join(ctx.rootDir, relPath);
-    write(absPath, stringifyYamlDocument(draft));
+    const finalDraft = applyProvenance(draft as Record<string, unknown>, provenanceFromContext(ctx, "create"));
+    write(absPath, stringifyYamlDocument(finalDraft));
 
     const index = loadCognitiveIndex(ctx.rootDir);
-    upsertIndexEntry(index, "state-machine", relPath, draft as Record<string, unknown>);
+    upsertIndexEntry(index, "state-machine", relPath, finalDraft);
     saveCognitiveIndex(ctx.rootDir, index);
 
     return {
