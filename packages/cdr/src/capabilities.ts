@@ -268,7 +268,8 @@ export const cdrProfile: AnyCap = {
         codegraph: codegraphBlock
       },
       sideEffects: [`profile written: ${relative(p.rootDir, outFile)}`],
-      reportFragments: [`generated profile for ${repo}`]
+      reportFragments: [`generated profile for ${repo}`],
+      artifactPaths: [relative(p.rootDir, outFile)]
     };
   }
 };
@@ -503,7 +504,8 @@ export const cdrEntriesPropose: AnyCap = {
         entry_path: path || null
       },
       sideEffects: [`entry proposed: ${id} in ${repo}`],
-      reportFragments: [`AI proposed entry ${id} (${type}) at ${file}:${line}`]
+      reportFragments: [`AI proposed entry ${id} (${type}) at ${file}:${line}`],
+      artifactPaths: [relative(p.rootDir, outFile)]
     };
   }
 };
@@ -662,7 +664,8 @@ export const cdrEntriesConfirm: AnyCap = {
         sources: sources as unknown as YamlValue
       },
       sideEffects: [`entry confirmed: ${entryId}`],
-      reportFragments: [`confirmed entry ${entryId} in ${repo} with ${sources.length} source(s)`]
+      reportFragments: [`confirmed entry ${entryId} in ${repo} with ${sources.length} source(s)`],
+      artifactPaths: [relative(ctx.rootDir, outFile)]
     };
   }
 };
@@ -780,7 +783,8 @@ export const cdrDomainCompose: AnyCap = {
         derived_from: behaviorIds
       },
       sideEffects: [`domain composed: ${relative(ctx.rootDir, outFile)}`],
-      reportFragments: [`composed domain '${domainName}' from ${behaviorIds.length} behavior(s)`]
+      reportFragments: [`composed domain '${domainName}' from ${behaviorIds.length} behavior(s)`],
+      artifactPaths: [relative(ctx.rootDir, outFile)]
     };
   }
 };
@@ -852,7 +856,8 @@ export const cdrBusinessCompose: AnyCap = {
         evidence_kind: (input.confidence as Record<string, unknown>).kind
       },
       sideEffects: ["business rule upserted", "index updated"],
-      reportFragments: [`upserted business rule ${id} (${kind})`]
+      reportFragments: [`upserted business rule ${id} (${kind})`],
+      artifactPaths: [relPath]
     };
   }
 };
@@ -919,7 +924,8 @@ export const cdrCapabilityMapInit: AnyCap = {
         capability_count: capEntries.length
       },
       sideEffects: [`capability map created: ${relative(ctx.rootDir, outFile)}`],
-      reportFragments: [`initialized capability map for '${product}' with ${capEntries.length} capabilities`]
+      reportFragments: [`initialized capability map for '${product}' with ${capEntries.length} capabilities`],
+      artifactPaths: [relative(ctx.rootDir, outFile)]
     };
   }
 };
@@ -1801,7 +1807,8 @@ export const cdrBehaviorUpsert: AnyCap = {
         kind: (input.confidence as Record<string, unknown>).kind
       },
       sideEffects: ["behavior upserted", "index updated"],
-      reportFragments: [`upserted behavior ${doc.id}`]
+      reportFragments: [`upserted behavior ${doc.id}`],
+      artifactPaths: [relPath]
     };
   }
 };
@@ -1963,7 +1970,8 @@ export const cdrStateDerive: AnyCap = {
         note: "inference-level draft — Agent must confirm before kind=fact"
       },
       sideEffects: ["state machine draft written", "index updated"],
-      reportFragments: [`derived state machine for ${entity} from ${derivedFrom.length} behavior(s)`]
+      reportFragments: [`derived state machine for ${entity} from ${derivedFrom.length} behavior(s)`],
+      artifactPaths: [relPath]
     };
   }
 };

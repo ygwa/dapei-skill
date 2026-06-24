@@ -40,6 +40,14 @@ export interface CapabilityResult<T extends Json = Json> {
   data: T;
   sideEffects: string[];
   reportFragments: string[];
+  /**
+   * v0.10 — workspace-relative paths of any files the capability
+   * wrote or modified. `runCapability` reads this field and includes
+   * it in the audit entry as `artifact_paths_written[]` so closeout
+   * and provenance tooling can correlate call → file. Optional; a
+   * capability that does no file I/O simply omits it.
+   */
+  artifactPaths?: string[];
 }
 
 export class CapabilityError extends Error {
