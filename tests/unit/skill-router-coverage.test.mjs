@@ -151,11 +151,19 @@ test('skill-router-coverage: stages named in SKILL.md are recognised by the rout
     'analyze-current-state', 'gap-analysis', 'solution-design', 'task-breakdown',
     'implementation', 'local-validation', 'architecture-review', 'acceptance',
   ];
-  const routerSrc = readFileSync(join(REPO_ROOT, 'packages', 'router', 'src', 'index.ts'), 'utf8');
+  // The router was refactored into extractors.ts + routes-table.ts +
+  // index.ts. Walk every TS file under packages/router/src and assert
+  // each stage literal appears in at least one of them. This keeps the
+  // test honest as the package grows.
+  const routerSrcDir = join(REPO_ROOT, 'packages', 'router', 'src');
+  const files = readdirSync(routerSrcDir)
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => readFileSync(join(routerSrcDir, f), 'utf8'));
+  const routerSrc = files.join('\n');
   for (const stage of STAGES) {
     assert.ok(
       routerSrc.includes(`"${stage}"`) || routerSrc.includes(`'${stage}'`),
-      `router source should mention stage "${stage}"`,
+      `router package should mention stage "${stage}"`,
     );
   }
 });

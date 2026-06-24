@@ -133,11 +133,22 @@ test('skill-contracts: workflow SKILL.md mentions all 8 standard stages', () => 
 });
 
 test('skill-contracts: router source has the same 8 stages in the same order', () => {
-  const routerSrc = readFileSync(ROUTER_SRC, 'utf8');
-  const stagesArrayMatch = routerSrc.match(
-    /const\s+stages\s*=\s*\[(.*?)\]/s,
+  // After the router refactor (M1), stages live in extractors.ts as
+  // `export const STAGES`. Walk every TS file under packages/router/src
+  // and pull the STAGES array out of whichever file declares it. We
+  // assert the array exists, contains the expected values, and that the
+  // order matches EXPECTED_STAGES — same contract as before, just
+  // sourced from the package directory instead of a single file.
+  const routerDir = join(REPO_ROOT, 'packages', 'router', 'src');
+  const files = readdirSync(routerDir)
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => readFileSync(join(routerDir, f), 'utf8'))
+    .join('\n');
+
+  const stagesArrayMatch = files.match(
+    /export\s+const\s+STAGES\s*=\s*\[(.*?)\]\s*as\s+const/s,
   );
-  assert.ok(stagesArrayMatch, 'router must define a stages array');
+  assert.ok(stagesArrayMatch, 'router must export a STAGES array');
 
   const stagesInRouter = stagesArrayMatch[1]
     .split(',')

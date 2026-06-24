@@ -32,8 +32,14 @@ const ROUTER_STAGES = [
 ];
 
 test('stage-consistency: all workflow stages are in router', () => {
-  const routerSrc = readFileSync(join(REPO_ROOT, 'packages/router/src/index.ts'), 'utf8');
-  const missing = WORKFLOW_STAGES.filter(s => !routerSrc.includes(s));
+  // After the router refactor (M1), walk every TS file in the router
+  // package. Stages are now declared in extractors.ts.
+  const routerDir = join(REPO_ROOT, 'packages/router/src');
+  const files = readdirSync(routerDir)
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => readFileSync(join(routerDir, f), 'utf8'))
+    .join('\n');
+  const missing = WORKFLOW_STAGES.filter(s => !files.includes(s));
   assert.equal(missing.length, 0, `stages missing in router: ${missing.join(', ')}`);
 });
 
@@ -44,12 +50,18 @@ test('stage-consistency: all router stages are in workflow', () => {
 });
 
 test('stage-consistency: router stages are exported for test reference', () => {
-  // The extractStage function should have a stages array that tests can import
-  const routerSrc = readFileSync(join(REPO_ROOT, 'packages/router/src/index.ts'), 'utf8');
-  const extractStageMatch = routerSrc.match(/function extractStage\(t: string\): string \{[\s\S]*?const stages = (\[[\s\S]*?\]);/);
-  assert.ok(extractStageMatch, 'extractStage should define a stages array');
+  // After M1, stages are exported as `STAGES` from extractors.ts and
+  // re-exported from index.ts. Walk the package directory and assert
+  // the named export exists with 8 entries.
+  const routerDir = join(REPO_ROOT, 'packages/router/src');
+  const files = readdirSync(routerDir)
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => readFileSync(join(routerDir, f), 'utf8'))
+    .join('\n');
+  const stagesMatch = files.match(/export\s+const\s+STAGES\s*=\s*\[([\s\S]*?)\]\s*as\s+const/);
+  assert.ok(stagesMatch, 'router must export a STAGES array from extractors.ts');
 
-  const stagesBlock = extractStageMatch[1];
+  const stagesBlock = stagesMatch[1];
   const count = (stagesBlock.match(/"[a-z-]+"/g) || []).length;
   assert.equal(count, 8, `expected 8 stages in router, got ${count}`);
 });

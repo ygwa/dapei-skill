@@ -1,0 +1,359 @@
+# Router intent corpus — golden fixtures for regression testing.
+#
+# Each entry is a single intent (the literal text a user would type after
+# `@dapei`) plus the expected route result. The router is expected to match
+# the listed `capability` with `confidence >= min_confidence`. Inputs are
+# checked as a deep-equal subset (extra keys are allowed so the corpus
+# stays stable when extractors gain new fields).
+#
+# This file is the source of truth for "what the router is allowed to do
+# today". Any change to a route must be reflected here first; the test
+# runner then verifies the live router still honors it.
+#
+# Coverage rationale: each existing route has at least one entry covering
+# its primary English pattern and one Chinese pattern where applicable.
+# Conflicts (two routes both match) are flagged so the test runner can
+# assert on the winner and surface silent precedence bugs.
+
+cases:
+  # --- workspace.init (route #1) ---
+  - id: workspace.init.english.short
+    intent: "initialize workspace"
+    expect:
+      capability: workspace.init
+      min_confidence: 0.9
+  - id: workspace.init.english.alias
+    intent: "init workspace"
+    expect:
+      capability: workspace.init
+      min_confidence: 0.9
+
+  # --- repos.add (route #2) ---
+  - id: repos.add.english
+    intent: "repos add my-repo git@example.com/repo.git"
+    expect:
+      capability: repos.add
+      min_confidence: 0.85
+      input_contains:
+        url: "git@example.com/repo.git"
+  - id: repos.add.with_name_flag
+    intent: "repos add foo"
+    expect:
+      capability: repos.add
+      min_confidence: 0.85
+      input_contains:
+        name: "foo"
+
+  # --- cognitive.discover (route #3) ---
+  - id: cognitive.discover.english
+    intent: "analyze behaviors for sample-app"
+    expect:
+      capability: cognitive.discover
+      min_confidence: 0.85
+  - id: cognitive.discover.singular
+    intent: "discover behavior for sample-app"
+    expect:
+      capability: cognitive.discover
+      min_confidence: 0.85
+
+  # --- cognitive.artifact.list (route #4) ---
+  - id: cognitive.artifact.list.english
+    intent: "list behaviors for sample-app"
+    expect:
+      capability: cognitive.artifact.list
+      min_confidence: 0.85
+
+  # --- cdr.profile (route #5) ---
+  - id: cdr.profile.english
+    intent: "profile repo sample-app"
+    expect:
+      capability: cdr.profile
+      min_confidence: 0.85
+      input_contains:
+        repo: "sample-app"
+  - id: cdr.profile.chinese
+    intent: "分析 repo sample-app"
+    expect:
+      capability: cdr.profile
+      min_confidence: 0.85
+      input_contains:
+        repo: "sample-app"
+
+  # --- cdr.entries.prepare (route #6, thin orchestrator) ---
+  - id: cdr.entries.prepare.english
+    intent: "discover entries for sample-app"
+    expect:
+      capability: cdr.entries.prepare
+      min_confidence: 0.9
+  - id: cdr.entries.prepare.chinese
+    intent: "扫描入口 for sample-app"
+    expect:
+      capability: cdr.entries.prepare
+      min_confidence: 0.85
+
+  # --- cdr.entries.confirm (route #7) ---
+  - id: cdr.entries.confirm.english
+    intent: "confirm entry order-create"
+    expect:
+      capability: cdr.entries.confirm
+      min_confidence: 0.85
+  - id: cdr.entries.confirm.chinese
+    intent: "确认入口 order-create"
+    expect:
+      capability: cdr.entries.confirm
+      min_confidence: 0.85
+
+  # --- cognitive.state.suggest (route #8) ---
+  - id: cognitive.state.suggest.english
+    intent: "discover states for Order"
+    expect:
+      capability: cognitive.state.suggest
+      min_confidence: 0.9
+  - id: cognitive.state.suggest.chinese
+    intent: "推导状态 for Order"
+    expect:
+      capability: cognitive.state.suggest
+      min_confidence: 0.85
+
+  # --- cdr.domain.compose (route #9) ---
+  - id: cdr.domain.compose.english
+    intent: "compose domain Transaction"
+    expect:
+      capability: cdr.domain.compose
+      min_confidence: 0.85
+  - id: cdr.domain.compose.chinese
+    intent: "组合领域 Transaction"
+    expect:
+      capability: cdr.domain.compose
+      min_confidence: 0.85
+
+  # --- cdr.capability.map.init (route #10) ---
+  - id: cdr.capability.map.init.english
+    intent: "init capability map for E-Commerce Mall"
+    expect:
+      capability: cdr.capability.map.init
+      min_confidence: 0.85
+  - id: cdr.capability.map.init.chinese
+    intent: "初始化功能地图"
+    expect:
+      capability: cdr.capability.map.init
+      min_confidence: 0.85
+
+  # --- cdr.bootstrap (route #11, v0.8) ---
+  - id: cdr.bootstrap.english
+    intent: "bootstrap sample-app"
+    expect:
+      capability: cdr.bootstrap
+      min_confidence: 0.85
+      input_contains:
+        repo: "sample-app"
+  - id: cdr.bootstrap.chinese
+    intent: "引导 sample-app"
+    expect:
+      capability: cdr.bootstrap
+      min_confidence: 0.85
+
+  # --- cdr.domain.suggest (route #12, v0.8) ---
+  - id: cdr.domain.suggest.english
+    intent: "suggest domains"
+    expect:
+      capability: cdr.domain.suggest
+      min_confidence: 0.85
+  - id: cdr.domain.suggest.chinese
+    intent: "推荐领域"
+    expect:
+      capability: cdr.domain.suggest
+      min_confidence: 0.85
+
+  # --- cdr.capability.map.synth (route #13, v0.8) ---
+  - id: cdr.capability.map.synth.english
+    intent: "synth capability map for E-Commerce Mall"
+    expect:
+      capability: cdr.capability.map.synth
+      min_confidence: 0.9
+  - id: cdr.capability.map.synth.chinese
+    intent: "合成功能地图"
+    expect:
+      capability: cdr.capability.map.synth
+      min_confidence: 0.85
+
+  # --- cdr.reversecluster.doc.generate (route #14, v0.8) ---
+  - id: cdr.reversecluster.doc.generate.english
+    intent: "render L1 portal"
+    expect:
+      capability: cdr.reversecluster.doc.generate
+      min_confidence: 0.85
+  - id: cdr.reversecluster.doc.generate.chinese
+    intent: "渲染 L1 门户"
+    expect:
+      capability: cdr.reversecluster.doc.generate
+      min_confidence: 0.85
+
+  # --- cdr.crossrepo.doc.generate (route #15, v0.5) ---
+  # Precedence over cdr.doc.generate is asserted via the conflict test
+  # below (see conflicts section).
+  - id: cdr.crossrepo.doc.generate.english
+    intent: "render cross-repo portal"
+    expect:
+      capability: cdr.crossrepo.doc.generate
+      min_confidence: 0.85
+  - id: cdr.crossrepo.doc.generate.chinese
+    intent: "生成跨仓库门户"
+    expect:
+      capability: cdr.crossrepo.doc.generate
+      min_confidence: 0.85
+
+  # --- cdr.doc.generate (route #16) ---
+  - id: cdr.doc.generate.english
+    intent: "generate documentation portal"
+    expect:
+      capability: cdr.doc.generate
+      min_confidence: 0.85
+  - id: cdr.doc.generate.chinese
+    intent: "生成文档门户"
+    expect:
+      capability: cdr.doc.generate
+      min_confidence: 0.85
+
+  # --- cdr.index.list (route #17) ---
+  - id: cdr.index.list.english
+    intent: "list assets"
+    expect:
+      capability: cdr.index.list
+      min_confidence: 0.8
+  - id: cdr.index.list.chinese
+    intent: "列出资产"
+    expect:
+      capability: cdr.index.list
+      min_confidence: 0.8
+
+  # --- repos.analyze (route #18) ---
+  - id: repos.analyze.english
+    intent: "repos analyze"
+    expect:
+      capability: repos.analyze
+      min_confidence: 0.9
+  - id: repos.analyze.with_target
+    intent: "analyze repos"
+    expect:
+      capability: repos.analyze
+      min_confidence: 0.9
+
+  # --- repos.sync (route #19) ---
+  - id: repos.sync.english
+    intent: "repos sync --all"
+    expect:
+      capability: repos.sync
+      min_confidence: 0.9
+      input_contains:
+        target: "--all"
+
+  # --- repos.list (route #20) ---
+  - id: repos.list.english
+    intent: "list the repos"
+    expect:
+      capability: repos.list
+      min_confidence: 0.85
+
+  # --- repos.check (route #21) ---
+  - id: repos.check.english
+    intent: "repos check"
+    expect:
+      capability: repos.check
+      min_confidence: 0.85
+
+  # --- feature.create (route #22) ---
+  - id: feature.create.english
+    intent: "create feature"
+    expect:
+      capability: feature.create
+      min_confidence: 0.9
+  - id: feature.create.chinese.direct
+    intent: "创建 feature payment"
+    expect:
+      capability: feature.create
+      min_confidence: 0.9
+  - id: feature.create.chinese.indirect
+    intent: "新开一个需求涉及 mall-payment"
+    expect:
+      capability: feature.create
+      min_confidence: 0.9
+
+  # --- context.build (route #23) ---
+  - id: context.build.english
+    intent: "context build for feature auth"
+    expect:
+      capability: context.build
+      min_confidence: 0.9
+
+  # --- workflow.runStage (route #24) ---
+  - id: workflow.runStage.english
+    intent: "run workflow on feature auth --stage implementation"
+    expect:
+      capability: workflow.runStage
+      min_confidence: 0.85
+      input_contains:
+        stage: "implementation"
+
+  # --- validation.run (route #25) ---
+  - id: validation.run.english
+    intent: "validate feature auth"
+    expect:
+      capability: validation.run
+      min_confidence: 0.8
+
+  # --- feature.report (route #26) ---
+  - id: feature.report.english
+    intent: "generate report for feature auth"
+    expect:
+      capability: feature.report
+      min_confidence: 0.75
+
+  # --- feature.review (route #27) ---
+  - id: feature.review.english
+    intent: "review feature auth"
+    expect:
+      capability: feature.review
+      min_confidence: 0.75
+
+  # --- feature.close (route #28 normal order) ---
+  - id: feature.close.normal
+    intent: "close feature payment-refactor"
+    expect:
+      capability: feature.close
+      min_confidence: 0.85
+
+  # --- feature.close (route #29 reversed order) ---
+  - id: feature.close.reversed
+    intent: "feature close payment-refactor"
+    expect:
+      capability: feature.close
+      min_confidence: 0.85
+
+  # --- feature.status (route #30) ---
+  - id: feature.status.fallback
+    intent: "status"
+    expect:
+      capability: feature.status
+      min_confidence: 0.6
+
+# Conflicting intents — must resolve to a single capability. The test
+# runner asserts the winner matches what `expect.winner` says; if it does
+# not, a precedence bug has appeared. Listed conflicts mirror the
+# ordering-sensitive comments in the existing router.
+conflicts:
+  - id: conflict.render.cross_repo_beats_plain
+    intent: "render cross-repo portal"
+    expect:
+      winner: cdr.crossrepo.doc.generate
+      loser: cdr.doc.generate
+  - id: conflict.render.synth_beats_init
+    intent: "synth capability map for E-Commerce Mall"
+    expect:
+      winner: cdr.capability.map.synth
+      loser: cdr.capability.map.init
+  - id: conflict.bootstrap_beats_cdr_profile
+    intent: "bootstrap sample-app"
+    expect:
+      winner: cdr.bootstrap
+      loser: cdr.profile
