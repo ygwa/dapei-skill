@@ -21,7 +21,7 @@ import {
 } from "../../core/src/cognitive-index.ts";
 import { parseYamlDocument, stringifyYamlDocument, type YamlValue } from "../../core/src/yaml-doc.ts";
 import { requireFields, detectRepoLanguage, detectTestCommands, parseReposYamlNames, featureRepoNames } from "../../core/src/capabilities/shared.ts";
-import { ensureDir, read, write, runSafe, workspacePaths, listFilesRecursively } from "../../runtime-adapters/src/system.ts";
+import { ensureDir, read, write, runSafe, workspacePaths, listFilesRecursively, safeJoinWithin, atomicWrite } from "../../runtime-adapters/src/system.ts";
 import { CodeGraphAdapter } from "../../runtime-adapters/src/codegraph.ts";
 import { applyProvenance, provenanceFromContext } from "../../core/src/provenance.ts";
 
@@ -168,8 +168,18 @@ function validateEvidencePoints(
       }
       continue;
     }
-    const rel = join("repos", repoName, file);
-    const abs = join(ctx.rootDir, rel);
+    // M7 — path-traversal guard. The old `join("repos", repoName, file)`
+    // accepted `../../etc/passwd` and resolved outside the repo
+    // directory. safeJoinWithin enforces that the resolved path is
+    // still inside ctx.rootDir before we touch the filesystem.
+    const rel = `repos/${repoName}/${file}`;
+    let abs: string;
+    try {
+      abs = safeJoinWithin(ctx.rootDir, rel);
+    } catch (err) {
+      errors.push(`sources[${i}].file escapes workspace: ${file} (${(err as Error).message})`);
+      continue;
+    }
     if (!existsSync(abs)) {
       errors.push(`sources[${i}].file not found in repo '${repoName}': ${file}`);
       continue;

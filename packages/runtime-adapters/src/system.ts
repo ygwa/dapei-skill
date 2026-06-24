@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, cpSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync, readdirSync, statSync, cpSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { randomBytes } from "node:crypto";
 
 export function run(cmd: string, args: string[], cwd: string): string {
   return execFileSync(cmd, args, { cwd, encoding: "utf8" }).trim();
@@ -11,6 +12,28 @@ export function runSafe(cmd: string, args: string[], cwd: string): string {
     return run(cmd, args, cwd);
   } catch {
     return "";
+  }
+}
+
+export interface RunResult {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  code: number | null;
+}
+
+export function runWithResult(cmd: string, args: string[], cwd: string): RunResult {
+  try {
+    const stdout = execFileSync(cmd, args, { cwd, encoding: "utf8" });
+    return { ok: true, stdout: stdout.trim(), stderr: "", code: 0 };
+  } catch (err: unknown) {
+    const e = err as { stdout?: string | Buffer; stderr?: string | Buffer; status?: number | null };
+    return {
+      ok: false,
+      stdout: typeof e.stdout === "string" ? e.stdout : e.stdout ? e.stdout.toString() : "",
+      stderr: typeof e.stderr === "string" ? e.stderr : e.stderr ? e.stderr.toString() : "",
+      code: typeof e.status === "number" ? e.status : null
+    };
   }
 }
 
@@ -25,6 +48,23 @@ export function read(path: string): string {
 export function write(path: string, content: string): void {
   ensureDir(dirname(path));
   writeFileSync(path, content, "utf8");
+}
+
+export function atomicWrite(absPath: string, content: string): void {
+  ensureDir(dirname(absPath));
+  const tmpPath = `${absPath}.tmp.${randomBytes(8).toString("hex")}`;
+  const fd = openSync(tmpPath, "w");
+  try {
+    writeFileSync(fd, content, "utf8");
+  } finally {
+    closeSync(fd);
+  }
+  // renameSync atomically moves the temp file to the target. On POSIX
+  // this is a single inode swap; readers always see either the old
+  // content or the new content, never a partial write. If rename
+  // throws, the temp file is left behind for the operator to clean
+  // up — the target file is untouched.
+  renameSync(tmpPath, absPath);
 }
 
 export function copyIfMissing(src: string, target: string): void {
@@ -77,4 +117,32 @@ export function workspacePaths(rootDir: string) {
     docsDir: resolve(resolvedRoot, "docs"),
     runtimeDir: resolve(resolvedRoot, "runtime")
   };
+}
+
+/**
+ * Path-traversal guard. Resolves `rel` against `root` (which must
+ * itself be absolute) and asserts the resolved path is still inside
+ * `root`. Throws on:
+ *   - `rel` is an absolute path (caller must use relative inputs)
+ *   - `rel` contains `..` segments that escape root after resolution
+ *   - `rel` resolves to root itself (returning rootDir would be ambiguous)
+ *
+ * The function does NOT consult the filesystem, so it does not protect
+ * against pre-existing symlinks that point outside root. Callers that
+ * need that guarantee should additionally `realpath` and re-check.
+ */
+export function safeJoinWithin(root: string, rel: string): string {
+  if (!isAbsolute(root)) {
+    throw new Error(`safeJoinWithin: root must be absolute, got ${root}`);
+  }
+  if (isAbsolute(rel)) {
+    throw new Error(`safeJoinWithin: rel must be relative, got ${rel}`);
+  }
+  const resolvedRoot = resolve(root);
+  const joined = resolve(resolvedRoot, rel);
+  const relToRoot = relative(resolvedRoot, joined);
+  if (relToRoot.startsWith("..") || isAbsolute(relToRoot)) {
+    throw new Error(`safeJoinWithin: path traversal blocked: ${rel} escapes ${root}`);
+  }
+  return joined;
 }
