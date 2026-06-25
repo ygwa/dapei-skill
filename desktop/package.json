@@ -13,7 +13,9 @@
     "check:dimension-rules": "node --experimental-strip-types scripts/check-dimension-rules.ts",
     "test:contract": "node --test packages/engine-client/src/__tests__/contract.test.mjs",
     "test:ipc": "node --experimental-strip-types --test packages/contracts/src/__tests__/ipc-channels.test.ts",
-    "test": "pnpm test:contract && pnpm test:ipc && pnpm check:dimension-rules"
+    "test:registry": "node --test apps/electron/src/main/workspace/__tests__/registry.test.mjs",
+    "test:integration": "node --test apps/electron/src/main/workspace/__tests__/integration.test.mjs",
+    "test": "pnpm test:contract && pnpm test:ipc && pnpm test:registry && pnpm test:integration && pnpm check:dimension-rules"
   },
   "engines": {
     "node": ">=22.6.0"

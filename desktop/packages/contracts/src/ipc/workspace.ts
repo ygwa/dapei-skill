@@ -1,4 +1,4 @@
-/** Workspace 相关 IPC payload（实现阶段由 services 填充） */
+/** Workspace 相关 IPC payload */
 
 export interface RecentWorkspace {
   id: string;
@@ -8,7 +8,7 @@ export interface RecentWorkspace {
 }
 
 export interface WorkspaceValidation {
-  status: "valid" | "invalid";
+  status: "valid" | "warn" | "invalid";
   errors: string[];
   warnings: string[];
 }

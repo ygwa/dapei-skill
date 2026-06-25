@@ -11,10 +11,10 @@ import { broadcastPush } from "../push/broadcast.ts";
 export function registerIpcHandlers(
   engine: EngineClient,
   getContext: () => WorkspaceContext,
-  _setContext: (ctx: WorkspaceContext) => void
+  setContext: (ctx: WorkspaceContext) => void
 ): void {
   setRouterEngineAndContext(engine, getContext);
-  registerWorkspaceHandlers();
+  registerWorkspaceHandlers(setContext, getContext);
   registerReposHandlers();
   registerFeatureHandlers();
 
@@ -32,18 +32,5 @@ export function registerIpcHandlers(
 
   installIpcRouter();
 
-  ipcMain.handle(IPC_CHANNELS.workspace.listRecents, async () => []);
-  ipcMain.handle(IPC_CHANNELS.workspace.pickDirectory, async () => null);
-  ipcMain.handle(IPC_CHANNELS.workspace.open, async (_e, path: string) => ({
-    ok: true,
-    path,
-    name: path.split(/[/\\]/).pop() ?? path,
-    validation: { status: "valid" as const, errors: [], warnings: [] }
-  }));
-  ipcMain.handle(IPC_CHANNELS.workspace.init, async (_e, parentDir: string, name: string) => {
-    const path = `${parentDir.replace(/[/\\]$/, "")}/${name}`;
-    broadcastPush({ channel: "dapei:workspace:mutated", payload: { scope: "workspace" } });
-    return { ok: true, path, name, validation: { status: "valid" as const, errors: [], warnings: [] } };
-  });
   ipcMain.handle(IPC_CHANNELS.plugin.list, async () => []);
 }
