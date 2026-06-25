@@ -11,6 +11,7 @@ import { FeatureListView } from "./workspace/FeatureListView.tsx";
 import { FeatureWorkbenchView } from "./workspace/FeatureWorkbenchView.tsx";
 import { PlaceholderView } from "./workspace/PlaceholderView.tsx";
 import { ReposView } from "./workspace/ReposView.tsx";
+import { KnowledgeView } from "./workspace/KnowledgeView.tsx";
 
 const NAV_LABELS: Record<WorkspaceNavId, string> = {
   overview: "工作空间概览",
@@ -38,7 +39,7 @@ function WorkspaceRoutes() {
       <Route index element={<DashboardView />} />
       <Route path="features" element={<FeatureListView />} />
       <Route path="features/:featureId" element={<FeatureWorkbenchView />} />
-      <Route path="knowledge" element={<PlaceholderView title="业务知识图谱" />} />
+      <Route path="knowledge" element={<KnowledgeView />} />
       <Route path="architecture" element={<PlaceholderView title="架构与决策 (ADR)" />} />
       <Route path="repos" element={<ReposView />} />
       <Route path="settings" element={<PlaceholderView title="Workspace 设置" />} />

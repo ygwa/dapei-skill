@@ -25,6 +25,12 @@ const api: DesktopApi = {
     tasks: (name) => ipcRenderer.invoke(IPC_CHANNELS.feature.tasks, { name, action: "list" }),
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.feature.create, input)
   },
+  knowledge: {
+    portalBuild: () => ipcRenderer.invoke(IPC_CHANNELS.knowledge.portalBuild),
+    portalUrl: () => ipcRenderer.invoke(IPC_CHANNELS.knowledge.portalUrl),
+    assetTree: () => ipcRenderer.invoke(IPC_CHANNELS.knowledge.assetTree),
+    indexList: () => ipcRenderer.invoke(IPC_CHANNELS.knowledge.indexList)
+  },
   agent: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.agent.list),
     listBackends: () => ipcRenderer.invoke(IPC_CHANNELS.agent.listBackends),

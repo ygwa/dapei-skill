@@ -31,7 +31,8 @@ export const IPC_CHANNELS = {
   knowledge: {
     portalBuild: "dapei:knowledge:portalBuild",
     portalUrl: "dapei:knowledge:portalUrl",
-    assetTree: "dapei:knowledge:assetTree"
+    assetTree: "dapei:knowledge:assetTree",
+    indexList: "dapei:knowledge:indexList"
   },
   agent: {
     list: "dapei:agent:list",

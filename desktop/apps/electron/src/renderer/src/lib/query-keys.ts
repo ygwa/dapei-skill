@@ -19,6 +19,10 @@ export const queryKeys = {
     sessions: () => ["agent", "sessions"] as const,
     backends: () => ["agent", "backends"] as const
   },
+  knowledge: {
+    portalUrl: (workspaceRoot: string) => ["knowledge", "portalUrl", workspaceRoot] as const,
+    assetTree: (workspaceRoot: string) => ["knowledge", "assetTree", workspaceRoot] as const
+  },
   pipeline: {
     status: (repo: string) => ["pipeline", "status", repo] as const
   }

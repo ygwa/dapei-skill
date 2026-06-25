@@ -37,6 +37,12 @@ function createDevDesktopApi(): DesktopApi {
       tasks: async () => ({ ok: true, text: "" }),
       create: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } })
     },
+    knowledge: {
+      portalBuild: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } }),
+      portalUrl: async () => ({ ok: false, url: "", error: { code: "DEV_STUB", message: "dev stub" } }),
+      assetTree: async () => [],
+      indexList: async () => ({ ok: true, behaviors: [], stateMachines: [] })
+    },
     agent: {
       list: async () => [],
       listBackends: async () => [

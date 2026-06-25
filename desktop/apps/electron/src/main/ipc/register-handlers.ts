@@ -8,6 +8,7 @@ import { registerHandler, installIpcRouter, setRouterEngineAndContext } from "./
 import { registerWorkspaceHandlers } from "./workspace-handlers.ts";
 import { registerReposHandlers } from "./repos-handlers.ts";
 import { registerFeatureHandlers } from "./feature-handlers.ts";
+import { registerKnowledgeHandlers } from "./knowledge-handlers.ts";
 import { registerAgentHandlers } from "./agent-handlers.ts";
 import { broadcastPush } from "../push/broadcast.ts";
 
@@ -22,6 +23,7 @@ export function registerIpcHandlers(
   registerWorkspaceHandlers(setContext, getContext);
   registerReposHandlers(services);
   registerFeatureHandlers(services);
+  registerKnowledgeHandlers(services, getContext);
   registerAgentHandlers(agent);
 
   registerHandler(IPC_CHANNELS.capability.run, async (rawInput, ctx) => {

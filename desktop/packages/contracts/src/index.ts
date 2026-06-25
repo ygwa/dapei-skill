@@ -12,6 +12,15 @@ export interface RepoSummary {
   cloned: boolean;
 }
 
+/** Asset node in the P3 Knowledge asset tree. */
+export interface AssetNode {
+  name: string;
+  path: string;
+  kind: "behavior" | "state-machine" | "domain" | "profile" | "entry" | "business-rule" | "capability-map" | "index" | "directory";
+  children?: AssetNode[];
+  meta?: { title?: string; repo?: string; kind?: string; level?: string; updatedAt?: string };
+}
+
 /** Feature summary surfaced to the renderer. */
 export interface FeatureSummary {
   name: string;
@@ -43,6 +52,17 @@ export interface DesktopApi {
     context: (name: string, stage: string) => Promise<{ ok: boolean; runtimeContext?: string; error?: { code: string; message: string } }>;
     tasks: (name: string) => Promise<{ ok: boolean; text?: string; error?: { code: string; message: string } }>;
     create: (input: { name: string; repos: string; objective?: string }) => Promise<{ ok: boolean; feature?: string; error?: { code: string; message: string } }>;
+  };
+  knowledge: {
+    portalBuild: () => Promise<{ ok: boolean; error?: { code: string; message: string } }>;
+    portalUrl: () => Promise<{ ok: boolean; url: string; error?: { code: string; message: string } }>;
+    assetTree: () => Promise<AssetNode[]>;
+    indexList: () => Promise<{
+      ok: boolean;
+      behaviors: Array<{ id: string; kind: string; level: string; repo?: string }>;
+      stateMachines: Array<{ entity: string; kind: string; level: string; repo?: string }>;
+      error?: { code: string; message: string };
+    }>;
   };
   agent: {
     list: () => Promise<Array<{ id: string; cwd: string; feature?: string }>>;
