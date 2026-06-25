@@ -156,9 +156,9 @@ importers:
       '@dapei/desktop-contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@dapei/desktop-plugin-sdk':
-        specifier: workspace:*
-        version: link:../plugin-sdk
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@types/node':
         specifier: ^22.15.29

@@ -16,6 +16,10 @@
     "@dapei/desktop-contracts": "workspace:*",
     "@dapei/desktop-plugin-sdk": "workspace:*"
   },
+  "dependencies": {
+    "@dapei/desktop-contracts": "workspace:*",
+    "zod": "^3.25.76"
+  },
   "devDependencies": {
     "@types/node": "^22.15.29",
     "typescript": "^6.0.3"
