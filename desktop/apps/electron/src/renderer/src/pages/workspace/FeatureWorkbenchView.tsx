@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FileText, GitBranch, Loader2, MessageSquare, Send, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
-import { MarkdownViewer, StageStepper } from "@dapei/desktop-ui";
+import { EvidenceCard, MarkdownViewer, StageStepper, ToolCallCard } from "@dapei/desktop-ui";
 import type { AgentEvent, DesktopPushEvent } from "@dapei/desktop-contracts";
 import { ensureDesktopApi } from "../../lib/desktop-api.ts";
 import { queryKeys } from "../../lib/query-keys.ts";
@@ -13,7 +13,12 @@ interface ChatMessage {
   id: string;
   kind: "user" | "assistant" | "tool" | "system";
   text: string;
-  meta?: { toolName?: string; toolOk?: boolean };
+  meta?: {
+    toolName?: string;
+    toolOk?: boolean;
+    toolInput?: Record<string, unknown>;
+    toolOutput?: unknown;
+  };
   ts: number;
 }
 
@@ -64,9 +69,18 @@ export function FeatureWorkbenchView() {
       } else if (e.type === "message:assistant") {
         setMessages((prev) => [...prev, { id: cryptoId(), kind: "assistant", text: e.text, ts: Date.now() }]);
       } else if (e.type === "tool:call") {
-        setMessages((prev) => [...prev, { id: cryptoId(), kind: "tool", text: `→ ${e.name}`, meta: { toolName: e.name }, ts: Date.now() }]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: cryptoId(),
+            kind: "tool",
+            text: `→ ${e.name}`,
+            meta: { toolName: e.name, toolInput: e.input as Record<string, unknown> },
+            ts: Date.now()
+          }
+        ]);
       } else if (e.type === "tool:result") {
-        setMessages((prev) => prev.map((m) => m.meta?.toolName === e.name && m.kind === "tool" ? { ...m, text: `${m.text} ${e.ok ? "✓" : "✗"}`, meta: { ...m.meta, toolOk: e.ok } } : m));
+        setMessages((prev) => prev.map((m) => m.meta?.toolName === e.name && m.kind === "tool" ? { ...m, text: `${m.text} ${e.ok ? "✓" : "✗"}`, meta: { ...m.meta, toolOk: e.ok, toolOutput: e.output } } : m));
       } else if (e.type === "capability:invoked") {
         setMessages((prev) => [...prev, { id: cryptoId(), kind: "system", text: `capability: ${e.id} ${e.ok ? "✓" : "✗"}`, ts: Date.now() }]);
       }
@@ -220,22 +234,36 @@ export function FeatureWorkbenchView() {
                   {sessionId ? "等待 Agent 回应…" : "点击右上 'Attach Agent' 启动"}
                 </p>
               )}
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={
-                    m.kind === "user"
-                      ? "ml-auto max-w-[90%] rounded-xl rounded-tr-sm bg-indigo-600 p-3 text-white shadow-sm"
-                      : m.kind === "assistant"
-                        ? "mr-auto max-w-[90%] rounded-xl rounded-tl-sm border border-slate-200 bg-slate-50 p-3 text-slate-700"
-                        : m.kind === "tool"
-                          ? "mx-auto max-w-[90%] rounded-md border border-slate-200 bg-white px-2 py-1 text-center font-mono text-xs text-slate-500"
+              {messages.map((m) => {
+                if (m.kind === "tool" && m.meta?.toolName) {
+                  return (
+                    <div key={m.id} className="mx-auto max-w-[95%]">
+                      <ToolCallCard
+                        tool={{
+                          call: { type: "tool:call", name: m.meta.toolName, input: m.meta.toolInput ?? {} },
+                          result: m.meta.toolOk !== undefined
+                            ? { type: "tool:result", name: m.meta.toolName, output: m.meta.toolOutput, ok: m.meta.toolOk }
+                            : undefined
+                        }}
+                      />
+                    </div>
+                  );
+                }
+                return (
+                  <div
+                    key={m.id}
+                    className={
+                      m.kind === "user"
+                        ? "ml-auto max-w-[90%] rounded-xl rounded-tr-sm bg-indigo-600 p-3 text-white shadow-sm"
+                        : m.kind === "assistant"
+                          ? "mr-auto max-w-[90%] rounded-xl rounded-tl-sm border border-slate-200 bg-slate-50 p-3 text-slate-700"
                           : "mx-auto max-w-[90%] rounded-md bg-amber-50 px-2 py-1 text-center text-xs text-amber-700"
-                  }
-                >
-                  {m.text}
-                </div>
-              ))}
+                    }
+                  >
+                    {m.text}
+                  </div>
+                );
+              })}
             </div>
             <div className="border-t border-slate-100 bg-white p-3">
               <div className="relative">
@@ -286,6 +314,22 @@ export function FeatureWorkbenchView() {
                 <div className="font-mono text-slate-600">
                   {currentStage ?? "(未开始)"}
                   {currentStage && currentIndex >= 0 && ` (${currentIndex + 1} / ${STAGES.length})`}
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-2 text-xs font-semibold text-slate-700">证据链 (EvidenceCard · M2-2)</div>
+                <div className="space-y-2">
+                  <EvidenceCard
+                    kind="fact"
+                    label="order-create endpoint"
+                    source={{ file: "mall-order/src/routes.ts", line: 6, symbol_handle: "POST /orders", repo: "mall-order" }}
+                  />
+                  <EvidenceCard
+                    kind="inference"
+                    label="order-cancel derived from behavior"
+                    source={{ file: "docs/as-is/behavior/order-cancel.yaml", symbol_handle: "kind: fact" }}
+                  />
                 </div>
               </div>
 
