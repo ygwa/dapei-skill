@@ -1,0 +1,70 @@
+version: "0.2"
+feature:
+  name: cdr-treesitter-finding-layer
+  objective: "Replace the v0.7 raw-content-inlined path of `cdr.entries.candidate` with a built-in tree-sitter structural finding layer, while preserving ADR-0003's 'AI is scanner, engine is validator' principle and ADR-0005's 'engine never calls LLMs' guarantee. Tree-sitter becomes the default finding layer; CodeGraph remains the optional graph finding layer. Agent still owns all semantic claims; engine still owns validation. New `cdr.entries.expand` capability provides explicit on-demand content access. ADR-0006 records the layering decision."
+  owner: "ygwa"
+  isolation: "symlink"
+  repos:
+    - name: dapei-skill
+      branch: feature/cdr-treesitter-finding-layer
+      base-ref: main
+      base-time: 2026-06-25T00:00:00Z
+      path: repos/dapei-skill
+  scope:
+    in:
+      # Workspace-dimension durable docs (per AGENTS.md: ADR/feature delivery doc land now)
+      - "docs/decisions/ADR-0006-treesitter-default-finding-layer.md"
+      - "docs/features/cdr-treesitter-finding-layer.md"
+      - "docs/features/cdr-treesitter-fixture-baseline.md"
+      - "docs/features/cdr-treesitter-ci-matrix.md"
+      - "docs/cdr-architecture.md"                          # §2.1, §3, §7.4 amendments
+      # Skill layer updates (engine-internal, AI-visible)
+      - "skills/cdr/SKILL.md"                                # Phase 1 workflow rewrite + migration table
+      # Engine implementation
+      - "packages/runtime-adapters/src/treesitter/**"        # new package directory
+      - "packages/runtime-adapters/package.json"             # add 5 tree-sitter-* deps
+      - "packages/core/src/capabilities/domains/cdr.ts"      # cdr.entries.candidate refactor + new cdr.entries.expand + cdr.profile tree_sitter block
+      - "packages/core/src/capabilities/index.ts"           # register cdrEntriesExpand
+      # Tests
+      - "tests/fixtures/treesitter/**"                       # baseline fixtures (5 languages + broken + oversized)
+      - "tests/unit/treesitter-*.test.mjs"                   # new
+      - "tests/unit/cdr-entries-candidate-*.test.mjs"        # updated
+      - "tests/unit/cdr-entries-expand.test.mjs"             # new
+      - "tests/ai-behavior/fixtures/conversations/cdr-treesitter-finding-layer.yaml"
+      # CI matrix
+      - ".github/workflows/ci.yml"                           # add treesitter-platform-matrix job
+      # Changeset
+      - ".changeset/cdr-treesitter-finding-layer.md"
+      # CHANGELOG
+      - "CHANGELOG.md"
+      # Feature-dimension local docs (per AGENTS.md)
+      - "features/cdr-treesitter-finding-layer/**"
+    out:
+      # NOT in scope (explicit non-goals from plan)
+      - "packages/doc-gen/**"                                # portal NOT changed; code_map not rendered
+      - "packages/router/**"                                 # no new intents; existing cdr routing unchanged
+      - "packages/cdr/**"                                    # capabilities registry unchanged
+      # No backend selector abstraction
+      # Doc portal explicitly NOT gaining a code map page
+      # Cognitive index explicitly NOT gaining a code_map field
+      # No WASM / Bun support in v1
+  acceptance:
+    - "Phase 1: TreeSitterCodeMapAdapter parses TypeScript / JavaScript / Python / Java fixtures with parse_status='clean'; broken fixtures emit 'partial'; oversized emits 'oversized'; unsupported extension emits 'unsupported'; TS decorator attach works (sibling in class_body); Python @decorator attaches as preceding sibling; Java @Annotation attaches as child of declaration; Java record captured as class; cold-start < 500 ms total across all four grammars"
+    - "Phase 1: tests/unit/treesitter-smoke.test.mjs passes on linux-x64; CI matrix proposal ready for darwin-arm64 + linux-arm64"
+    - "Phase 2: cdr.entries.candidate returns code_map (no content); backend label is 'tree-sitter' or 'tree-sitter+codegraph' (no 'fallback' value); cdr.entries.expand capability validates symbol_handle and line_range"
+    - "Phase 2: cdr.profile output includes tree_sitter block with files_parsed / files_partial / files_unsupported / files_oversized counts"
+    - "Phase 2: existing P1 red line tests still pass — cdr.entries.propose rejects missing sources[] / non-existent file / out-of-range line; cdr.entries.confirm still requires sources[]"
+    - "Phase 3: skills/cdr/SKILL.md Phase 1 text reads 'expand → propose' not 'read content → propose'; v0.3→v1.0 migration table added"
+    - "Phase 3: docs/cdr-architecture.md §2.1 diagram shows both finding layers; §7.4 has tree-sitter degradation row; §3 layout shows .dapei/cdr/tree-sitter-cache/"
+    - "Phase 3: ADR-0006 accepted; docs/features/cdr-treesitter-finding-layer.md published; .changeset entry ready"
+    - "Verification: npm run verify passes (typecheck + validate:skills + build + 4 test layers + smoke)"
+    - "Verification: code review pass via code-review-workflow OR superpowers:code-reviewer agent"
+    - "No regression: 35 framework-assertion tests (replaced in v0.3) remain replaced; evidence-validation tests still cover the three required categories"
+  risk_level: high
+  dependencies:
+    - "ADR-0003 (preserved verbatim)"
+    - "ADR-0005 (preserved verbatim)"
+    - "docs/cdr-architecture.md §2.1 (Three roles — already defines Finding / Agent / Platform split)"
+    - "docs/features/cdr-v0.7-codegraph.md (CodeGraph integration that established 'finding only, never auto-promoted')"
+    - "packages/runtime-adapters/src/codegraph.ts (existing CodeGraphAdapter, kept as-is)"
+  last-review-at: 2026-06-25

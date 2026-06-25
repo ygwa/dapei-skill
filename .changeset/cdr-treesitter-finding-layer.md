@@ -1,0 +1,5 @@
+---
+"dapei-skill": minor
+---
+
+CDR v1.0 — Tree-sitter as default finding layer. A new `runtime-adapters/src/treesitter/` package provides built-in, deterministic structural code map extraction (TypeScript / JavaScript / Python / Java) without external CLI dependencies. `cdr.entries.candidate` now returns `code_map` instead of inlined raw content; AI requests specific content slices via the new `cdr.entries.expand` capability. `apisurface_hint` is removed from candidate response and returns to being an Agent declaration on `cdr.entries.propose` input. `cdr.profile` gains a `tree_sitter` block in parallel with the existing `codegraph` block. CodeGraph remains the optional graph finding layer (refs / impact); tree-sitter and CodeGraph coexist with explicit `backend: 'tree-sitter' | 'tree-sitter+codegraph'` labels — they are not abstracted behind a unified selector. ADR-0006 records the layering decision. The 35 framework-assertion tests (already replaced in v0.3) remain replaced; the v0.3 evidence-validation contract is unchanged.
