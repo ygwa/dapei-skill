@@ -2,13 +2,16 @@
   "name": "dapei-desktop",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "大培桌面端 — 独立 pnpm workspace",
   "scripts": {
     "postinstall": "node scripts/ensure-electron.mjs",
     "dev": "node scripts/ensure-electron.mjs && pnpm --filter @dapei/desktop-app dev",
     "build": "pnpm --filter @dapei/desktop-app build",
     "typecheck": "pnpm -r typecheck",
-    "ensure-electron": "node scripts/ensure-electron.mjs"
+    "ensure-electron": "node scripts/ensure-electron.mjs",
+    "check:dimension-rules": "node --experimental-strip-types scripts/check-dimension-rules.ts",
+    "test:contract": "node --test packages/engine-client/src/__tests__/contract.test.mjs"
   },
   "engines": {
     "node": ">=22.6.0"

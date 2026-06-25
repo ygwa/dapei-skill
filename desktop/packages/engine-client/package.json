@@ -14,6 +14,7 @@
     "@dapei/desktop-contracts": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^22.15.29",
     "typescript": "^6.0.3"
   }
 }

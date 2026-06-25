@@ -2,8 +2,25 @@ import { app, BrowserWindow } from "electron";
 import { join } from "node:path";
 import { bootstrapApp } from "./bootstrap.ts";
 import { registerPushWindow } from "./push/broadcast.ts";
+import type { WorkspaceContext } from "@dapei/desktop-engine-client";
 
 let appContext: ReturnType<typeof bootstrapApp> | undefined;
+
+/**
+ * Build the initial WorkspaceContext at app boot. In M1-1 this is a
+ * no-op default: the renderer will open the Launcher, the user picks
+ * or creates a workspace, and the workspace handler will call
+ * appContext.setContext(...). Until then, the context points at the
+ * engine's HOME (the dapei-skill monorepo root); capability calls
+ * against it are deterministic but may not be meaningful.
+ */
+function initialContext(): WorkspaceContext {
+  const monorepoRoot = process.env.DAPEI_MONOREPO_ROOT ?? join(__dirname, "../../../..");
+  return {
+    workspaceRoot: monorepoRoot,
+    dimension: "workspace"
+  };
+}
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -35,7 +52,7 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(() => {
   const win = createWindow();
-  appContext = bootstrapApp(win);
+  appContext = bootstrapApp(win, initialContext());
 });
 
 app.on("window-all-closed", () => {
