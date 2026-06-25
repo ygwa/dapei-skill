@@ -15,7 +15,7 @@ export function registerIpcHandlers(
   setContext: (ctx: WorkspaceContext) => void,
   services: DesktopServices
 ): void {
-  setRouterEngineAndContext(engine, getContext);
+  setRouterEngineAndContext(engine, getContext, setContext);
   registerWorkspaceHandlers(setContext, getContext);
   registerReposHandlers(services);
   registerFeatureHandlers(services);

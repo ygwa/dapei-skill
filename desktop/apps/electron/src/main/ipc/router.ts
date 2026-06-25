@@ -14,7 +14,15 @@ import { broadcastPush } from "../push/broadcast.ts";
  * Handlers receive (input, ctx, engine). They MUST NOT mutate ctx;
  * ctx is a read-only snapshot of the current WorkspaceContext.
  */
-type RouterHandler = (input: unknown, ctx: WorkspaceContext, engine: EngineClient) => Promise<unknown>;
+type RouterHandler = (
+  input: unknown,
+  ctx: WorkspaceContext,
+  engine: EngineClient,
+  runtime: {
+    getContext: () => WorkspaceContext;
+    setContext: ((ctx: WorkspaceContext) => void) | null;
+  }
+) => Promise<unknown>;
 
 type AnyHandler = RouterHandler;
 
@@ -85,7 +93,7 @@ export function installIpcRouter(): void {
       // 2. Get the engine + context from the running app. The router
       //    needs a way to get the current context; bootstrap wires
       //    this in via setRouterEngineAndContext.
-      const { engine, getContext } = routerRuntime;
+      const { engine, getContext, setContext } = routerRuntime;
       if (!engine || !getContext) {
         return {
           ok: false,
@@ -93,9 +101,11 @@ export function installIpcRouter(): void {
         };
       }
       const ctx = getContext();
-      // 3. Invoke the handler.
+      // 3. Invoke the handler. The runtime context is passed as the
+      //    4th arg so handlers can switch dimension / feature when
+      //    a feature-scoped call comes in.
       try {
-        const result = await entry.handler(parsed, ctx, engine);
+        const result = await entry.handler(parsed, ctx, engine, { getContext, setContext: setContext ?? null });
         // 4. If the handler returned a CapabilityInvokeResponse, use
         //    its ok/error. Otherwise, treat the result as {ok:true, data}.
         if (result && typeof result === "object" && "ok" in (result as Record<string, unknown>)) {
@@ -124,16 +134,23 @@ export function installIpcRouter(): void {
 interface RouterRuntime {
   engine: EngineClient | null;
   getContext: (() => WorkspaceContext) | null;
+  setContext: ((ctx: WorkspaceContext) => void) | null;
 }
 
 export const routerRuntime: RouterRuntime = {
   engine: null,
-  getContext: null
+  getContext: null,
+  setContext: null
 };
 
-export function setRouterEngineAndContext(engine: EngineClient, getContext: () => WorkspaceContext): void {
+export function setRouterEngineAndContext(
+  engine: EngineClient,
+  getContext: () => WorkspaceContext,
+  setContext?: (ctx: WorkspaceContext) => void
+): void {
   routerRuntime.engine = engine;
   routerRuntime.getContext = getContext;
+  routerRuntime.setContext = setContext ?? null;
 }
 
 /** Internal: used by tests to inspect the handler table. */

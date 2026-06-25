@@ -50,6 +50,15 @@ export const featureRunStageRequestSchema = z.object({
   stage: z.string().min(1),
   confirmed: z.boolean().optional()
 }).strict();
+export const featureContextRequestSchema = z.object({
+  name: z.string().min(1),
+  stage: z.string().min(1)
+}).strict();
+export const featureTasksRequestSchema = z.object({
+  name: z.string().min(1),
+  action: z.enum(["list", "append"]).default("list"),
+  content: z.string().optional()
+}).strict();
 
 /** Channel → request schema lookup. The router uses this to validate
  * the payload before invoking the handler. */
@@ -68,7 +77,9 @@ export const REQUEST_SCHEMAS = {
   [IPC_CHANNELS.feature.create]: featureCreateRequestSchema,
   [IPC_CHANNELS.feature.status]: featureStatusRequestSchema,
   [IPC_CHANNELS.feature.stage]: featureStageRequestSchema,
-  [IPC_CHANNELS.feature.runStage]: featureRunStageRequestSchema
+  [IPC_CHANNELS.feature.runStage]: featureRunStageRequestSchema,
+  [IPC_CHANNELS.feature.context]: featureContextRequestSchema,
+  [IPC_CHANNELS.feature.tasks]: featureTasksRequestSchema
 } as const;
 
 export type ChannelWithSchema = keyof typeof REQUEST_SCHEMAS;

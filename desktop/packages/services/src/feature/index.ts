@@ -14,6 +14,10 @@ export interface FeatureService {
   getStage(name: string): Promise<{ stage: string | null }>;
   create(input: { name: string; repos: string; objective?: string }): Promise<{ ok: boolean; feature?: string; error?: { code: string; message: string } }>;
   runStage(name: string, stage: string, confirmed: boolean): Promise<{ ok: boolean; error?: { code: string; message: string } }>;
+  /** Build runtime-context.md for a feature at a stage. M1-5 wires P5. */
+  buildContext(name: string, stage: string): Promise<{ ok: boolean; runtimeContext?: string; error?: { code: string; message: string } }>;
+  /** Read the feature.tasks/backlog.md content. */
+  getBacklog(name: string): Promise<{ ok: boolean; text?: string; error?: { code: string; message: string } }>;
 }
 
 export function createFeatureService(engine: EngineClient, context: EngineWorkspaceContext): FeatureService {
@@ -60,6 +64,28 @@ export function createFeatureService(engine: EngineClient, context: EngineWorksp
         return { ok: false, error: result.error };
       }
       return { ok: true };
+    },
+    async buildContext(name, stage) {
+      const result = await engine.run(
+        { capabilityId: "context.build", input: { feature: name, stage }, workspaceRoot: context.workspaceRoot, feature: name },
+        { workspaceRoot: context.workspaceRoot, dimension: "feature", feature: name }
+      );
+      if (!result.ok) {
+        return { ok: false, error: result.error };
+      }
+      const data = result.data as { runtimeContext?: string } | undefined;
+      return { ok: true, runtimeContext: data?.runtimeContext };
+    },
+    async getBacklog(name) {
+      const result = await engine.run(
+        { capabilityId: "feature.tasks", input: { feature: name, action: "list" }, workspaceRoot: context.workspaceRoot, feature: name },
+        { workspaceRoot: context.workspaceRoot, dimension: "feature", feature: name }
+      );
+      if (!result.ok) {
+        return { ok: false, error: result.error };
+      }
+      const data = result.data as { text?: string } | undefined;
+      return { ok: true, text: data?.text ?? "" };
     }
   };
 }

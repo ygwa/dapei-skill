@@ -24,6 +24,8 @@ export const IPC_CHANNELS = {
     status: "dapei:feature:status",
     stage: "dapei:feature:stage",
     runStage: "dapei:feature:runStage",
+    context: "dapei:feature:context",
+    tasks: "dapei:feature:tasks",
     close: "dapei:feature:close"
   },
   knowledge: {

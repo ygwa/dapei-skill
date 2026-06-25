@@ -33,6 +33,8 @@ function createDevDesktopApi(): DesktopApi {
       status: async () => ({ stage: null }),
       stage: async () => ({ stage: null }),
       runStage: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } }),
+      context: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } }),
+      tasks: async () => ({ ok: true, text: "" }),
       create: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } })
     },
     capability: {

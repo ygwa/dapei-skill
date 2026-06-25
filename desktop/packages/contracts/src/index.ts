@@ -40,6 +40,8 @@ export interface DesktopApi {
     status: (name: string) => Promise<{ stage: string | null }>;
     stage: (name: string) => Promise<{ stage: string | null }>;
     runStage: (name: string, stage: string, confirmed?: boolean) => Promise<{ ok: boolean; error?: { code: string; message: string } }>;
+    context: (name: string, stage: string) => Promise<{ ok: boolean; runtimeContext?: string; error?: { code: string; message: string } }>;
+    tasks: (name: string) => Promise<{ ok: boolean; text?: string; error?: { code: string; message: string } }>;
     create: (input: { name: string; repos: string; objective?: string }) => Promise<{ ok: boolean; feature?: string; error?: { code: string; message: string } }>;
   };
   capability: {

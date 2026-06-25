@@ -3,9 +3,8 @@ import { registerHandler } from "./router.ts";
 import type { FeatureService } from "@dapei/desktop-services";
 
 /**
- * Feature IPC handlers. M1-4 wires: list, status, stage,
- * runStage, create. The FeatureService does the engine
- * round-trip; the router does Zod validation + dimension rule.
+ * Feature IPC handlers. M1-5 adds: context (build), tasks (list).
+ * M1-4 already had list / status / stage / runStage / create.
  */
 export function registerFeatureHandlers(services: { feature: FeatureService }): void {
   registerHandler("dapei:feature:list", async () => {
@@ -26,6 +25,23 @@ export function registerFeatureHandlers(services: { feature: FeatureService }): 
     const { name, stage, confirmed } = rawInput as { name: string; stage: string; confirmed?: boolean };
     return services.feature.runStage(name, stage, Boolean(confirmed));
   }, { isWrite: true });
+
+  registerHandler("dapei:feature:context", async (rawInput, _ctx, _engine, runtimeCtx) => {
+    const { name, stage } = rawInput as { name: string; stage: string };
+    if (runtimeCtx?.setContext) {
+      const current = runtimeCtx.getContext();
+      runtimeCtx.setContext({ workspaceRoot: current.workspaceRoot, dimension: "feature", feature: name });
+    }
+    return services.feature.buildContext(name, stage);
+  }, { isWrite: true });
+
+  registerHandler("dapei:feature:tasks", async (rawInput) => {
+    const { name, action = "list" } = rawInput as { name: string; action?: "list" | "append" };
+    if (action === "list") {
+      return services.feature.getBacklog(name);
+    }
+    return { ok: false, error: { code: "NOT_IMPLEMENTED", message: "append not implemented in M1-5" } };
+  });
 
   registerHandler("dapei:feature:create", async (rawInput) => {
     const { name, repos, objective } = rawInput as { name: string; repos: string; objective?: string };
