@@ -1621,7 +1621,7 @@ export const docGenerate: AnyCap = {
     for (const pr of profileDocs) {
       const repo = String(pr.doc.repo || pr.doc.name || basename(pr.file, ".yaml"));
       const slug = safeId(repo);
-      write(join(outputDir, "profiles", `${slug}.md`), generateProfilePage(pr, p.rootDir, crossArtifactIndex));
+      write(join(outputDir, "profiles", `${slug}.md`), generateProfilePage(pr, p.rootDir));
       profileItems.push({ text: repo, link: `/profiles/${slug}` });
       totalPages++;
       sections.profiles++;

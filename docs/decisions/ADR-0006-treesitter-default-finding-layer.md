@@ -1,7 +1,7 @@
 ---
 id: ADR-0006
 title: "Tree-sitter as the default finding layer; semantic claims stay with the Agent"
-status: proposed
+status: accepted
 date: 2026-06-25
 deciders: [ygwa]
 technical-story: "feature/cdr-treesitter-finding-layer"

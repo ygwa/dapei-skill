@@ -634,12 +634,7 @@ export const cdrEntriesExpand: AnyCap = {
     properties: {
       repo: { type: "string", minLength: 1 },
       file: { type: "string", minLength: 1 },
-      line_range: {
-        type: "array",
-        items: { type: "number" },
-        minItems: 2,
-        maxItems: 2
-      },
+      line_range: { type: "array" },
       symbol_handle: { type: "string", minLength: 1 }
     },
     additionalProperties: false

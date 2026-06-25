@@ -17,6 +17,62 @@ Match the language and detail level of the existing release entries.
 ## [Unreleased]
 
 ### Added
+- **CDR v1.0 — Tree-sitter as default finding layer**
+  (on `feature/cdr-treesitter-finding-layer`). Closes the documented
+  ADR-0003 negative consequence ("Higher token usage per propose call")
+  by replacing the raw-content-inline path with a structured code map.
+  The engine emits structural signals only; semantic claims remain with
+  the Agent (ADR-0003).
+  - New `packages/runtime-adapters/src/treesitter/` package: built-in
+    `TreeSitterCodeMapAdapter` parsing TypeScript / JavaScript / Python /
+    Java into `code_map` (imports / classes / functions / methods /
+    decorators / line ranges / `entry_candidates`). Per-language
+    decorator attach (TS sibling, Python preceding sibling, Java
+    `modifiers` child). 32 MB size cap before parse; defensive
+    `bufferSize` setting (node-tree-sitter#222); cold-start ≤ 500 ms.
+  - `cdr.entries.candidate` (v1.0.0 → v2.0.0) returns `code_map` per file
+    instead of inlined `content`. New `backend` values:
+    `'tree-sitter'` (default) or `'tree-sitter+codegraph'` (augmented). No
+    `'fallback'` value — tree-sitter always runs on Node ≥ 22.
+    `apisurface_hint` removed from candidate; Agent declares `method` /
+    `path` on `cdr.entries.propose` input.
+  - New `cdr.entries.expand` capability: resolves `symbol_handle` (from
+    `code_map.symbols[]`) to its line range, or accepts arbitrary
+    `line_range`; returns bounded content + `truncated` flag +
+    `line_count`. Validates: file exists, line_range in range,
+    symbol_handle resolves to exactly one symbol.
+  - `cdr.profile` gains a `tree_sitter` block in parallel with the
+    existing `codegraph` block (both are substrate metadata, never
+    framework claims). Five count fields: `files_parsed`,
+    `files_partial`, `files_unsupported`, `files_oversized`,
+    `cold_start_ms`.
+  - CodeGraph coexistence preserved: when CLI is present, its
+    `apisurface_hint` route metadata is merged into
+    `code_map.entry_candidates[].decorators` as raw capture (engine
+    never decides route metadata).
+  - ADR-0006 records the layering decision; plan v2
+    (`docs/features/cdr-treesitter-finding-layer.md`) is the canonical
+    implementation guide; fixture baseline doc
+    (`docs/features/cdr-treesitter-fixture-baseline.md`) and CI matrix
+    doc (`docs/features/cdr-treesitter-ci-matrix.md`) accompany.
+  - New CI job `treesitter-platform-matrix` in `.github/workflows/ci.yml`:
+    linux-x64 + darwin-arm64 + linux-arm64; cold-start budget asserted.
+  - 9 baseline fixtures under `tests/fixtures/treesitter/` covering TS
+    decorator attach (class + method level), TSX JSX grammar, Python
+    `@dataclass` / `@app.get` / PEP 695, Java `@RestController` /
+    `@GetMapping` / record / `@interface`, and 4 broken fixtures
+    exercising `partial` parse_status.
+  - 25 new unit tests (`treesitter-smoke` × 10, `treesitter-decorators` × 10,
+    `treesitter-types` × 5) and 7 new `cdr-entries-expand` tests.
+  - New L4 AI behavior transcript
+    `tests/ai-behavior/fixtures/conversations/cdr-treesitter-finding-layer.yaml`
+    covering the full candidate → expand → propose → confirm flow.
+  - `skills/cdr/SKILL.md` Phase 1 text rewritten with the v1.0 flow and
+    v0.3→v1.0 migration table. `docs/cdr-architecture.md` §2.1, §3, §7.4
+    amended to reflect the two-finding-layer model and tree-sitter
+    degradation paths.
+
+### Added (continued)
 - **CDR v0.10 — portal builds end-to-end on real cognitive output**
   (on `feature/cdr-v0.10-portal-sanitize`). Three commits land together; they
   ship one user story: a CDR-generated portal is now buildable via

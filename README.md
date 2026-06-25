@@ -408,6 +408,8 @@ npx skills add ygwa/dapei-skill@vX.Y.Z
 | --- | --- |
 | [agents.md](agents.md) | Agent collaboration constraints for this repo |
 | [docs/cdr-architecture.md](docs/cdr-architecture.md) | CDR + CodeGraph integration architecture (v0.3 implemented; v1.0 proposed) |
+| [docs/features/cdr-treesitter-finding-layer.md](docs/features/cdr-treesitter-finding-layer.md) | Feature delivery doc for `feature/cdr-treesitter-finding-layer` (v1.0: tree-sitter as default finding layer + `cdr.entries.expand`) |
+| [docs/decisions/ADR-0006-treesitter-default-finding-layer.md](docs/decisions/ADR-0006-treesitter-default-finding-layer.md) | ADR: tree-sitter default finding layer; semantic claims stay with the Agent |
 | [docs/features/cdr-runtime.md](docs/features/cdr-runtime.md) | Feature delivery doc for `feature/cdr-runtime` (v0.1) |
 | [docs/features/cdr-mining.md](docs/features/cdr-mining.md) | Feature delivery doc for `feature/cdr-mining` (v0.2: annotation-aware entries + business-rule artifacts) |
 | [docs/features/cdr-v0.3-ai-as-scanner.md](docs/features/cdr-v0.3-ai-as-scanner.md) | Feature delivery doc for `feature/cdr-v0.3-ai-as-scanner` (v0.3: AI as scanner, engine as validator) |

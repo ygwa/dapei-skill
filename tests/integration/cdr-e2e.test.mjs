@@ -43,14 +43,17 @@ test('cdr e2e: profile → entries → behavior → state → domain → capabil
     assert.ok(profileRes.data.language.includes('nodejs'));
     assert.ok(existsSync(join(tmp, 'docs/as-is/profiles/sample-app.yaml')));
 
-    // Step 2: cdr.entries.candidate — engine lists code files (v0.3: no pattern matching)
+    // Step 2: cdr.entries.candidate — engine lists code files with code_map (v1.0: no pattern matching, no content inline)
     const { result: entriesRes } = await core.runCapability('cdr.entries.candidate', { repo: 'sample-app' }, c(tmp));
     assert.equal(entriesRes.ok, true);
     assert.ok(entriesRes.data.file_count >= 1);
+    assert.equal(entriesRes.data.backend, 'tree-sitter');
     const files = entriesRes.data.files;
     const orderCtrlFile = files.find((f) => String(f.relpath).includes('orderController.ts'));
     assert.ok(orderCtrlFile, 'orderController.ts must surface as a code file');
-    assert.ok(orderCtrlFile.content.length > 0, 'file content must be inlined for AI to read');
+    assert.ok(orderCtrlFile.code_map, 'v1.0: file must carry code_map (no content inline)');
+    assert.ok(Array.isArray(orderCtrlFile.code_map.symbols), 'code_map.symbols must be an array');
+    assert.ok(Array.isArray(orderCtrlFile.code_map.imports), 'code_map.imports must be an array');
 
     // Step 2b: cdr.entries.propose — AI submits one entry with evidence
     // (In v0.3 the AI reads the content and decides which files are entry points)

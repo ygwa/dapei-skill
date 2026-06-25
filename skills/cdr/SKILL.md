@@ -125,7 +125,7 @@ L3 流程层 — 行为链路 + 状态机 + 业务规则 (Behavior + State + Rul
 
 **产出**：`docs/as-is/profiles/<repo>.yaml`
 
-### Phase 1 — Entry Discovery（入口发现，v0.3 重设计）
+### Phase 1 — Entry Discovery（入口发现，v1.0 重设计）
 
 ```
 @dapei discover entries for mall-order
@@ -133,21 +133,37 @@ L3 流程层 — 行为链路 + 状态机 + 业务规则 (Behavior + State + Rul
 
 **目标**：列出 repo 中的代码文件,让 AI 读取并识别入口,**引擎不做框架预设**。
 
-**新流程**:
+**v1.0 流程**(ADR-0006):
 
 1. **引擎**: `runCapability('cdr.entries.candidate', {repo: 'mall-order'})`
-   - 返回 `files[]`,每项含 `relpath` / `language` / `content`(已 inline)
+   - 返回 `files[]`,每项含 `relpath` / `language` / `code_map`
+   - `code_map` 是结构化的 code map(imports / classes / functions / methods / decorators / line ranges / entry_candidates)
+   - **不再内联 raw content** —— AI 通过 `cdr.entries.expand` 按需获取
+   - `backend: 'tree-sitter'` 或 `'tree-sitter+codegraph'`(无 `'fallback'` 值)
    - 没有 framework 字段,没有 pattern 匹配
-2. **AI** (在 chat session 中): 阅读 `content`,用 LLM 的理解力识别入口
+2. **AI** (在 chat session 中): 阅读 `code_map.entry_candidates`(结构性弱信号:有 decorator 的公开方法)识别候选入口
    - 找出 Spring `@RestController` / NestJS `@Controller` / FastAPI `@app.get` / Express (app.get) / Quarkus / Ktor / Hapi / Axum / gRPC / GraphQL / 自定义路由 / 动态注册
-3. **AI**: 对每个识别出的入口,调 `runCapability('cdr.entries.propose', {repo, id, type, file, line, method, path, sources: [{file, line, repo}]})`
+3. **AI**: 对每个候选入口,调 `runCapability('cdr.entries.expand', {repo, file, symbol_handle? | line_range?})`
+   - 返回该符号的 bounded content(行号范围)
+   - 引擎校验 `symbol_handle` 在 `code_map.symbols[]` 中能唯一定位
+4. **AI**: 阅读 expand 返回的 bounded content,判断是否真是入口;若是,调 `runCapability('cdr.entries.propose', {repo, id, type, file, line, method?, path?, sources: [{file, line, repo}]})`
+   - `method` / `path` 是 AI 声明的语义字段,**引擎不做 route 推断**
    - 引擎校验 `sources[].file` 存在于 `repos/<repo>/<file>`
    - 引擎校验 `line` 在文件行数范围内
    - 通过则写入 `docs/as-is/entries/<repo>.yaml`(`status: candidate`)
-4. **人 / AI**: 调 `runCapability('cdr.entries.confirm', {repo, entry_id, summary, priority, sources: [...]})` 标记为 `status: confirmed`
+5. **人 / AI**: 调 `runCapability('cdr.entries.confirm', {repo, entry_id, summary, priority, sources: [...]})` 标记为 `status: confirmed`
    - `sources[]` 是**必填**的——确认入口也必须指 evidence
 
-**旧版(v0.2)废弃路径**: `cdr.entries.prepare` 现在退化为薄封装,内部调用 `cdr.entries.candidate` 后返回 workflow 描述;不再返回平台自动识别的 entry 列表。新代码请直接用 `cdr.entries.candidate` + `cdr.entries.propose`。
+**v0.3 → v1.0 关键差异**:
+
+| v0.3 | v1.0 |
+|------|------|
+| `cdr.entries.candidate` 返回 `content`(每文件 ≤200KB,合计 ≤40MB) | 返回 `code_map`(结构化),`content` 通过新 capability 按需获取 |
+| AI 直接读 raw content 找入口 | AI 读 `code_map.entry_candidates` 选候选,`expand` 获取 bounded content |
+| `apisurface_hint` 是引擎从 CodeGraph 生成的路由元数据 | `apisurface_hint` **移除**;`method` / `path` 由 AI 在 propose 时声明 |
+| `backend: 'native' \| 'fallback'` | `backend: 'tree-sitter' \| 'tree-sitter+codegraph'`(无 fallback,tree-sitter 总是跑) |
+
+**旧版(v0.2 / v0.3)废弃路径**: `cdr.entries.prepare` 退化为薄封装,内部调用 `cdr.entries.candidate` 后返回 workflow 描述;不再返回平台自动识别的 entry 列表。新代码请直接用 `cdr.entries.candidate` + `cdr.entries.expand` + `cdr.entries.propose`。
 
 **产出**:`docs/as-is/entries/<repo>.yaml`(`status: candidate` → `status: confirmed`)
 

@@ -118,21 +118,30 @@ CDR does **not** replace Feature/Workflow. It supplies **Workspace-dimension L3 
 │ Platform (cdr.*)  │                 │ Agent: semantics │
 │ contract/index/   │                 │ writes YAML,      │
 │ validate/stale    │                 │ promotes fact     │
-└─────────┬─────────┘                 └─────────┬─────────┘
+└─────────┬─────────┘                 └─────────┬──────────┘
           │                                       │
           ▼                                       ▼
 ┌─────────────────────────────────────────────────────────┐
-│ CodeGraph substrate (Finding only)                      │
-│ orient · apisurface · explain · refs · impact · graph     │
-│ Never auto-promoted to kind=fact business artifacts     │
+│ Finding layer (v1.0 — two substrates, see ADR-0006)      │
+│                                                        │
+│ tree-sitter  ── built-in default, structural code map     │
+│   imports / classes / functions / methods /             │
+│   decorators / annotations / line ranges / symbol handles │
+│                                                        │
+│ CodeGraph    ── optional upgrade, cross-file graph        │
+│   refs / impact / call graph (when CLI is available)     │
+│                                                        │
+│ Both return structural signals. Neither auto-promotes    │
+│ structural signals into kind=fact business artifacts.    │
 └─────────────────────────────────────────────────────────┘
 ```
 
-- **CodeGraph**: Finding (where code lives, who calls whom, change blast radius).
-- **Agent**: Understanding (what a step means, business semantics, rule synthesis).
-- **Platform**: Contract (schema, index, upsert, guardrail, context injection).
+- **tree-sitter**: Built-in default finding layer. Always available on Node ≥ 22. Returns file-level `code_map` (imports / classes / functions / methods / decorators / line ranges / `entry_candidates`). Does NOT decide whether a symbol is a route — that's an Agent decision.
+- **CodeGraph**: Optional upgrade. Returns `apisurface_hint` route metadata (merged into `code_map.entry_candidates[].decorators` as raw capture) and cross-file `refs` / `impact` / call graph. When the CLI is missing, tree-sitter alone covers structural finding.
+- **Agent**: Understanding (what a step means, business semantics, rule synthesis). Reads `code_map`, expands symbols via `cdr.entries.expand`, proposes entries with `method`/`path` as Agent-declared fields.
+- **Platform**: Contract (schema, index, upsert, guardrail, context injection). Validates evidence, never decides route metadata.
 
-Layer 3 “DFS” is **Agent-driven along bounded graph neighborhoods** from CodeGraph `explain` / `refs`, not engine grep heuristics for business flow.
+Layer 3 "DFS" is **Agent-driven along bounded graph neighborhoods** from CodeGraph `explain` / `refs`, not engine grep heuristics for business flow.
 
 ### 2.2 Principles (executable)
 
@@ -171,10 +180,13 @@ Workspace (docs/as-is + .dapei/cdr/)
 .dapei/cdr/
 ├── index.yaml          ← unified artifact index
 ├── graph/<repo>/       ← CodeGraph cache/SQLite (gitignored by default)
+├── tree-sitter-cache/  ← parsed code_map LRU (gitignored; rebuilt on demand)
 └── sessions/<id>/      ← optional per-discover trace metadata
 ```
 
 CodeGraph indexes live under **`.dapei/graph/<repo>/`**, scanning `repos/<repo>/`. Product repos are not required to host SQLite unless explicitly configured.
+
+The tree-sitter code map is parsed on demand and cached in-process (per-worker LRU keyed by `(repo, file, mtime)`). On disk, `.dapei/cdr/tree-sitter-cache/` is gitignored. The cache is rebuilt from source on every `cdr.entries.expand` call that has a cache miss — there is no persistent on-disk cache in v1.0.
 
 ---
 
@@ -430,6 +442,10 @@ The only dapei-side decision is *which repo* to point CodeGraph at — every pro
 | Index pending sync (file edits since last sync) | `codegraph_status` surfaces a `### Pending sync:` section naming affected files; the agent reads those directly per the staleness banner protocol. No dapei-side action. |
 | Weak language parse (Lua / Liquid / Pascal have lower measured cross-file coverage) | `cdr.entries.candidate` lowers candidate confidence for those files; more Agent confirmation; the engine never silently fabricates entries. |
 | Stale graph (commit drift) | `cdr.stale.scan` compares `repo_revision` against the index `revision`; mismatches prompt a re-`codegraph init -i` before the next `cdr.behavior.upsert`. |
+| tree-sitter parse error in a file | `cdr.entries.candidate` sets `code_map.parse_status = 'partial'` for that file; emits symbols outside `ERROR` nodes; `cdr.profile` surfaces the count in `tree_sitter.files_partial`. No file-level failure blocks the scan. |
+| tree-sitter file > 32 MB | `code_map.parse_status = 'oversized'`; empty code_map; profile surfaces `tree_sitter.files_oversized`. The 32 MB cap is enforced before `parser.parse()` to avoid memory pressure (tree-sitter#222, Aura pattern). |
+| tree-sitter language unsupported | `code_map.parse_status = 'unsupported'`; empty code_map; profile surfaces `tree_sitter.files_unsupported`. Extension not in `tree-sitter-{typescript,javascript,python,java}` registry. |
+| tree-sitter buffer-size bug | Defensive `bufferSize: Math.max(1024*1024, source.length + 3)` is always set; without it, files of exactly 32768 bytes throw `Invalid argument` (node-tree-sitter#222). Tested in `treesitter-smoke.test.mjs`. |
 
 The adapter's `orient()`, `refs()`, `impact()`, and `fullDoctor()` methods all return `{ available: false, reason: "..." }` when the CLI is missing or fails. Callers MUST check the flag and degrade gracefully. The design principle is that the dapei platform ships with a working tree-walk + manifest fallback at every level; CodeGraph is an upgrade, not a dependency.
 

@@ -10,7 +10,7 @@
     "first-run": "node scripts/first-run.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "validate:skills": "node scripts/validate-skills.mjs",
-    "build": "esbuild engine/dapei-engine.ts --bundle --platform=node --format=esm --outfile=dist/dapei-engine.js --external:node:* --minify",
+    "build": "esbuild engine/dapei-engine.ts --bundle --platform=node --format=esm --outfile=dist/dapei-engine.js --external:node:* --external:tree-sitter --external:tree-sitter-typescript --external:tree-sitter-javascript --external:tree-sitter-python --external:tree-sitter-java --minify",
     "test": "npm run test:unit && npm run test:integration && npm run test:scenarios && npm run test:ai-behavior",
     "test:unit": "node --experimental-strip-types --test tests/unit/*.test.mjs",
     "test:integration": "node --experimental-strip-types --test tests/integration/*.test.mjs",
