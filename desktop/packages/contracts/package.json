@@ -1,0 +1,23 @@
+{
+  "name": "@dapei/desktop-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "IPC、ACP、事件流、插件 manifest 类型与 Zod schema",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ipc": "./src/ipc/index.ts",
+    "./events": "./src/events/index.ts",
+    "./plugin": "./src/plugin/index.ts",
+    "./acp": "./src/acp/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

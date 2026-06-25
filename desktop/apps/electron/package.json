@@ -1,0 +1,42 @@
+{
+  "name": "@dapei/desktop-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "大培 Electron 应用壳",
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@dapei/desktop-agent": "workspace:*",
+    "@dapei/desktop-contracts": "workspace:*",
+    "@dapei/desktop-engine-client": "workspace:*",
+    "@dapei/desktop-git": "workspace:*",
+    "@dapei/desktop-knowledge": "workspace:*",
+    "@dapei/desktop-plugin-sdk": "workspace:*",
+    "@dapei/desktop-plugins": "workspace:*",
+    "@dapei/desktop-services": "workspace:*",
+    "@dapei/desktop-ui": "workspace:*",
+    "@tanstack/react-query": "^5.80.7",
+    "lucide-react": "^1.21.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.2",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.8",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.5.2",
+    "electron": "^35.2.1",
+    "electron-vite": "^3.1.0",
+    "tailwindcss": "^4.1.8",
+    "typescript": "^6.0.3",
+    "vite": "^6.3.5"
+  }
+}

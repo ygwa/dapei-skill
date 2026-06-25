@@ -17,7 +17,10 @@
     "test:scenarios": "node --experimental-strip-types --test tests/scenarios/*.test.mjs",
     "test:ai-behavior": "node --experimental-strip-types --test tests/ai-behavior/*.test.mjs",
     "smoke": "bash scripts/smoke-test.sh",
-    "verify": "npm run typecheck && npm run validate:skills && npm run build && npm run test && npm run smoke"
+    "verify": "npm run typecheck && npm run validate:skills && npm run build && npm run test && npm run smoke",
+    "desktop:dev": "pnpm -C desktop dev",
+    "desktop:build": "pnpm -C desktop build",
+    "desktop:typecheck": "pnpm -C desktop typecheck"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",

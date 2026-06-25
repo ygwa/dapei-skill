@@ -19,6 +19,8 @@ node_modules
 # Build outputs
 dist/
 build/
+desktop/out/
+desktop/**/out/
 
 # Agent / IDE scratch (never commit)
 /.omo/

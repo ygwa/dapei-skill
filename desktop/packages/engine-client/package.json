@@ -1,0 +1,19 @@
+{
+  "name": "@dapei/desktop-engine-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "dapei-engine / runCapability 桥接接口",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@dapei/desktop-contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@dapei/desktop-contracts": ["../../packages/contracts/src/index.ts"],
+      "@dapei/desktop-contracts/ipc": ["../../packages/contracts/src/ipc/index.ts"],
+      "@dapei/desktop-contracts/plugin": ["../../packages/contracts/src/plugin/index.ts"],
+      "@dapei/desktop-engine-client": ["../../packages/engine-client/src/index.ts"],
+      "@dapei/desktop-services": ["../../packages/services/src/index.ts"],
+      "@dapei/desktop-agent": ["../../packages/agent/src/index.ts"],
+      "@dapei/desktop-git": ["../../packages/git/src/index.ts"],
+      "@dapei/desktop-knowledge": ["../../packages/knowledge/src/index.ts"],
+      "@dapei/desktop-plugins": ["../../packages/plugins/src/index.ts"],
+      "@dapei/desktop-plugin-sdk": ["../../packages/plugin-sdk/src/index.ts"],
+      "@dapei/desktop-ui": ["../../packages/ui/src/index.ts"]
+    },
+    "types": ["node"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "electron.vite.config.ts"
+  ]
+}

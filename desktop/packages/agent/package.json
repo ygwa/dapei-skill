@@ -1,0 +1,22 @@
+{
+  "name": "@dapei/desktop-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent-Share — ACP Client、Session、Backend 注册",
+  "exports": {
+    ".": "./src/index.ts",
+    "./backends": "./src/backends/index.ts",
+    "./acp": "./src/acp/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@dapei/desktop-contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "typescript": "^6.0.3"
+  }
+}
