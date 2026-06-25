@@ -18,7 +18,8 @@
     "test:dimension": "node --test apps/electron/src/main/workspace/__tests__/m15-dimension.test.mjs",
     "test:agent": "node --experimental-strip-types --test apps/electron/src/main/agent/__tests__/mock-backend.test.ts",
     "test:plugins": "node --experimental-strip-types --test apps/electron/src/main/plugins/__tests__/plugin-host.test.ts",
-    "test": "pnpm test:contract && pnpm test:ipc && pnpm test:registry && pnpm test:integration && pnpm test:dimension && pnpm test:agent && pnpm test:plugins && pnpm check:dimension-rules"
+    "test:router": "node --experimental-strip-types --test apps/electron/src/main/ipc/__tests__/router-pass-through.test.ts",
+    "test": "pnpm test:contract && pnpm test:ipc && pnpm test:registry && pnpm test:integration && pnpm test:dimension && pnpm test:agent && pnpm test:plugins && pnpm test:router && pnpm check:dimension-rules"
   },
   "engines": {
     "node": ">=22.6.0"

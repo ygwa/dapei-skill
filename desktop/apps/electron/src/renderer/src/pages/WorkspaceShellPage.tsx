@@ -22,12 +22,13 @@ const NAV_LABELS: Record<WorkspaceNavId, string> = {
   settings: "Workspace 设置"
 };
 
-function navFromPath(pathname: string): WorkspaceNavId {
-  if (pathname.includes("/features")) return "features";
-  if (pathname.includes("/knowledge")) return "knowledge";
-  if (pathname.includes("/architecture")) return "architecture";
-  if (pathname.includes("/repos")) return "repos";
-  if (pathname.includes("/settings")) return "settings";
+function navFromPath(pathname: string | undefined): WorkspaceNavId {
+  const p = pathname ?? "";
+  if (p.includes("/features")) return "features";
+  if (p.includes("/knowledge")) return "knowledge";
+  if (p.includes("/architecture")) return "architecture";
+  if (p.includes("/repos")) return "repos";
+  if (p.includes("/settings")) return "settings";
   return "overview";
 }
 
