@@ -165,11 +165,20 @@ function extractSymbols(rootNode: any, source: string): { symbols: CodeMapSymbol
     // Symbols
     const kind = mapNodeKindToSymbolKind(node.type);
     if (kind) {
+      let name = "";
       const nameNode = node.childForFieldName?.("name");
-      const name =
-        nameNode?.text ||
-        node.namedChildren?.find?.((c: any) => c.type === "identifier" || c.type === "property_identifier" || c.type === "type_identifier")?.text ||
-        "";
+      if (nameNode) {
+        name = nameNode.text;
+      } else if (node.type === "arrow_function" || node.type === "function_expression") {
+        // Anonymous function — name comes from the parent variable_declarator
+        const parent = node.parent;
+        if (parent?.type === "variable_declarator") {
+          const varName = parent.childForFieldName?.("name");
+          if (varName) name = varName.text;
+        }
+      } else {
+        name = node.namedChildren?.find?.((c: any) => c.type === "identifier" || c.type === "property_identifier" || c.type === "type_identifier")?.text || "";
+      }
       if (name) {
         symbols.push({
           kind,

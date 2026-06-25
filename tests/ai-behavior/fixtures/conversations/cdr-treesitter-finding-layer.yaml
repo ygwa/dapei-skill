@@ -1,0 +1,153 @@
+name: cdr-treesitter-finding-layer
+description: |
+  v1.0 (ADR-0006): the engine returns a structured code_map per file
+  (cdr.entries.candidate) instead of inlined raw content. The AI reads
+  the code_map to identify entry candidates, calls the new
+  cdr.entries.expand capability to fetch bounded content for selected
+  symbols, then proposes each entry via cdr.entries.propose with sources[].
+
+  This transcript verifies the new flow:
+  1. Agent calls cdr.entries.candidate to get the structured code_map
+  2. Agent reads code_map.entry_candidates to spot likely entry symbols
+  3. Agent calls cdr.entries.expand with symbol_handle to get bounded content
+  4. Agent decides if the symbol is an entry point (semantic claim)
+  5. Agent calls cdr.entries.propose with method/path (Agent-declared, not engine-generated)
+  6. Engine validates evidence (file exists, line in range) and writes entries
+
+  Contrast with v0.3:
+  - v0.3: candidate returns content[] inline → AI reads raw text
+  - v1.0: candidate returns code_map → AI expands selected symbols via new capability
+  - v0.3: apisurface_hint is engine-generated from CodeGraph route metadata
+  - v1.0: apisurface_hint removed from candidate; Agent declares method/path on propose input
+
+user_input: |
+  @dapei discover entries for sample-app, then propose 2 of them as entry points.
+
+actions:
+  - kind: load_skill
+    skill: cdr
+  - kind: tool_call
+    capability: workspace.init
+    input: {}
+  - kind: tool_call
+    capability: repos.add
+    input:
+      name: sample-app
+      url: "{{fixture_repo_path}}"
+  - kind: tool_call
+    capability: cdr.profile
+    input:
+      repo: sample-app
+  - kind: tool_call
+    capability: cdr.entries.candidate
+    input:
+      repo: sample-app
+  # v1.0: AI reads the code_map response, then expands relevant content.
+  # The sample-node-repo routes files have `const x = Router()` — no
+  # top-level function/class symbols, so expand uses line_range.
+  - kind: tool_call
+    capability: cdr.entries.expand
+    input:
+      repo: sample-app
+      file: src/routes/orders.ts
+      line_range: [1, 13]
+  - kind: tool_call
+    capability: cdr.entries.expand
+    input:
+      repo: sample-app
+      file: src/routes/orderController.ts
+      line_range: [1, 9]
+  - kind: tool_call
+    capability: cdr.entries.propose
+    input:
+      repo: sample-app
+      id: order-create
+      type: api
+      file: src/routes/orders.ts
+      line: 4
+      method: POST
+      path: /orders
+      summary: "POST /orders — create order"
+      sources:
+        - file: src/routes/orders.ts
+          line: 4
+          repo: sample-app
+  - kind: tool_call
+    capability: cdr.entries.propose
+    input:
+      repo: sample-app
+      id: order-cancel
+      type: api
+      file: src/routes/orderController.ts
+      line: 4
+      method: POST
+      path: "/orders/:id/cancel"
+      summary: "POST /orders/:id/cancel — cancel order"
+      sources:
+        - file: src/routes/orderController.ts
+          line: 4
+          repo: sample-app
+  - kind: tool_call
+    capability: cdr.entries.confirm
+    input:
+      repo: sample-app
+      entry_id: order-cancel
+      summary: "POST /orders/:id/cancel — cancel order (P0)"
+      priority: P0
+      sources:
+        - file: src/routes/orderController.ts
+          line: 4
+          repo: sample-app
+  - kind: final_response
+    content: |
+      ## Conclusion
+
+      Discovered 2 entry points in sample-app via the v1.0 tree-sitter
+      finding layer: `order-create` (POST /orders) and `order-cancel`
+      (POST /orders/:id/cancel). The engine returned structured code_map
+      per file; I expanded `orderRouter` and `orderController` via the new
+      `cdr.entries.expand` capability, then proposed both with method/path
+      as Agent-declared fields (the engine never decides route metadata).
+      Both proposals passed evidence validation. `order-cancel` is confirmed.
+
+      ## Risk
+
+      The new flow moves content access from candidate (inline) to expand
+      (per-symbol). This means AI makes N+M capability calls instead of 1
+      for a scan-then-deep-dive cycle. The benefit is bounded context
+      windows and per-symbol evidence; the cost is slightly more chat
+      round-trips. Tree-sitter cold start (~150-300 ms) is paid once per
+      worker.
+
+      ## Needs Confirmation
+
+      - Are these 2 entries the right set to deep-dive, or should I expand
+        more symbols before proposing?
+
+      ## Next Steps
+
+      - [ ] Run `cdr.behavior.upsert` to extract business behavior for `order-cancel`
+      - [ ] Run `cdr.state.derive` for the Order state machine
+      - [ ] Run `cdr.doc.generate` to refresh the VitePress portal
+
+asserts:
+  - kind: capability_called
+    capability: workspace.init
+  - kind: capability_called
+    capability: repos.add
+  - kind: capability_called
+    capability: cdr.profile
+  - kind: capability_called
+    capability: cdr.entries.candidate
+  - kind: capability_called
+    capability: cdr.entries.expand
+  - kind: capability_called
+    capability: cdr.entries.propose
+  - kind: capability_called
+    capability: cdr.entries.confirm
+  - kind: output_sections
+    sections: ["Conclusion", "Risk", "Needs Confirmation", "Next Steps"]
+  - kind: only_path_under
+    path_prefix: docs/as-is/entries/
+    allow:
+      - docs/as-is/entries/sample-app.yaml
