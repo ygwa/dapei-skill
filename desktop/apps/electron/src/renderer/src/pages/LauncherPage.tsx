@@ -13,10 +13,16 @@ interface SetupState {
 export function LauncherPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: recents = [] } = useQuery({
+  const { data: recentsRaw, error: recentsError } = useQuery({
     queryKey: queryKeys.workspace.recents,
     queryFn: () => ensureDesktopApi().workspace.listRecents()
   });
+  // Defensive: the API contract is `RecentWorkspace[]` but a stale
+  // vite cache or a third-party API stub may return a non-array.
+  // We coerce to an array so the render path is type-safe.
+  const recents: Array<{ id: string; name: string; path: string; openedAt: string }> = Array.isArray(recentsRaw)
+    ? recentsRaw
+    : [];
 
   const [setup, setSetup] = useState<SetupState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +84,12 @@ export function LauncherPage() {
           {error && (
             <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
               {error}
+            </div>
+          )}
+
+          {recentsError && !error && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
+              listRecents 失败：{String((recentsError as Error)?.message ?? recentsError)}。试试 Ctrl+R 刷新或重启 vite。
             </div>
           )}
 
