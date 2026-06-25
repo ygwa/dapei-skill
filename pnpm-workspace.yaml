@@ -1,3 +1,14 @@
 packages:
   - 'packages/*'
   - 'engine'
+
+# pnpm 10 only-built-dependencies: per-package allowlist for build scripts.
+# Tree-sitter packages need to run node-gyp-build during install to compile
+# the N-API binding when no matching prebuilt binary is available.
+onlyBuiltDependencies:
+  - tree-sitter
+  - tree-sitter-typescript
+  - tree-sitter-javascript
+  - tree-sitter-python
+  - tree-sitter-java
+  - esbuild

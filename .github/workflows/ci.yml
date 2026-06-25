@@ -3,6 +3,12 @@ name: CI
 on:
   push:
     branches: [main, feature/*]
+    paths:
+      - 'packages/runtime-adapters/src/treesitter/**'
+      - 'packages/runtime-adapters/package.json'
+      - 'tests/fixtures/treesitter/**'
+      - 'tests/unit/treesitter-*.test.mjs'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
 
@@ -85,6 +91,73 @@ jobs:
 
       - name: L4 AI behavior compliance (mock harness)
         run: npm run test:ai-behavior
+
+  treesitter-platform-matrix:
+    name: Tree-sitter native binding — ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x64 (current default)
+          - os: macos-latest
+            label: darwin-arm64 (Apple Silicon)
+          - os: ubuntu-24.04-arm
+            label: linux-arm64 (AWS Graviton)
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # tree-sitter native bindings may need compile-from-source fallback on
+      # some platforms; onlyBuiltDependencies in pnpm-workspace.yaml covers
+      # the known packages.
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Verify tree-sitter grammars load on this platform
+        run: |
+          node --experimental-strip-types --input-type=module -e "
+            import { TreeSitterCodeMapAdapter } from './packages/runtime-adapters/src/treesitter/index.ts';
+            const adapter = new TreeSitterCodeMapAdapter();
+            const doctor = adapter.fullDoctor();
+            console.log('platform:', process.platform, process.arch);
+            console.log('languages:', doctor.languages);
+            if (doctor.languages.length !== 4) {
+              console.error('Expected 4 languages, got', doctor.languages.length);
+              process.exit(1);
+            }
+          "
+
+      - name: Run tree-sitter smoke + decorators + types tests
+        run: |
+          node --experimental-strip-types --test \
+            tests/unit/treesitter-smoke.test.mjs \
+            tests/unit/treesitter-decorators.test.mjs \
+            tests/unit/treesitter-types.test.mjs
+
+      - name: Cold-start budget check (< 500 ms)
+        run: |
+          node --experimental-strip-types --input-type=module -e "
+            import { performance } from 'node:perf_hooks';
+            import { TreeSitterCodeMapAdapter } from './packages/runtime-adapters/src/treesitter/index.ts';
+            const t0 = performance.now();
+            new TreeSitterCodeMapAdapter();
+            const elapsed = performance.now() - t0;
+            console.log('cold start:', elapsed.toFixed(0), 'ms');
+            if (elapsed > 500) {
+              console.error('Cold start exceeded 500 ms budget');
+              process.exit(1);
+            }
+          "
 
   guardrail:
     name: Dapei Guardrail Check
