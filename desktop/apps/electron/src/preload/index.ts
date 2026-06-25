@@ -10,6 +10,19 @@ const api: DesktopApi = {
     pickDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.workspace.pickDirectory),
     init: (parentDir, name) => ipcRenderer.invoke(IPC_CHANNELS.workspace.init, parentDir, name)
   },
+  repos: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.repos.list),
+    add: (name, url) => ipcRenderer.invoke(IPC_CHANNELS.repos.add, { name, url }),
+    sync: (target) => ipcRenderer.invoke(IPC_CHANNELS.repos.sync, { target }),
+    profile: (name) => ipcRenderer.invoke(IPC_CHANNELS.repos.profile, { name })
+  },
+  features: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.feature.list),
+    status: (name) => ipcRenderer.invoke(IPC_CHANNELS.feature.status, { name }),
+    stage: (name) => ipcRenderer.invoke(IPC_CHANNELS.feature.stage, { name }),
+    runStage: (name, stage, confirmed) => ipcRenderer.invoke(IPC_CHANNELS.feature.runStage, { name, stage, confirmed }),
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.feature.create, input)
+  },
   capability: {
     run: (request: CapabilityInvokeRequest) => ipcRenderer.invoke(IPC_CHANNELS.capability.run, request)
   },

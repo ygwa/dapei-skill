@@ -4,6 +4,22 @@ export { IPC_CHANNELS } from "./ipc/channels.ts";
 
 import type { DesktopPushEvent } from "./events/push.ts";
 
+/** Repo summary surfaced to the renderer. */
+export interface RepoSummary {
+  name: string;
+  branch?: string;
+  hash?: string;
+  cloned: boolean;
+}
+
+/** Feature summary surfaced to the renderer. */
+export interface FeatureSummary {
+  name: string;
+  stage: string | null;
+  active: boolean;
+  openedAt: string;
+}
+
 /** Preload 暴露给 renderer 的 API 形状 */
 export interface DesktopApi {
   version: string;
@@ -12,6 +28,19 @@ export interface DesktopApi {
     open: (path: string) => Promise<import("./ipc/workspace.ts").WorkspaceOpenResult>;
     pickDirectory: () => Promise<string | null>;
     init: (parentDir: string, name: string) => Promise<import("./ipc/workspace.ts").WorkspaceOpenResult>;
+  };
+  repos: {
+    list: () => Promise<RepoSummary[]>;
+    add: (name: string, url: string) => Promise<{ ok: boolean; error?: { code: string; message: string } }>;
+    sync: (target: string) => Promise<{ ok: boolean; synced: string[]; error?: { code: string; message: string } }>;
+    profile: (name: string) => Promise<{ ok: boolean; profile?: unknown; error?: { code: string; message: string } }>;
+  };
+  features: {
+    list: () => Promise<FeatureSummary[]>;
+    status: (name: string) => Promise<{ stage: string | null }>;
+    stage: (name: string) => Promise<{ stage: string | null }>;
+    runStage: (name: string, stage: string, confirmed?: boolean) => Promise<{ ok: boolean; error?: { code: string; message: string } }>;
+    create: (input: { name: string; repos: string; objective?: string }) => Promise<{ ok: boolean; feature?: string; error?: { code: string; message: string } }>;
   };
   capability: {
     run: (request: CapabilityInvokeRequest) => Promise<CapabilityInvokeResponse>;

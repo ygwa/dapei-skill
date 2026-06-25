@@ -1,6 +1,5 @@
 import type { DesktopApi } from "@dapei/desktop-contracts";
 
-/** 浏览器直开 Vite dev server 时的 stub（Electron 走 preload） */
 function createDevDesktopApi(): DesktopApi {
   return {
     version: "0.1.0-dev",
@@ -10,7 +9,7 @@ function createDevDesktopApi(): DesktopApi {
         ok: true,
         path,
         name: path.split(/[/\\]/).pop() ?? path,
-        validation: { status: "valid", errors: [], warnings: [] }
+        validation: { status: "warn", errors: [], warnings: ["dev stub"] }
       }),
       pickDirectory: async () => null,
       init: async (parentDir, name) => {
@@ -19,9 +18,22 @@ function createDevDesktopApi(): DesktopApi {
           ok: true,
           path,
           name,
-          validation: { status: "valid", errors: [], warnings: [] }
+          validation: { status: "warn", errors: [], warnings: ["dev stub"] }
         };
       }
+    },
+    repos: {
+      list: async () => [],
+      add: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } }),
+      sync: async () => ({ ok: false, synced: [], error: { code: "DEV_STUB", message: "dev stub" } }),
+      profile: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } })
+    },
+    features: {
+      list: async () => [],
+      status: async () => ({ stage: null }),
+      stage: async () => ({ stage: null }),
+      runStage: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } }),
+      create: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } })
     },
     capability: {
       run: async (request) => ({

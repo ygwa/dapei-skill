@@ -2,6 +2,7 @@ import { ipcMain } from "electron";
 import type { CapabilityInvokeRequest } from "@dapei/desktop-contracts";
 import { IPC_CHANNELS } from "@dapei/desktop-contracts";
 import type { EngineClient, WorkspaceContext } from "@dapei/desktop-engine-client";
+import type { DesktopServices } from "@dapei/desktop-services";
 import { registerHandler, installIpcRouter, setRouterEngineAndContext } from "./router.ts";
 import { registerWorkspaceHandlers } from "./workspace-handlers.ts";
 import { registerReposHandlers } from "./repos-handlers.ts";
@@ -11,12 +12,13 @@ import { broadcastPush } from "../push/broadcast.ts";
 export function registerIpcHandlers(
   engine: EngineClient,
   getContext: () => WorkspaceContext,
-  setContext: (ctx: WorkspaceContext) => void
+  setContext: (ctx: WorkspaceContext) => void,
+  services: DesktopServices
 ): void {
   setRouterEngineAndContext(engine, getContext);
   registerWorkspaceHandlers(setContext, getContext);
-  registerReposHandlers();
-  registerFeatureHandlers();
+  registerReposHandlers(services);
+  registerFeatureHandlers(services);
 
   registerHandler(IPC_CHANNELS.capability.run, async (rawInput, ctx) => {
     const input = rawInput as CapabilityInvokeRequest;

@@ -1,9 +1,5 @@
-import type { EngineClient } from "@dapei/desktop-engine-client";
-import {
-  createWorkspaceService,
-  type WorkspaceService,
-  type WorkspaceContext
-} from "./workspace/index.ts";
+import type { EngineClient, WorkspaceContext } from "@dapei/desktop-engine-client";
+import { createWorkspaceService, type WorkspaceService } from "./workspace/index.ts";
 import { createReposService, type ReposService } from "./repos/index.ts";
 import { createFeatureService, type FeatureService } from "./feature/index.ts";
 import { createKnowledgeService, type KnowledgeService } from "./knowledge/index.ts";
@@ -31,7 +27,6 @@ export function createDesktopServices(engine: EngineClient, context: WorkspaceCo
 }
 
 export * from "./workspace/index.ts";
-export type { WorkspaceContext } from "./workspace/index.ts";
 export * from "./repos/index.ts";
 export * from "./feature/index.ts";
 export * from "./knowledge/index.ts";

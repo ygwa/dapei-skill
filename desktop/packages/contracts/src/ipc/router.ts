@@ -20,10 +20,36 @@ export const workspaceValidateRequestSchema = z.object({}).strict();
 // ---- repos.* ----
 
 export const reposListRequestSchema = z.object({}).strict();
+export const reposAddRequestSchema = z.object({
+  name: z.string().min(1).regex(/^[a-z0-9][a-z0-9_-]{0,62}$/),
+  url: z.string().min(1)
+}).strict();
+export const reposSyncRequestSchema = z.object({
+  target: z.string().min(1)
+}).strict();
+export const reposProfileRequestSchema = z.object({
+  name: z.string().min(1)
+}).strict();
 
 // ---- feature.* ----
 
 export const featureListRequestSchema = z.object({}).strict();
+export const featureCreateRequestSchema = z.object({
+  name: z.string().min(1).regex(/^[a-z0-9][a-z0-9-]{0,62}$/),
+  repos: z.string().min(1),
+  objective: z.string().optional()
+}).strict();
+export const featureStatusRequestSchema = z.object({
+  name: z.string().min(1)
+}).strict();
+export const featureStageRequestSchema = z.object({
+  name: z.string().min(1)
+}).strict();
+export const featureRunStageRequestSchema = z.object({
+  name: z.string().min(1),
+  stage: z.string().min(1),
+  confirmed: z.boolean().optional()
+}).strict();
 
 /** Channel → request schema lookup. The router uses this to validate
  * the payload before invoking the handler. */
@@ -35,7 +61,14 @@ export const REQUEST_SCHEMAS = {
   [IPC_CHANNELS.workspace.status]: workspaceStatusRequestSchema,
   [IPC_CHANNELS.workspace.validate]: workspaceValidateRequestSchema,
   [IPC_CHANNELS.repos.list]: reposListRequestSchema,
-  [IPC_CHANNELS.feature.list]: featureListRequestSchema
+  [IPC_CHANNELS.repos.add]: reposAddRequestSchema,
+  [IPC_CHANNELS.repos.sync]: reposSyncRequestSchema,
+  [IPC_CHANNELS.repos.profile]: reposProfileRequestSchema,
+  [IPC_CHANNELS.feature.list]: featureListRequestSchema,
+  [IPC_CHANNELS.feature.create]: featureCreateRequestSchema,
+  [IPC_CHANNELS.feature.status]: featureStatusRequestSchema,
+  [IPC_CHANNELS.feature.stage]: featureStageRequestSchema,
+  [IPC_CHANNELS.feature.runStage]: featureRunStageRequestSchema
 } as const;
 
 export type ChannelWithSchema = keyof typeof REQUEST_SCHEMAS;

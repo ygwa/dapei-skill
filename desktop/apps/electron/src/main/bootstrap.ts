@@ -2,6 +2,7 @@ import type { BrowserWindow } from "electron";
 import type { EngineClient, WorkspaceContext } from "@dapei/desktop-engine-client";
 import { createAgentHostStub } from "@dapei/desktop-agent";
 import { createPluginHostStub } from "@dapei/desktop-plugins";
+import { createDesktopServices, type DesktopServices } from "@dapei/desktop-services";
 import { registerIpcHandlers } from "./ipc/register-handlers.ts";
 import { startPluginUtilityHost } from "./plugins/utility-host.ts";
 import { wireAgentPush } from "./wire-agent-push.ts";
@@ -11,12 +12,7 @@ export interface AppContext {
   agent: ReturnType<typeof createAgentHostStub>;
   plugins: ReturnType<typeof createPluginHostStub>;
   engine: EngineClient;
-  /**
-   * The current WorkspaceContext held by the main process. M1-1 wired
-   * this in; handlers reach for it through `getContext()` rather than
-   * reading from process.env (which would race and which is forbidden
-   * by ADR-0009).
-   */
+  services: DesktopServices;
   currentContext: WorkspaceContext;
   setContext: (ctx: WorkspaceContext) => void;
 }
@@ -37,8 +33,11 @@ export function bootstrapApp(_mainWindow: BrowserWindow, initialContext: Workspa
   const setContext = (next: WorkspaceContext): void => {
     currentContext = next;
   };
+  const getContext = (): WorkspaceContext => currentContext;
 
-  registerIpcHandlers(engine, () => currentContext, setContext);
+  const services = createDesktopServices(engine, currentContext);
+
+  registerIpcHandlers(engine, getContext, setContext, services);
   void plugins.init();
   startPluginUtilityHost();
   wireAgentPush(agent);
@@ -46,5 +45,5 @@ export function bootstrapApp(_mainWindow: BrowserWindow, initialContext: Workspa
   console.info(
     `[dapei-desktop] bootstrap complete (workspace=${currentContext.workspaceRoot}, dimension=${currentContext.dimension})`
   );
-  return { agent, plugins, engine, currentContext, setContext };
+  return { agent, plugins, engine, services, currentContext, setContext };
 }
