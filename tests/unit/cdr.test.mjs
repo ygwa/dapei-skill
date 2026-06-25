@@ -85,12 +85,15 @@ test('cdr.profile: rejects missing repo on disk', async () => {
 // 2. cdr.entries.candidate (NEW v0.3 — file list, no pattern matching)
 // ---------------------------------------------------------------------------
 
-test('cdr.entries.candidate: returns all code files in repo with content slices', async () => {
+test('cdr.entries.candidate: returns all code files in repo with structured code_map', async () => {
+  // v1.0 (ADR-0006): candidate returns code_map per file (imports / symbols /
+  // line ranges). Content is NOT inlined — AI requests it via cdr.entries.expand.
   const tmp = await workspaceWithSampleRepo();
   try {
     const { result } = await core.runCapability('cdr.entries.candidate', { repo: 'sample-app' }, ctx(tmp));
     assert.equal(result.ok, true);
     assert.ok(result.data.file_count >= 5, 'sample-node-repo has >= 5 ts files');
+    assert.equal(result.data.backend, 'tree-sitter');
 
     const files = result.data.files;
     const relpaths = files.map((f) => f.relpath).sort();
@@ -98,11 +101,13 @@ test('cdr.entries.candidate: returns all code files in repo with content slices'
     assert.ok(relpaths.includes('src/routes/orderController.ts'));
     assert.ok(relpaths.includes('src/services/orderService.ts'));
 
-    // Each file entry must have content slice + language hint
+    // v1.0: each file carries code_map (no content field)
     const orders = files.find((f) => f.relpath === 'src/routes/orders.ts');
-    assert.ok(orders.content.length > 0, 'content must be inlined');
+    assert.ok(orders.code_map, 'code_map must be present');
     assert.equal(orders.language, 'typescript');
-    assert.equal(orders.truncated, false);
+    assert.ok(['clean', 'partial', 'unsupported', 'oversized'].includes(orders.parse_status));
+    assert.ok(Array.isArray(orders.code_map.symbols), 'code_map.symbols is an array');
+    assert.ok(Array.isArray(orders.code_map.imports), 'code_map.imports is an array');
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

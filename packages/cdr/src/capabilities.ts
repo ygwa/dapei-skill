@@ -23,6 +23,7 @@ import { parseYamlDocument, stringifyYamlDocument, type YamlValue } from "../../
 import { requireFields, detectRepoLanguage, detectTestCommands, parseReposYamlNames, featureRepoNames } from "../../core/src/capabilities/shared.ts";
 import { ensureDir, read, write, runSafe, workspacePaths, listFilesRecursively, safeJoinWithin, atomicWrite } from "../../runtime-adapters/src/system.ts";
 import { CodeGraphAdapter } from "../../runtime-adapters/src/codegraph.ts";
+import { TreeSitterCodeMapAdapter, type CodeMapSymbol } from "../../runtime-adapters/src/treesitter/index.ts";
 import { applyProvenance, provenanceFromContext } from "../../core/src/provenance.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
@@ -228,6 +229,34 @@ export const cdrProfile: AnyCap = {
     const directoryTree = repoDirectoryTree(repoPath, p.rootDir);
     const testCommands = detectTestCommands(repoPath);
 
+    // v1.0 (ADR-0006) — tree-sitter is the built-in default finding layer.
+    // Always present; records how many files parsed cleanly, partially,
+    // were unsupported, or oversized. Parallel to the codegraph block —
+    // both are substrate metadata, never framework claims.
+    const tsAdapter = new TreeSitterCodeMapAdapter();
+    let tsFilesParsed = 0;
+    let tsFilesPartial = 0;
+    let tsFilesUnsupported = 0;
+    let tsFilesOversized = 0;
+    try {
+      for (const cm of tsAdapter.parseDirectory(repoPath, { maxFiles: MAX_FILES_PER_CANDIDATE })) {
+        if (cm.parse_status === "clean") tsFilesParsed++;
+        else if (cm.parse_status === "partial") tsFilesPartial++;
+        else if (cm.parse_status === "unsupported") tsFilesUnsupported++;
+        else if (cm.parse_status === "oversized") tsFilesOversized++;
+      }
+    } catch {
+      // tree-sitter init failure should never block a profile write
+    }
+    const treesitterBlock: Record<string, YamlValue> = {
+      backend: "native",
+      languages: ["typescript", "javascript", "python", "java"],
+      files_parsed: tsFilesParsed,
+      files_partial: tsFilesPartial,
+      files_unsupported: tsFilesUnsupported,
+      files_oversized: tsFilesOversized
+    };
+
     // v0.7 — CodeGraph integration. The profile records what the substrate
     // actually inspected so downstream consumers (build-cognitive-pages.ts,
     // the agent itself) can tell whether the graph was used. When the CLI
@@ -259,6 +288,7 @@ export const cdrProfile: AnyCap = {
       manifest_files: manifestFiles,
       directory_tree: directoryTree,
       test_commands: testCommands,
+      tree_sitter: treesitterBlock as YamlValue,
       codegraph: codegraphBlock as YamlValue
     }, provenanceFromContext(ctx, "create"));
 
@@ -275,6 +305,7 @@ export const cdrProfile: AnyCap = {
         language,
         manifest_files: manifestFiles,
         test_commands: testCommands,
+        tree_sitter: treesitterBlock,
         codegraph: codegraphBlock
       },
       sideEffects: [`profile written: ${relative(p.rootDir, outFile)}`],
@@ -296,13 +327,12 @@ export const cdrProfile: AnyCap = {
 
 export const cdrEntriesCandidate: AnyCap = {
   id: "cdr.entries.candidate",
-  version: "1.0.0",
+  version: "2.0.0",
   inputSchema: {
     required: ["repo"],
     properties: {
       repo: { type: "string", minLength: 1 },
-      max_files: { type: "number" },
-      max_bytes: { type: "number" }
+      max_files: { type: "number" }
     },
     additionalProperties: false
   },
@@ -319,66 +349,79 @@ export const cdrEntriesCandidate: AnyCap = {
     const maxFiles = typeof input.max_files === "number" && input.max_files > 0
       ? Math.min(input.max_files, 1000)
       : MAX_FILES_PER_CANDIDATE;
-    const maxBytes = typeof input.max_bytes === "number" && input.max_bytes > 0
-      ? Math.min(input.max_bytes, 2_000_000)
-      : MAX_FILE_BYTES;
 
-    // v0.7 — prefer CodeGraph when present. The adapter returns a richer
-    // structure (each file carries `apisurface_hint` when the CLI tagged it)
-    // and reports `backend: 'native'`. When the CLI is missing the adapter
-    // returns `available: false` and we fall back to the v0.3 tree walk
-    // with `backend: 'fallback'`. Existing callers see the same `files[]`
-    // shape; new callers branch on `data.backend` to use richer output.
-    const adapter = new CodeGraphAdapter(ctx.rootDir);
-    const orient = adapter.orient(repoPath, { maxFiles, maxBytes });
-    let backend: "native" | "fallback" = "fallback";
+    // v1.0 (ADR-0006) — tree-sitter is the default finding layer.
+    // Each file returns a structured code_map (imports / classes / functions /
+    // methods / decorators / line ranges). Content is NOT inlined; Agent
+    // requests it via the new cdr.entries.expand capability.
+    //
+    // CodeGraph remains the optional graph finding layer. When present its
+    // apisurface_hint route metadata is merged into code_map.entry_candidates[].decorators
+    // as raw capture — engine never makes a "this is a route" claim.
+    //
+    // backend values: 'tree-sitter' (default) or 'tree-sitter+codegraph' (augmented).
+    // There is no 'fallback' value — tree-sitter always runs on Node ≥ 22.
+    const tsAdapter = new TreeSitterCodeMapAdapter();
+    const tsFiles = tsAdapter.parseDirectory(repoPath, { maxFiles });
+
+    let backend: "tree-sitter" | "tree-sitter+codegraph" = "tree-sitter";
     let backendReason: string | undefined;
-    if (!orient.available) {
-      backendReason = orient.reason || adapter.getDoctor().reason || "codegraph CLI not available";
+
+    try {
+      const cgAdapter = new CodeGraphAdapter(ctx.rootDir);
+      if (cgAdapter.isAvailable()) {
+        const orient = cgAdapter.orient(repoPath, { maxFiles, maxBytes: 200_000 });
+        if (orient.available) {
+          backend = "tree-sitter+codegraph";
+          const routeDecoratorsByFile = new Map<string, string[]>();
+          for (const f of orient.files) {
+            if (f.apisurface_hint?.method || f.apisurface_hint?.path) {
+              const decs: string[] = [];
+              if (f.apisurface_hint.method) decs.push(`route:${f.apisurface_hint.method}`);
+              if (f.apisurface_hint.path) decs.push(`path:${f.apisurface_hint.path}`);
+              routeDecoratorsByFile.set(f.relpath, decs);
+            }
+          }
+          for (const cm of tsFiles) {
+            const extra = routeDecoratorsByFile.get(cm.relpath);
+            if (extra && extra.length > 0 && cm.entry_candidates) {
+              for (const ec of cm.entry_candidates) {
+                for (const d of extra) {
+                  if (!ec.decorators.includes(d)) ec.decorators.push(d);
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      backendReason = `codegraph augmentation skipped: ${e?.message ?? String(e)}`;
     }
-    let fileEntries: Array<Record<string, YamlValue>>;
+
+    const fileEntries: Array<Record<string, YamlValue>> = [];
     const skipped: Array<{ relpath: string; reason: string }> = [];
 
-    if (orient.available && orient.files.length > 0) {
-      backend = "native";
-      fileEntries = orient.files.map((f) => {
-        const entry: Record<string, YamlValue> = {
-          relpath: f.relpath,
-          language: f.language,
-          size_bytes: f.size_bytes,
-          truncated: f.truncated,
-          content: f.content
-        };
-        if (f.apisurface_hint) entry.apisurface_hint = f.apisurface_hint as unknown as YamlValue;
-        return entry;
-      });
-    } else {
-      const allFiles = listFilesRecursively(repoPath, CODE_EXTS, maxFiles);
-      fileEntries = [];
-      for (const filePath of allFiles) {
-        const relFile = relative(repoPath, filePath);
-        let content = "";
-        let truncated = false;
-        try {
-          const raw = read(filePath);
-          if (raw.length > maxBytes) {
-            content = raw.slice(0, maxBytes);
-            truncated = true;
-            skipped.push({ relpath: relFile, reason: `exceeds ${maxBytes} bytes` });
-          } else {
-            content = raw;
-          }
-        } catch {
-          skipped.push({ relpath: relFile, reason: "unreadable" });
-          continue;
-        }
-        fileEntries.push({
-          relpath: relFile,
-          language: languageHintForFile(relFile),
-          size_bytes: content.length,
-          truncated,
-          content
-        });
+    for (const cm of tsFiles) {
+      const entry: Record<string, YamlValue> = {
+        relpath: cm.relpath,
+        language: cm.language,
+        size_bytes: cm.symbols.length + cm.imports.length,
+        parse_status: cm.parse_status,
+        code_map: {
+          parse_status: cm.parse_status,
+          symbols: cm.symbols as unknown as YamlValue,
+          imports: cm.imports as unknown as YamlValue
+        } as unknown as YamlValue
+      };
+      if (cm.entry_candidates) {
+        (entry.code_map as Record<string, YamlValue>).entry_candidates = cm.entry_candidates as unknown as YamlValue;
+      }
+      if (cm.parse_diagnostic) entry.parse_diagnostic = cm.parse_diagnostic;
+      fileEntries.push(entry);
+      if (cm.parse_status === "oversized") {
+        skipped.push({ relpath: cm.relpath, reason: "oversized" });
+      } else if (cm.parse_status === "unsupported") {
+        skipped.push({ relpath: cm.relpath, reason: "unsupported extension" });
       }
     }
 
@@ -391,16 +434,18 @@ export const cdrEntriesCandidate: AnyCap = {
         file_count: fileEntries.length,
         files: fileEntries as unknown as YamlValue,
         skipped: skipped as unknown as YamlValue,
-        max_bytes: maxBytes,
         workflow: {
           step: 1,
           phase: "candidate",
-          goal: "AI reads file content and decides which files are entry points",
-          next: "For each entry point: runCapability('cdr.entries.propose', {id, file, line, type, sources: [...]})"
+          goal: "AI reads code_map and identifies entry points via cdr.entries.expand",
+          next: "For each candidate symbol: runCapability('cdr.entries.expand', {repo, file, symbol_handle}) to get bounded content; then runCapability('cdr.entries.propose', {id, file, line, type, sources: [...]})"
         }
       },
       sideEffects: [],
-      reportFragments: [`listed ${fileEntries.length} code file(s) in ${repo} for AI triage (backend=${backend})`]
+      reportFragments: [
+        `listed ${fileEntries.length} code file(s) in ${repo} with structured code_map`,
+        `backend: ${backend}`
+      ]
     };
   }
 };
@@ -567,6 +612,135 @@ export const cdrEntriesPrepare: AnyCap = {
       },
       sideEffects: candResult.sideEffects,
       reportFragments: candResult.reportFragments
+    };
+  }
+};
+
+// ---------------------------------------------------------------------------
+// 4.5. cdr.entries.expand — bounded content access by symbol_handle or line_range
+//
+// v1.0 (ADR-0006): the candidate response no longer inlines raw content.
+// Instead, AI calls this capability to fetch a specific symbol's body or
+// an arbitrary line range. Evidence validation applies: file must exist
+// under repos/<repo>/<file>; line_range bounds must be in range;
+// symbol_handle must resolve to exactly one symbol in the file's code_map.
+// ---------------------------------------------------------------------------
+
+export const cdrEntriesExpand: AnyCap = {
+  id: "cdr.entries.expand",
+  version: "1.0.0",
+  inputSchema: {
+    required: ["repo", "file"],
+    properties: {
+      repo: { type: "string", minLength: 1 },
+      file: { type: "string", minLength: 1 },
+      line_range: {
+        type: "array",
+        items: { type: "number" },
+        minItems: 2,
+        maxItems: 2
+      },
+      symbol_handle: { type: "string", minLength: 1 }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    requireFields(input, ["repo", "file"]);
+    const repo = String(input.repo);
+    const file = String(input.file);
+    const p = workspacePaths(ctx.rootDir);
+    const repoPath = join(p.reposDir, repo);
+    const absFile = join(repoPath, file);
+
+    if (!existsSync(repoPath)) {
+      throw new CapabilityError("REPO_MISSING", `repos/${repo} not found`);
+    }
+    if (!existsSync(absFile)) {
+      throw new CapabilityError("FILE_MISSING", `repos/${repo}/${file} not found`);
+    }
+
+    const hasLineRange = Array.isArray(input.line_range) && input.line_range.length === 2;
+    const hasSymbolHandle = typeof input.symbol_handle === "string" && input.symbol_handle.length > 0;
+
+    if (hasLineRange && hasSymbolHandle) {
+      throw new CapabilityError(
+        "INVALID_INPUT",
+        "Provide either line_range or symbol_handle, not both"
+      );
+    }
+    if (!hasLineRange && !hasSymbolHandle) {
+      throw new CapabilityError(
+        "INVALID_INPUT",
+        "Provide either line_range or symbol_handle"
+      );
+    }
+
+    let startLine: number;
+    let endLine: number;
+
+    if (hasLineRange) {
+      const [s, e] = input.line_range as [number, number];
+      if (!Number.isInteger(s) || !Number.isInteger(e)) {
+        throw new CapabilityError("INVALID_INPUT", "line_range values must be integers");
+      }
+      if (s < 1) {
+        throw new CapabilityError("INVALID_INPUT", "line_range start must be ≥ 1");
+      }
+      if (e < s) {
+        throw new CapabilityError("INVALID_INPUT", "line_range end must be ≥ start");
+      }
+      startLine = s;
+      endLine = e;
+    } else {
+      const tsAdapter = new TreeSitterCodeMapAdapter();
+      const cm = tsAdapter.parseFile(repoPath, file);
+      const handle = String(input.symbol_handle);
+      const matches = cm.symbols.filter((s: CodeMapSymbol) => {
+        if (s.name === handle) return true;
+        const qualified = s.parent ? `${s.parent}#${s.name}` : s.name;
+        return qualified === handle;
+      });
+      if (matches.length === 0) {
+        throw new CapabilityError(
+          "NOT_FOUND",
+          `symbol_handle '${handle}' not found in code_map of ${file}`
+        );
+      }
+      if (matches.length > 1) {
+        throw new CapabilityError(
+          "AMBIGUOUS",
+          `symbol_handle '${handle}' resolved to ${matches.length} symbols; provide a more specific handle (e.g. ClassName#methodName)`
+        );
+      }
+      startLine = matches[0].start_line;
+      endLine = matches[0].end_line;
+    }
+
+    const source = read(absFile);
+    const lines = source.split("\n");
+    const fileLineCount = lines.length;
+    if (endLine > fileLineCount) {
+      throw new CapabilityError(
+        "INVALID_INPUT",
+        `line_range end ${endLine} exceeds file line count ${fileLineCount}`
+      );
+    }
+
+    const content = lines.slice(startLine - 1, endLine).join("\n");
+    const truncated = endLine < fileLineCount;
+
+    return {
+      ok: true,
+      data: {
+        repo,
+        file,
+        content,
+        truncated,
+        line_count: fileLineCount,
+        range: { start: startLine, end: endLine }
+      },
+      sideEffects: [],
+      reportFragments: [`expanded ${file}:${startLine}-${endLine}`]
     };
   }
 };
