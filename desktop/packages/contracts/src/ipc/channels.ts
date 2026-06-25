@@ -9,16 +9,20 @@ export const IPC_CHANNELS = {
     open: "dapei:workspace:open",
     pickDirectory: "dapei:workspace:pickDirectory",
     init: "dapei:workspace:init",
-    status: "dapei:workspace:status"
+    status: "dapei:workspace:status",
+    validate: "dapei:workspace:validate"
   },
   repos: {
     list: "dapei:repos:list",
     add: "dapei:repos:add",
-    sync: "dapei:repos:sync"
+    sync: "dapei:repos:sync",
+    profile: "dapei:repos:profile"
   },
   feature: {
     create: "dapei:feature:create",
+    list: "dapei:feature:list",
     status: "dapei:feature:status",
+    stage: "dapei:feature:stage",
     close: "dapei:feature:close"
   },
   knowledge: {
