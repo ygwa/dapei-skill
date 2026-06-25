@@ -1,6 +1,6 @@
 {
   "name": "@dapei/desktop-ui",
-  "version": "0.1.0",
+  "version": "0.2.0-canary.0",
   "private": true,
   "type": "module",
   "description": "共享 React 组件（Tailwind + shadcn 基础）",

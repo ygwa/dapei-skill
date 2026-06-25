@@ -1,6 +1,6 @@
 {
   "name": "@dapei/desktop-app",
-  "version": "0.1.0",
+  "version": "0.2.0-canary.0",
   "private": true,
   "description": "大培 Electron 应用壳",
   "type": "module",

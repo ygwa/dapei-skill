@@ -141,6 +141,57 @@ Match the language and detail level of the existing release entries.
 
 ### Removed
 
+## Desktop (M1) — 2026-06-26
+
+The dapei desktop end-to-end is live on `feature/desktop-m1-m2`
+(13 commits, 7720+3612 lines). Per ADR-0007 the desktop carries
+its own canary version (`@dapei/desktop-app@0.2.0-canary.0`,
+all 9 desktop packages aligned). No npm publish yet — repo-internal
+dev only.
+
+### Added
+
+- **M0 scaffold**: pnpm workspace with 9 desktop-* packages
+  + 1 Electron app. electron-vite 3, React 19, TanStack Query 5,
+  Zustand 5, Tailwind 4, React Router 7.
+- **M1-1 EngineClient contract** (ADR-0008, ADR-0009, ADR-0010):
+  `run(req, ctx)` is the only public method. WorkspaceContext
+  is injected via spawn-env only; the parent `process.env` is
+  never mutated. The dimension rule fires inside
+  `SubprocessEngineClient.run` against a 32-regex blocklist +
+  6-prefix feature allowlist; a self-check script scans
+  `packages/core/src/capabilities/` and asserts every
+  workspace-dim write is in the blocklist.
+- **M1-2 IPC router**: per-namespace handlers (workspace /
+  repos / feature / agent). Zod request schema per channel;
+  INVALID_PAYLOAD on parse fail; broadcast push on success.
+- **M1-3 P0 launcher real**: `~/.dapei/desktop/recent.json`
+  registry, native `dialog.showOpenDialog`, real
+  `workspace.{init,validate,open}` capability calls, AppContext
+  switches on success.
+- **M1-4 P1/P2/P4 read-aggregate pages**: real engine calls
+  for `workspace.status` / `repos.list` / `repos.add` /
+  `repos.sync` / `feature.list` / `feature.create`. Mock data
+  is gone from these surfaces.
+- **M1-5 P5 workbench**: real feature.yaml + context + backlog
+  reads; StageStepper from `feature.status`; confirmation
+  gate before `workflow.runStage`; entering P5 auto-switches
+  the AppContext dimension to `feature`.
+- **M1-6 Agent-Share v1** (ADR-0011): ACP stdio JSON-RPC
+  transport, two backends (MockAgentBackend for CI + dev,
+  OpenCodeAgentBackend for real `opencode acp` spawn). 7-type
+  AgentEvent union; 6 IPC channels. PTY bridge is permanently
+  deprecated.
+- **5 ADRs** (0007-0011) under `docs/decisions/`.
+- **48 node:test cases**: contract (19) + IPC (11) + registry
+  (7) + integration (3) + dimension (2) + agent (6).
+
+### Fixed
+
+- Electron macOS Framework extraction (the `ensure-electron`
+  helper script, originally a M0 contribution, is now part
+  of the documented postinstall flow).
+
 ## [3.2.0] - 2026-06-16
 
 
