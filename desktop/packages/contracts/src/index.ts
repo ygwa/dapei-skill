@@ -44,6 +44,13 @@ export interface DesktopApi {
     tasks: (name: string) => Promise<{ ok: boolean; text?: string; error?: { code: string; message: string } }>;
     create: (input: { name: string; repos: string; objective?: string }) => Promise<{ ok: boolean; feature?: string; error?: { code: string; message: string } }>;
   };
+  agent: {
+    list: () => Promise<Array<{ id: string; cwd: string; feature?: string }>>;
+    listBackends: () => Promise<Array<{ id: string; label: string; installed: boolean; path?: string }>>;
+    attach: (input: { backendId: string; cwd: string; feature?: string }) => Promise<{ ok: boolean; sessionId?: string; backendId?: string; error?: { code: string; message: string } }>;
+    detach: (sessionId: string) => Promise<{ ok: boolean; error?: { code: string; message: string } }>;
+    send: (sessionId: string, text: string) => Promise<{ ok: boolean; error?: { code: string; message: string } }>;
+  };
   capability: {
     run: (request: CapabilityInvokeRequest) => Promise<CapabilityInvokeResponse>;
   };

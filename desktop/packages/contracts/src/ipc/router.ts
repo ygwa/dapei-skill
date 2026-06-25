@@ -60,6 +60,27 @@ export const featureTasksRequestSchema = z.object({
   content: z.string().optional()
 }).strict();
 
+// ---- agent.* ----
+
+export const agentListRequestSchema = z.object({}).strict();
+export const agentAttachRequestSchema = z.object({
+  backendId: z.string().min(1),
+  cwd: z.string().min(1),
+  feature: z.string().min(1).optional()
+}).strict();
+export const agentDetachRequestSchema = z.object({
+  sessionId: z.string().min(1)
+}).strict();
+export const agentSendRequestSchema = z.object({
+  sessionId: z.string().min(1),
+  text: z.string().min(1)
+}).strict();
+export const agentInjectContextRequestSchema = z.object({
+  sessionId: z.string().min(1),
+  context: z.record(z.string(), z.unknown())
+}).strict();
+export const agentListBackendsRequestSchema = z.object({}).strict();
+
 /** Channel → request schema lookup. The router uses this to validate
  * the payload before invoking the handler. */
 export const REQUEST_SCHEMAS = {
@@ -79,7 +100,13 @@ export const REQUEST_SCHEMAS = {
   [IPC_CHANNELS.feature.stage]: featureStageRequestSchema,
   [IPC_CHANNELS.feature.runStage]: featureRunStageRequestSchema,
   [IPC_CHANNELS.feature.context]: featureContextRequestSchema,
-  [IPC_CHANNELS.feature.tasks]: featureTasksRequestSchema
+  [IPC_CHANNELS.feature.tasks]: featureTasksRequestSchema,
+  [IPC_CHANNELS.agent.list]: agentListRequestSchema,
+  [IPC_CHANNELS.agent.attach]: agentAttachRequestSchema,
+  [IPC_CHANNELS.agent.detach]: agentDetachRequestSchema,
+  [IPC_CHANNELS.agent.send]: agentSendRequestSchema,
+  [IPC_CHANNELS.agent.injectContext]: agentInjectContextRequestSchema,
+  [IPC_CHANNELS.agent.listBackends]: agentListBackendsRequestSchema
 } as const;
 
 export type ChannelWithSchema = keyof typeof REQUEST_SCHEMAS;

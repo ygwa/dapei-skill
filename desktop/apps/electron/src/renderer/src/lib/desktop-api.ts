@@ -37,6 +37,16 @@ function createDevDesktopApi(): DesktopApi {
       tasks: async () => ({ ok: true, text: "" }),
       create: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } })
     },
+    agent: {
+      list: async () => [],
+      listBackends: async () => [
+        { id: "mock", label: "Mock Agent (CI / dev)", installed: true },
+        { id: "opencode", label: "OpenCode (ACP)", installed: false }
+      ],
+      attach: async () => ({ ok: true, sessionId: "dev-stub-session", backendId: "mock" }),
+      detach: async () => ({ ok: true }),
+      send: async () => ({ ok: true })
+    },
     capability: {
       run: async (request) => ({
         ok: false,

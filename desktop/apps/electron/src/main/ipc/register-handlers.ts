@@ -3,22 +3,26 @@ import type { CapabilityInvokeRequest } from "@dapei/desktop-contracts";
 import { IPC_CHANNELS } from "@dapei/desktop-contracts";
 import type { EngineClient, WorkspaceContext } from "@dapei/desktop-engine-client";
 import type { DesktopServices } from "@dapei/desktop-services";
+import type { AgentHost } from "@dapei/desktop-agent";
 import { registerHandler, installIpcRouter, setRouterEngineAndContext } from "./router.ts";
 import { registerWorkspaceHandlers } from "./workspace-handlers.ts";
 import { registerReposHandlers } from "./repos-handlers.ts";
 import { registerFeatureHandlers } from "./feature-handlers.ts";
+import { registerAgentHandlers } from "./agent-handlers.ts";
 import { broadcastPush } from "../push/broadcast.ts";
 
 export function registerIpcHandlers(
   engine: EngineClient,
   getContext: () => WorkspaceContext,
   setContext: (ctx: WorkspaceContext) => void,
-  services: DesktopServices
+  services: DesktopServices,
+  agent: AgentHost
 ): void {
   setRouterEngineAndContext(engine, getContext, setContext);
   registerWorkspaceHandlers(setContext, getContext);
   registerReposHandlers(services);
   registerFeatureHandlers(services);
+  registerAgentHandlers(agent);
 
   registerHandler(IPC_CHANNELS.capability.run, async (rawInput, ctx) => {
     const input = rawInput as CapabilityInvokeRequest;

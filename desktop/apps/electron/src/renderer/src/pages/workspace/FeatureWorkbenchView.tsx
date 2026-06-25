@@ -1,20 +1,21 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, FileText, GitBranch, Loader2, Zap } from "lucide-react";
+import { ArrowLeft, FileText, GitBranch, Loader2, MessageSquare, Send, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CodeDiffViewer, MarkdownViewer, StageStepper } from "@dapei/desktop-ui";
+import { MarkdownViewer, StageStepper } from "@dapei/desktop-ui";
+import type { AgentEvent, DesktopPushEvent } from "@dapei/desktop-contracts";
 import { ensureDesktopApi } from "../../lib/desktop-api.ts";
 import { queryKeys } from "../../lib/query-keys.ts";
 
-const STAGES = [
-  "现状分析",
-  "方案设计",
-  "任务分解",
-  "实现",
-  "本地验证",
-  "评审",
-  "验收"
-];
+const STAGES = ["现状分析", "方案设计", "任务分解", "实现", "本地验证", "评审", "验收"];
+
+interface ChatMessage {
+  id: string;
+  kind: "user" | "assistant" | "tool" | "system";
+  text: string;
+  meta?: { toolName?: string; toolOk?: boolean };
+  ts: number;
+}
 
 export function FeatureWorkbenchView() {
   const { workspaceId = "", featureId = "" } = useParams();
@@ -24,6 +25,10 @@ export function FeatureWorkbenchView() {
   const [activeDoc, setActiveDoc] = useState<string>("01-current-state");
   const [confirmingStage, setConfirmingStage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [chatInput, setChatInput] = useState("");
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [backendLabel, setBackendLabel] = useState<string>("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const statusQuery = useQuery({
     queryKey: queryKeys.features.stage(workspaceId, featureId),
@@ -38,15 +43,68 @@ export function FeatureWorkbenchView() {
   });
   const backlog = backlogQuery.data?.text ?? "";
 
-  const contextQuery = useQuery({
-    queryKey: queryKeys.features.context(workspaceId, featureId, currentStage ?? "general"),
-    queryFn: () => ensureDesktopApi().features.context(featureId, currentStage ?? "general"),
-    enabled: false
+  const backendsQuery = useQuery({
+    queryKey: queryKeys.agent.backends(),
+    queryFn: () => ensureDesktopApi().agent.listBackends()
+  });
+
+  useEffect(() => {
+    const handler = (push: DesktopPushEvent) => {
+      if (push.channel !== "dapei:agent:event") return;
+      const e = push.payload;
+      if (e.type === "session:ready") {
+        if (e.sessionId === sessionId || !sessionId) {
+          setSessionId(e.sessionId);
+          setMessages((prev) => [...prev, { id: cryptoId(), kind: "system", text: `Agent session ready (${e.sessionId.slice(0, 8)}…)`, ts: Date.now() }]);
+        }
+      } else if (e.type === "session:closed") {
+        setMessages((prev) => [...prev, { id: cryptoId(), kind: "system", text: `Session closed`, ts: Date.now() }]);
+      } else if (e.type === "message:user") {
+        setMessages((prev) => [...prev, { id: cryptoId(), kind: "user", text: e.text, ts: Date.now() }]);
+      } else if (e.type === "message:assistant") {
+        setMessages((prev) => [...prev, { id: cryptoId(), kind: "assistant", text: e.text, ts: Date.now() }]);
+      } else if (e.type === "tool:call") {
+        setMessages((prev) => [...prev, { id: cryptoId(), kind: "tool", text: `→ ${e.name}`, meta: { toolName: e.name }, ts: Date.now() }]);
+      } else if (e.type === "tool:result") {
+        setMessages((prev) => prev.map((m) => m.meta?.toolName === e.name && m.kind === "tool" ? { ...m, text: `${m.text} ${e.ok ? "✓" : "✗"}`, meta: { ...m.meta, toolOk: e.ok } } : m));
+      } else if (e.type === "capability:invoked") {
+        setMessages((prev) => [...prev, { id: cryptoId(), kind: "system", text: `capability: ${e.id} ${e.ok ? "✓" : "✗"}`, ts: Date.now() }]);
+      }
+    };
+    const unsub = window.dapei?.events?.subscribe(handler);
+    return () => {
+      unsub?.();
+    };
+  }, [sessionId]);
+
+  const attachMutation = useMutation({
+    mutationFn: async () => {
+      const backends = backendsQuery.data ?? (await ensureDesktopApi().agent.listBackends());
+      const first = backends.find((b) => b.installed) ?? backends[0];
+      if (!first) throw new Error("no agent backend available");
+      setBackendLabel(first.label);
+      return ensureDesktopApi().agent.attach({ backendId: first.id, cwd: workspacePath, feature: featureId });
+    },
+    onSuccess: (result) => {
+      if (!result.ok) {
+        setError(result.error?.message ?? "attach failed");
+        return;
+      }
+      if (result.sessionId) setSessionId(result.sessionId);
+    },
+    onError: (err: Error) => setError(err.message)
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: async (text: string) => {
+      if (!sessionId) throw new Error("no session");
+      return ensureDesktopApi().agent.send(sessionId, text);
+    },
+    onError: (err: Error) => setError(err.message)
   });
 
   const runStageMutation = useMutation({
-    mutationFn: async (stage: string) =>
-      ensureDesktopApi().features.runStage(featureId, stage, true),
+    mutationFn: async (stage: string) => ensureDesktopApi().features.runStage(featureId, stage, true),
     onSuccess: (result) => {
       if (!result.ok) {
         setError(result.error?.message ?? "runStage failed");
@@ -85,11 +143,23 @@ export function FeatureWorkbenchView() {
           <StageStepper stages={STAGES} currentIndex={currentIndex} />
         </div>
 
-        <div className="flex w-1/4 items-center justify-end">
-          <span className="mr-4 flex items-center rounded-md border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-800">
-            <span className="mr-2 h-2 w-2 animate-pulse rounded-full bg-orange-500" />
-            Feature 维度 · 隔离中
-          </span>
+        <div className="flex w-1/4 items-center justify-end gap-2">
+          {sessionId ? (
+            <span className="flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800">
+              <span className="mr-2 h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+              {backendLabel || "Agent 在线"}
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => attachMutation.mutate()}
+              disabled={attachMutation.isPending}
+              className="flex items-center rounded-md border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-800 hover:bg-orange-100 disabled:opacity-50"
+            >
+              {attachMutation.isPending && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+              Attach Agent
+            </button>
+          )}
         </div>
       </header>
 
@@ -128,27 +198,73 @@ export function FeatureWorkbenchView() {
           </div>
 
           <div className="flex flex-1 flex-col bg-white">
-            <div className="flex items-center bg-slate-100 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-700">
-              Agent 指挥台 (M1-6)
+            <div className="flex items-center justify-between bg-slate-100 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-700">
+              <span className="flex items-center">
+                <MessageSquare className="mr-2 h-3.5 w-3.5" />
+                Agent 对话
+              </span>
+              {sessionId && (
+                <button
+                  type="button"
+                  onClick={() => ensureDesktopApi().agent.detach(sessionId)}
+                  className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                  title="Detach"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
             </div>
-            <div className="flex-1 space-y-3 overflow-y-auto p-4 text-sm text-slate-500">
-              <p className="rounded-md border border-dashed border-slate-300 p-3 text-center text-xs">
-                Agent-Share v1 在 M1-6 接入。当前 P5 仅展示阶段闸门与状态。
-              </p>
+            <div className="flex-1 space-y-2 overflow-y-auto p-3 text-sm">
+              {messages.length === 0 && (
+                <p className="rounded-md border border-dashed border-slate-300 p-3 text-center text-xs text-slate-400">
+                  {sessionId ? "等待 Agent 回应…" : "点击右上 'Attach Agent' 启动"}
+                </p>
+              )}
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={
+                    m.kind === "user"
+                      ? "ml-auto max-w-[90%] rounded-xl rounded-tr-sm bg-indigo-600 p-3 text-white shadow-sm"
+                      : m.kind === "assistant"
+                        ? "mr-auto max-w-[90%] rounded-xl rounded-tl-sm border border-slate-200 bg-slate-50 p-3 text-slate-700"
+                        : m.kind === "tool"
+                          ? "mx-auto max-w-[90%] rounded-md border border-slate-200 bg-white px-2 py-1 text-center font-mono text-xs text-slate-500"
+                          : "mx-auto max-w-[90%] rounded-md bg-amber-50 px-2 py-1 text-center text-xs text-amber-700"
+                  }
+                >
+                  {m.text}
+                </div>
+              ))}
             </div>
-            <div className="border-t border-slate-100 bg-white p-4">
+            <div className="border-t border-slate-100 bg-white p-3">
               <div className="relative">
                 <textarea
-                  placeholder="M1-6 接入..."
-                  className="h-12 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 py-2 pl-3 pr-10 text-sm shadow-inner focus:border-indigo-400 focus:outline-none"
-                  disabled
+                  placeholder={sessionId ? "输入 @dapei 指令…" : "先 attach Agent"}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey && chatInput && sessionId) {
+                      e.preventDefault();
+                      sendMutation.mutate(chatInput);
+                      setChatInput("");
+                    }
+                  }}
+                  className="h-12 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 py-2 pl-3 pr-10 text-sm shadow-inner focus:border-indigo-400 focus:outline-none disabled:opacity-50"
+                  disabled={!sessionId}
                 />
                 <button
                   type="button"
-                  disabled
-                  className="absolute bottom-2 right-2 rounded bg-slate-300 p-1.5 text-white"
+                  disabled={!sessionId || !chatInput || sendMutation.isPending}
+                  onClick={() => {
+                    if (chatInput) {
+                      sendMutation.mutate(chatInput);
+                      setChatInput("");
+                    }
+                  }}
+                  className="absolute bottom-2 right-2 rounded bg-indigo-600 p-1.5 text-white shadow-sm hover:bg-indigo-700 disabled:bg-slate-300"
                 >
-                  <ArrowRight className="h-4 w-4" />
+                  <Send className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -202,13 +318,6 @@ export function FeatureWorkbenchView() {
                   })}
                 </div>
               </div>
-
-              {contextQuery.data && (
-                <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs">
-                  <div className="mb-1 font-semibold text-slate-700">context.build 产物</div>
-                  <div className="font-mono text-slate-600">{contextQuery.data.runtimeContext}</div>
-                </div>
-              )}
             </div>
           </div>
         </main>
@@ -219,8 +328,7 @@ export function FeatureWorkbenchView() {
           <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
             <h2 className="mb-2 text-lg font-semibold text-slate-800">推进到 "{confirmingStage}"</h2>
             <p className="mb-4 text-sm text-slate-500">
-              进入下一阶段前，请确认本阶段产物已就绪（context/runtime-context.md / reports/feature-progress.md / tasks/backlog.md）。
-              引擎会执行 <code className="rounded bg-slate-100 px-1 text-xs">workflow.runStage</code>。
+              进入下一阶段前，请确认本阶段产物已就绪。引擎会执行 <code className="rounded bg-slate-100 px-1 text-xs">workflow.runStage</code>。
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -246,4 +354,8 @@ export function FeatureWorkbenchView() {
       )}
     </div>
   );
+}
+
+function cryptoId(): string {
+  return Math.random().toString(36).slice(2, 10);
 }

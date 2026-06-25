@@ -34,10 +34,13 @@ export const IPC_CHANNELS = {
     assetTree: "dapei:knowledge:assetTree"
   },
   agent: {
+    list: "dapei:agent:list",
     attach: "dapei:agent:attach",
+    detach: "dapei:agent:detach",
     send: "dapei:agent:send",
     injectContext: "dapei:agent:injectContext",
-    event: "dapei:agent:event"
+    event: "dapei:agent:event",
+    listBackends: "dapei:agent:listBackends"
   },
   capability: {
     run: "dapei:capability:run"

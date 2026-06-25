@@ -15,6 +15,10 @@ export const queryKeys = {
   repos: {
     list: (workspaceRoot: string) => ["repos", "list", workspaceRoot] as const
   },
+  agent: {
+    sessions: () => ["agent", "sessions"] as const,
+    backends: () => ["agent", "backends"] as const
+  },
   pipeline: {
     status: (repo: string) => ["pipeline", "status", repo] as const
   }

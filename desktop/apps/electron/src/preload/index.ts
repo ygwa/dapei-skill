@@ -25,6 +25,13 @@ const api: DesktopApi = {
     tasks: (name) => ipcRenderer.invoke(IPC_CHANNELS.feature.tasks, { name, action: "list" }),
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.feature.create, input)
   },
+  agent: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.agent.list),
+    listBackends: () => ipcRenderer.invoke(IPC_CHANNELS.agent.listBackends),
+    attach: (input) => ipcRenderer.invoke(IPC_CHANNELS.agent.attach, input),
+    detach: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.agent.detach, { sessionId }),
+    send: (sessionId, text) => ipcRenderer.invoke(IPC_CHANNELS.agent.send, { sessionId, text })
+  },
   capability: {
     run: (request: CapabilityInvokeRequest) => ipcRenderer.invoke(IPC_CHANNELS.capability.run, request)
   },

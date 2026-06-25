@@ -1,6 +1,6 @@
 import type { BrowserWindow } from "electron";
 import type { EngineClient, WorkspaceContext } from "@dapei/desktop-engine-client";
-import { createAgentHostStub } from "@dapei/desktop-agent";
+import { createAgentHost, type AgentHost } from "@dapei/desktop-agent";
 import { createPluginHostStub } from "@dapei/desktop-plugins";
 import { createDesktopServices, type DesktopServices } from "@dapei/desktop-services";
 import { registerIpcHandlers } from "./ipc/register-handlers.ts";
@@ -9,7 +9,7 @@ import { wireAgentPush } from "./wire-agent-push.ts";
 import { createEngineClient } from "./engine/subprocess-client.ts";
 
 export interface AppContext {
-  agent: ReturnType<typeof createAgentHostStub>;
+  agent: AgentHost;
   plugins: ReturnType<typeof createPluginHostStub>;
   engine: EngineClient;
   services: DesktopServices;
@@ -26,7 +26,7 @@ export function bootstrapApp(_mainWindow: BrowserWindow, initialContext: Workspa
   bootstrapped = true;
 
   const engine = createEngineClient();
-  const agent = createAgentHostStub();
+  const agent = createAgentHost();
   const plugins = createPluginHostStub();
 
   let currentContext: WorkspaceContext = initialContext;
@@ -37,7 +37,7 @@ export function bootstrapApp(_mainWindow: BrowserWindow, initialContext: Workspa
 
   const services = createDesktopServices(engine, currentContext);
 
-  registerIpcHandlers(engine, getContext, setContext, services);
+  registerIpcHandlers(engine, getContext, setContext, services, agent);
   void plugins.init();
   startPluginUtilityHost();
   wireAgentPush(agent);
