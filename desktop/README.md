@@ -5,10 +5,9 @@
 
 ## 当前状态
 
-**M1 shipped** (commit TBD on `feature/desktop-m1-m2`).
+**M1 + M2 shipped** (commit TBD on `feature/desktop-m1-m2`).
 
 M1 包含：
-
 - 真实接 engine（`engine/dapei-engine.ts` 通过 subprocess 调用）
 - P0 启动层：recents 持久化、原生目录选择器、validate + setContext
 - P1 Dashboard：status / 资产健康
@@ -20,7 +19,15 @@ M1 包含：
 - 6 份 ADR（0007-0011、0010）作为工程决策的可追溯记录
 - 48 个 node:test + dimension self-check 全部 green
 
-详细能力清单见 [`docs/M1-acceptance.md`](docs/M1-acceptance.md)。
+M2 增加：
+- P3 Knowledge：本地静态 server (127.0.0.1) + VitePress portal iframe + 结构化 asset tree
+- EvidenceCard + ToolCallCard：行为证据 + Agent 工具调用的可视化
+- PluginHost L1 真实化：Zod allowlist + L1 拒绝 L3 surface + sample 插件
+- ADR-0012 (Portal: webview vs BrowserView) + ADR-0013 (Plugin L1 allowlist)
+- 6 个新 contract 测试 (54 总计)
+
+详细能力清单见 [`docs/M1-acceptance.md`](docs/M1-acceptance.md) 和
+[`docs/M2-acceptance.md`](docs/M2-acceptance.md)。
 
 ## 目录
 

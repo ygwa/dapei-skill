@@ -141,6 +141,50 @@ Match the language and detail level of the existing release entries.
 
 ### Removed
 
+## Desktop (M2) — 2026-06-26
+
+M2 lands on top of M1. P3 Knowledge is real (portal + asset
+tree), P5 Inspector gets evidence and tool-call cards, and
+the Plugin L1 surface is live (Zod allowlist + sample plugin).
+M2 keeps the `0.2.0-canary.0` version (no version bump —
+internal canary, no npm publish per ADR-0007).
+
+### Added
+
+### Added
+
+- **M2-1 P3 Knowledge** (ADR-0012): local static-file server
+  on `127.0.0.1` + iframe-based portal embed. CSP and
+  X-Content-Type-Options headers; path-traversal blocked.
+  Asset tree walks `docs/as-is/` and surfaces
+  behavior / state-machine / domain / profile / entry /
+  business-rule / capability-map directories plus the
+  cognitive index. `KnowledgeView` has two tabs (portal +
+  assets); "Generate Portal" calls `cdr.doc.generate`.
+- **M2-2 Inspector cards**: `EvidenceCard` (sources[]
+  from cognitive artifacts, with fact / inference /
+  unknown badges) and `ToolCallCard` (collapsible
+  tool:call + tool:result pair with input + output JSON,
+  ok/err indicator). P5 chat panel renders tool messages
+  as `ToolCallCard`; the Inspector right rail shows sample
+  `EvidenceCard`s (real evidence loading is M3+).
+- **M2-3 PluginHost L1** (ADR-0013): the stub is replaced
+  with a real implementation. Discovers
+  `~/.dapei/plugins/*/dapei-desktop-plugin.json` and
+  `<workspace>/.dapei/plugins/*/dapei-desktop-plugin.json`;
+  validates with a strict Zod schema (regex for id, enum
+  for slot, `pipelineSteps` accepted but flagged for L1
+  rejection); catches duplicate plugin ids AND duplicate
+  contribution ids. `enable` / `disable` toggles
+  `LoadedPlugin.enabled`. Ships a sample plugin
+  (`apps/sample-plugin/`) with one sidebar item + one
+  route contribution.
+- **2 ADRs** (0012, 0013) under `docs/decisions/`.
+- **6 new node:test cases** (54 total): plugin host
+  contract tests for invalid id, pipelineSteps
+  rejection, duplicate contributions, sample plugin
+  shape, enable/disable, empty init.
+
 ## Desktop (M1) — 2026-06-26
 
 The dapei desktop end-to-end is live on `feature/desktop-m1-m2`
@@ -191,9 +235,6 @@ dev only.
 - Electron macOS Framework extraction (the `ensure-electron`
   helper script, originally a M0 contribution, is now part
   of the documented postinstall flow).
-
-## [3.2.0] - 2026-06-16
-
 
 ### Added
 - **CDR Reading/Writing Loop Closure** (on `feature/cdr-reading-writing-loop`).

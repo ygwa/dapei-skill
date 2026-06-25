@@ -1,6 +1,6 @@
 {
   "name": "@dapei/desktop-contracts",
-  "version": "0.2.0-canary.0",
+  "version": "0.3.0-canary.0",
   "private": true,
   "type": "module",
   "description": "IPC、ACP、事件流、插件 manifest 类型与 Zod schema",

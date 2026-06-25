@@ -1,6 +1,6 @@
 {
   "name": "dapei-desktop",
-  "version": "0.2.0-canary.0",
+  "version": "0.3.0-canary.0",
   "private": true,
   "type": "module",
   "description": "大培桌面端 — 独立 pnpm workspace",

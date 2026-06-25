@@ -1,6 +1,6 @@
 {
   "name": "@dapei/desktop-plugin-sdk",
-  "version": "0.2.0-canary.0",
+  "version": "0.3.0-canary.0",
   "private": true,
   "type": "module",
   "description": "第三方桌面插件开发 SDK",
