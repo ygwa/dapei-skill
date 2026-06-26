@@ -1,0 +1,34 @@
+{
+  "name": "dapei-desktop",
+  "version": "0.3.0-canary.0",
+  "private": true,
+  "type": "module",
+  "description": "大培桌面端 — 独立 pnpm workspace",
+  "scripts": {
+    "postinstall": "node scripts/ensure-electron.mjs",
+    "dev": "node scripts/ensure-electron.mjs && pnpm --filter @dapei/desktop-app dev",
+    "build": "pnpm --filter @dapei/desktop-app build",
+    "typecheck": "pnpm -r typecheck",
+    "ensure-electron": "node scripts/ensure-electron.mjs",
+    "check:dimension-rules": "node --experimental-strip-types scripts/check-dimension-rules.ts",
+    "test:contract": "node --test packages/engine-client/src/__tests__/contract.test.mjs",
+    "test:ipc": "node --experimental-strip-types --test packages/contracts/src/__tests__/ipc-channels.test.ts",
+    "test:registry": "node --test apps/electron/src/main/workspace/__tests__/registry.test.mjs",
+    "test:integration": "node --test apps/electron/src/main/workspace/__tests__/integration.test.mjs",
+    "test:dimension": "node --test apps/electron/src/main/workspace/__tests__/m15-dimension.test.mjs",
+    "test:agent": "node --experimental-strip-types --test apps/electron/src/main/agent/__tests__/mock-backend.test.ts",
+    "test:plugins": "node --experimental-strip-types --test apps/electron/src/main/plugins/__tests__/plugin-host.test.ts",
+    "test:router": "node --experimental-strip-types --test apps/electron/src/main/ipc/__tests__/router-pass-through.test.ts",
+    "test": "pnpm test:contract && pnpm test:ipc && pnpm test:registry && pnpm test:integration && pnpm test:dimension && pnpm test:agent && pnpm test:plugins && pnpm test:router && pnpm check:dimension-rules"
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "packageManager": "pnpm@10.12.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  }
+}

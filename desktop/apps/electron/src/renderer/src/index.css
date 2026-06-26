@@ -1,0 +1,73 @@
+@import "tailwindcss";
+@source "../../../../../packages/ui/src";
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Markdown viewer prose (lightweight, no typography plugin) */
+.prose-dapei {
+  color: #334155;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+.prose-dapei h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 1rem;
+}
+
+.prose-dapei p {
+  margin-bottom: 1rem;
+}
+
+.prose-dapei code {
+  font-size: 0.85em;
+  background: #f1f5f9;
+  padding: 0.15em 0.35em;
+  border-radius: 0.25rem;
+}
+
+.prose-dapei .code-block {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: #475569;
+  overflow-x: auto;
+  white-space: pre;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+  margin: 1.5rem 0;
+}
+
+.prose-dapei .agent-hint {
+  background: #fffbeb;
+  border-left: 4px solid #fbbf24;
+  padding: 1.25rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+  margin-top: 1.5rem;
+}
+
+.prose-dapei .agent-hint p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #92400e;
+}

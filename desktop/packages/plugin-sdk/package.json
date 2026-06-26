@@ -1,0 +1,19 @@
+{
+  "name": "@dapei/desktop-plugin-sdk",
+  "version": "0.3.0-canary.0",
+  "private": true,
+  "type": "module",
+  "description": "第三方桌面插件开发 SDK",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@dapei/desktop-contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

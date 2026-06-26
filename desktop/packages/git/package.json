@@ -1,0 +1,16 @@
+{
+  "name": "@dapei/desktop-git",
+  "version": "0.3.0-canary.0",
+  "private": true,
+  "type": "module",
+  "description": "Git 观测 — UI 向状态读取",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

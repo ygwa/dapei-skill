@@ -141,8 +141,100 @@ Match the language and detail level of the existing release entries.
 
 ### Removed
 
-## [3.2.0] - 2026-06-16
+## Desktop (M2) — 2026-06-26
 
+M2 lands on top of M1. P3 Knowledge is real (portal + asset
+tree), P5 Inspector gets evidence and tool-call cards, and
+the Plugin L1 surface is live (Zod allowlist + sample plugin).
+M2 keeps the `0.2.0-canary.0` version (no version bump —
+internal canary, no npm publish per ADR-0007).
+
+### Added
+
+### Added
+
+- **M2-1 P3 Knowledge** (ADR-0012): local static-file server
+  on `127.0.0.1` + iframe-based portal embed. CSP and
+  X-Content-Type-Options headers; path-traversal blocked.
+  Asset tree walks `docs/as-is/` and surfaces
+  behavior / state-machine / domain / profile / entry /
+  business-rule / capability-map directories plus the
+  cognitive index. `KnowledgeView` has two tabs (portal +
+  assets); "Generate Portal" calls `cdr.doc.generate`.
+- **M2-2 Inspector cards**: `EvidenceCard` (sources[]
+  from cognitive artifacts, with fact / inference /
+  unknown badges) and `ToolCallCard` (collapsible
+  tool:call + tool:result pair with input + output JSON,
+  ok/err indicator). P5 chat panel renders tool messages
+  as `ToolCallCard`; the Inspector right rail shows sample
+  `EvidenceCard`s (real evidence loading is M3+).
+- **M2-3 PluginHost L1** (ADR-0013): the stub is replaced
+  with a real implementation. Discovers
+  `~/.dapei/plugins/*/dapei-desktop-plugin.json` and
+  `<workspace>/.dapei/plugins/*/dapei-desktop-plugin.json`;
+  validates with a strict Zod schema (regex for id, enum
+  for slot, `pipelineSteps` accepted but flagged for L1
+  rejection); catches duplicate plugin ids AND duplicate
+  contribution ids. `enable` / `disable` toggles
+  `LoadedPlugin.enabled`. Ships a sample plugin
+  (`apps/sample-plugin/`) with one sidebar item + one
+  route contribution.
+- **2 ADRs** (0012, 0013) under `docs/decisions/`.
+- **6 new node:test cases** (54 total): plugin host
+  contract tests for invalid id, pipelineSteps
+  rejection, duplicate contributions, sample plugin
+  shape, enable/disable, empty init.
+
+## Desktop (M1) — 2026-06-26
+
+The dapei desktop end-to-end is live on `feature/desktop-m1-m2`
+(13 commits, 7720+3612 lines). Per ADR-0007 the desktop carries
+its own canary version (`@dapei/desktop-app@0.2.0-canary.0`,
+all 9 desktop packages aligned). No npm publish yet — repo-internal
+dev only.
+
+### Added
+
+- **M0 scaffold**: pnpm workspace with 9 desktop-* packages
+  + 1 Electron app. electron-vite 3, React 19, TanStack Query 5,
+  Zustand 5, Tailwind 4, React Router 7.
+- **M1-1 EngineClient contract** (ADR-0008, ADR-0009, ADR-0010):
+  `run(req, ctx)` is the only public method. WorkspaceContext
+  is injected via spawn-env only; the parent `process.env` is
+  never mutated. The dimension rule fires inside
+  `SubprocessEngineClient.run` against a 32-regex blocklist +
+  6-prefix feature allowlist; a self-check script scans
+  `packages/core/src/capabilities/` and asserts every
+  workspace-dim write is in the blocklist.
+- **M1-2 IPC router**: per-namespace handlers (workspace /
+  repos / feature / agent). Zod request schema per channel;
+  INVALID_PAYLOAD on parse fail; broadcast push on success.
+- **M1-3 P0 launcher real**: `~/.dapei/desktop/recent.json`
+  registry, native `dialog.showOpenDialog`, real
+  `workspace.{init,validate,open}` capability calls, AppContext
+  switches on success.
+- **M1-4 P1/P2/P4 read-aggregate pages**: real engine calls
+  for `workspace.status` / `repos.list` / `repos.add` /
+  `repos.sync` / `feature.list` / `feature.create`. Mock data
+  is gone from these surfaces.
+- **M1-5 P5 workbench**: real feature.yaml + context + backlog
+  reads; StageStepper from `feature.status`; confirmation
+  gate before `workflow.runStage`; entering P5 auto-switches
+  the AppContext dimension to `feature`.
+- **M1-6 Agent-Share v1** (ADR-0011): ACP stdio JSON-RPC
+  transport, two backends (MockAgentBackend for CI + dev,
+  OpenCodeAgentBackend for real `opencode acp` spawn). 7-type
+  AgentEvent union; 6 IPC channels. PTY bridge is permanently
+  deprecated.
+- **5 ADRs** (0007-0011) under `docs/decisions/`.
+- **48 node:test cases**: contract (19) + IPC (11) + registry
+  (7) + integration (3) + dimension (2) + agent (6).
+
+### Fixed
+
+- Electron macOS Framework extraction (the `ensure-electron`
+  helper script, originally a M0 contribution, is now part
+  of the documented postinstall flow).
 
 ### Added
 - **CDR Reading/Writing Loop Closure** (on `feature/cdr-reading-writing-loop`).

@@ -1,0 +1,20 @@
+{
+  "name": "@dapei/desktop-engine-client",
+  "version": "0.3.0-canary.0",
+  "private": true,
+  "type": "module",
+  "description": "dapei-engine / runCapability 桥接接口",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@dapei/desktop-contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "typescript": "^6.0.3"
+  }
+}

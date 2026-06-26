@@ -1,0 +1,22 @@
+{
+  "id": "sample.dapei-welcome",
+  "version": "0.1.0",
+  "name": "Dapei Welcome",
+  "description": "A minimal sample plugin that contributes a sidebar item. M2-3 ships this as the L1 example.",
+  "contributes": {
+    "sidebar": [
+      {
+        "id": "sample.welcome",
+        "label": "Sample 插件",
+        "route": "/sample/welcome"
+      }
+    ],
+    "routes": [
+      {
+        "id": "sample.welcome",
+        "path": "/sample/welcome",
+        "label": "Sample 插件"
+      }
+    ]
+  }
+}

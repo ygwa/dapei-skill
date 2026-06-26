@@ -1,0 +1,27 @@
+{
+  "name": "@dapei/desktop-plugins",
+  "version": "0.3.0-canary.0",
+  "private": true,
+  "type": "module",
+  "description": "内置 PluginHost — 发现、校验、注册 contributes",
+  "exports": {
+    ".": "./src/index.ts",
+    "./registry": "./src/registry/index.ts",
+    "./sandbox": "./src/sandbox/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@dapei/desktop-contracts": "workspace:*",
+    "@dapei/desktop-plugin-sdk": "workspace:*"
+  },
+  "dependencies": {
+    "@dapei/desktop-contracts": "workspace:*",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "typescript": "^6.0.3"
+  }
+}

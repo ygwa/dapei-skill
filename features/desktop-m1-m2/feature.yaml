@@ -1,0 +1,53 @@
+version: "0.1"
+feature:
+  name: desktop-m1-m2
+  objective: >
+    Bring up the dapei desktop end-to-end: M1 (real engine integration + Agent-Share v1)
+    and M2 (knowledge portal embedding + plugin L1). Replace all M0 mocks with real
+    capability calls and live agent sessions; ship Agent-Share as the desktop's
+    differentiating UX.
+  owner: "unassigned"
+  isolation: "symlink"
+  repos:
+    - name: dapei-skill
+      branch: feature/desktop-m1-m2
+      base-ref: main
+      base-time: 2026-06-25T00:00:00Z
+      path: repos/dapei-skill
+  scope:
+    in:
+      - "desktop/**"
+      - "docs/decisions/ADR-0007*.md"
+      - "docs/decisions/ADR-0008*.md"
+      - "docs/decisions/ADR-0009*.md"
+      - "docs/decisions/ADR-0010*.md"
+      - "docs/decisions/ADR-0011*.md"
+      - "docs/decisions/ADR-0012*.md"
+      - "docs/decisions/ADR-0013*.md"
+      - "packages/core/src/capabilities/workspace.status.ts (新增,不破坏)"
+      - "packages/core/src/capabilities/feature.list.ts (新增,不破坏)"
+      - "features/desktop-m1-m2/**"
+      - ".omo/plans/desktop-m1-m2.md"
+    out:
+      - "engine/** (只读引用,不修改)"
+      - "packages/router/**"
+      - "packages/cdr/**"
+      - "packages/doc-gen/**"
+      - "packages/runtime-adapters/**"
+      - "skills/**"
+  acceptance:
+    - "M0: feature/desktop-m1-m2 branch from main; ADRs 0007/0008/0009 merged; typecheck+build green"
+    - "M1-1: EngineClient contract locked; WorkspaceContext plumbed through env vars; contract tests green"
+    - "M1-2: IPC router with Zod parse; 3 demonstrative channels live; subsequent milestones append per channel"
+    - "M1-3: P0 Launcher creates/opens/recents a real workspace end-to-end"
+    - "M1-4: P1 Dashboard + P2 Repos + P4 Features list read from real engine"
+    - "M1-5: P5 Workbench with real Stage Stepper + Inspector + confirmation gate; dimension rule enforced in engine-client"
+    - "M1-6: P5 Agent panel with ACP stdio + mock backend (CI runs on mock) + opencode backend (local-only verification)"
+    - "M1-7: 8-step happy path documented; CHANGELOG desktop chapter; PR ready"
+    - "M2-1: P3 Knowledge shows real portal + asset tree; behavior→agent-question cross-link works"
+    - "M2-2: EvidenceCard + ToolCallCard live in P5 Inspector; stage stepper from real feature.status"
+    - "M2-3: PluginHost discovers+validates+registers L1 contributions; sample plugin loads from ~/.dapei/plugins/"
+    - "M2-4: M2 e2e documented; CHANGELOG M2 chapter; PR merged"
+  risk_level: medium-high
+  dependencies: []
+  last-review-at: null

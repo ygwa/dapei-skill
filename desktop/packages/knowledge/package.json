@@ -1,0 +1,17 @@
+{
+  "name": "@dapei/desktop-knowledge",
+  "version": "0.3.0-canary.0",
+  "private": true,
+  "type": "module",
+  "description": "CDR portal 构建与本地静态服务",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "typescript": "^6.0.3"
+  }
+}
