@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FileText, GitBranch, Loader2, MessageSquare, Send, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
-import { EvidenceCard, MarkdownViewer, StageStepper, ToolCallCard } from "@dapei/desktop-ui";
+import { CloseWizardModal, EvidenceCard, MarkdownViewer, StageStepper, ToolCallCard, type CloseWizardPayload, type WizardPreflight } from "@dapei/desktop-ui";
 import type { AgentEvent, DesktopPushEvent } from "@dapei/desktop-contracts";
 import { ensureDesktopApi } from "../../lib/desktop-api.ts";
 import { queryKeys } from "../../lib/query-keys.ts";
@@ -35,6 +35,16 @@ export function FeatureWorkbenchView() {
   const [backendLabel, setBackendLabel] = useState<string>("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
+  // M3-2: Close wizard state. Same shape as FeatureListView; the modal
+  // itself is the only instance rendered in either view.
+  const [preflight, setPreflight] = useState<WizardPreflight | null>(null);
+  const [preflightLoading, setPreflightLoading] = useState(false);
+  const [preflightError, setPreflightError] = useState<{ code: string; message: string } | null>(null);
+  // M3-2: success banner shown after the main process broadcasts
+  // dapei:feature:closed. The handler fires dapei:dimension:unlock in
+  // the same tick, so the rest of the UI returns to normal.
+  const [closeBanner, setCloseBanner] = useState<{ feature: string; cdrAssetsTagged: number } | null>(null);
+
   const statusQuery = useQuery({
     queryKey: queryKeys.features.stage(workspaceId, featureId),
     queryFn: () => ensureDesktopApi().features.status(featureId)
@@ -55,6 +65,24 @@ export function FeatureWorkbenchView() {
 
   useEffect(() => {
     const handler = (push: DesktopPushEvent) => {
+      if (push.channel === "dapei:feature:closed") {
+        if (push.payload.feature === featureId) {
+          setCloseBanner({
+            feature: push.payload.feature,
+            cdrAssetsTagged: push.payload.cdr_assets_tagged ?? 0
+          });
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: cryptoId(),
+              kind: "system",
+              text: `feature closed · 已回写到 workspace 维度 · ${push.payload.cdr_assets_tagged ?? 0} 个 CDR 资产已打标`,
+              ts: Date.now()
+            }
+          ]);
+        }
+        return;
+      }
       if (push.channel !== "dapei:agent:event") return;
       const e = push.payload;
       if (e.type === "session:ready") {
@@ -89,7 +117,7 @@ export function FeatureWorkbenchView() {
     return () => {
       unsub?.();
     };
-  }, [sessionId]);
+  }, [sessionId, featureId]);
 
   const attachMutation = useMutation({
     mutationFn: async () => {
@@ -130,6 +158,41 @@ export function FeatureWorkbenchView() {
     onError: (err: Error) => setError(err.message)
   });
 
+  // M3-2: load preflight when the user clicks the header Close button.
+  const startClose = async (): Promise<void> => {
+    setPreflight(null);
+    setPreflightError(null);
+    setPreflightLoading(true);
+    try {
+      const result = await ensureDesktopApi().features.prepareClose(featureId);
+      setPreflight(result as WizardPreflight);
+    } catch (err) {
+      const e = err as { code?: string; message?: string };
+      setPreflightError({ code: e.code ?? "UNKNOWN", message: e.message ?? String(err) });
+    } finally {
+      setPreflightLoading(false);
+    }
+  };
+
+  const cancelClose = (): void => {
+    setPreflight(null);
+    setPreflightError(null);
+  };
+
+  const closeMutation = useMutation({
+    mutationFn: async (payload: CloseWizardPayload) =>
+      ensureDesktopApi().features.closeWithPromote({
+        feature: featureId,
+        confirmed: true,
+        ...(payload.promote_artifacts ? { promote_artifacts: payload.promote_artifacts } : {})
+      }),
+    // The success path is handled by the dapei:feature:closed push event
+    // (see useEffect above) so the banner stays in sync with main-process
+    // state, not local optimistic state. We only clear the modal here.
+    onSettled: () => cancelClose(),
+    onError: (err: Error) => setPreflightError({ code: "UNKNOWN", message: err.message })
+  });
+
   useEffect(() => {
     setError(null);
   }, [featureId]);
@@ -158,6 +221,16 @@ export function FeatureWorkbenchView() {
         </div>
 
         <div className="flex w-1/4 items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={startClose}
+            data-testid="workbench-close-feature"
+            className="flex items-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
+            title="关闭 Feature 并回写选中的资产到 workspace 维度"
+          >
+            <X className="mr-1 h-3 w-3" />
+            Close
+          </button>
           {sessionId ? (
             <span className="flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800">
               <span className="mr-2 h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
@@ -176,6 +249,23 @@ export function FeatureWorkbenchView() {
           )}
         </div>
       </header>
+
+      {closeBanner && (
+        <div className="z-10 flex items-center justify-between gap-3 border-b border-amber-300 bg-amber-50 px-6 py-2.5 text-sm text-amber-900">
+          <span className="font-medium">
+            <X className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />
+            Feature 已关闭 · 已回写到 workspace 维度 · {closeBanner.cdrAssetsTagged} 个 CDR 资产已打标
+          </span>
+          <button
+            type="button"
+            onClick={() => setCloseBanner(null)}
+            className="rounded p-1 text-amber-700 hover:bg-amber-100"
+            aria-label="关闭提示"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="border-b border-red-200 bg-red-50 px-6 py-2 text-sm text-red-700">{error}</div>
@@ -396,6 +486,16 @@ export function FeatureWorkbenchView() {
           </div>
         </div>
       )}
+
+      <CloseWizardModal
+        open={preflight !== null || preflightLoading || preflightError !== null}
+        preflight={preflight}
+        loading={preflightLoading}
+        loadError={preflightError}
+        onRetry={startClose}
+        onCancel={cancelClose}
+        onConfirm={(payload) => closeMutation.mutate(payload)}
+      />
     </div>
   );
 }

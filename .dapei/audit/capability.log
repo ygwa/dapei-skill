@@ -1,0 +1,1 @@
+{"schema_version":"2.0","timestamp":"2026-06-27T12:52:01.719Z","capability":"cdr.context.envelope","version":"1.0.0","ok":false,"duration":2,"input":{"target":"behavior","id":"ghost-behavior-that-does-not-exist"},"sideEffects":[]}

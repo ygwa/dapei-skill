@@ -1,0 +1,54 @@
+version: "0.1"
+feature:
+  name: desktop-m3
+  objective: >
+    Desktop M3: close the product loop on three gaps surfaced by daily workflow review.
+    M3-1 = Close Feature wizard (engine side, promote_artifacts); M3-2/3 = desktop side
+    UI/IPC/preflight + dimension banner + P3 portal highlight. M3-4/5 = P3↔P5 cognitive
+    jump (cdr.context.envelope + UI button + Inspector sync). M3-6 = Dashboard advisor
+    (rule-based, non-LLM, action-bearing suggestions). M3-7 = docs + acceptance + PR.
+  owner: "unassigned"
+  isolation: "worktree"
+  repos:
+    - name: dapei-skill
+      branch: feature/desktop-m3
+      base-ref: 5cf0856 (main after M1+M2 merge)
+      base-time: 2026-06-26T00:00:00Z
+      path: repos/dapei-skill
+  scope:
+    in:
+      - "packages/core/src/capabilities/domains/feature.ts (M3-1 done, M3-4 may extend cdr.ts)"
+      - "desktop/packages/services/src/feature/** (M3-2)"
+      - "desktop/packages/contracts/src/ipc/** (M3-2 channels + Zod schemas)"
+      - "desktop/apps/electron/src/main/ipc/feature-handlers.ts (M3-2)"
+      - "desktop/packages/ui/src/components/CloseWizard/** (M3-2)"
+      - "desktop/packages/ui/src/components/CognitiveContextBadge/** (M3-5)"
+      - "desktop/packages/services/src/advisor/** (M3-6)"
+      - "desktop/packages/git/src/reader/** (M3-6 extension for behindCount/aheadCount/dirtyCount)"
+      - "desktop/apps/electron/src/main/ipc/advisor-handlers.ts (M3-6)"
+      - "docs/decisions/ADR-0017-feature-close-promote-artifacts.md (M3-1 ADR, planned not yet written)"
+      - "docs/decisions/ADR-0018-cdr-context-envelope.md (M3-4 ADR, planned not yet written)"
+      - "docs/decisions/ADR-0019-dashboard-advisor.md (M3-6 ADR, planned not yet written)"
+      - "features/desktop-m3/**"
+      - ".omo/plans/desktop-m3.md (v0.2, done)"
+      - "tests/unit/feature-close-promote.test.mjs (M3-1 done)"
+    out:
+      - "engine/** (only call into, do not modify)"
+      - "packages/router/**"
+      - "packages/doc-gen/**"
+      - "packages/runtime-adapters/**"
+      - "skills/**"
+      - "packages/ui/src/components/ToneBadge.tsx (ui-density-m3 owns this)"
+      - "design-desktop/** (desktop-ui-migration owns this)"
+      - "desktop-ui-migration.md plan (separate plan)"
+  acceptance:
+    - "M3-1: feature.close v3.0.0 accepts optional promote_artifacts (decisions/architecture/cognitive.unlink/reports); idempotent via content-hash; rollback on partial failure; promoted_artifacts in output. 11 new tests green; existing feature.close tests zero-regression."
+    - "M3-2: Desktop side — CloseWizard 4-step modal (summary → artifact checklist → preview → confirm); feature-handlers register prepareClose + closeWithPromote; P4 row + P5 header expose Close button"
+    - "M3-3: After close, full-width orange banner 'Feature closed · promoted to workspace dimension'; P3 portal asset tree shows NEW badge on promoted nodes (24h)"
+    - "M3-4: cdr.context.envelope capability exists; agent-host injects envelope at attach-time (post session:ready, pre first user message); envelope persisted at features/<f>/.dapei/last-attached-context.json"
+    - "M3-5: P3 asset tree node has '在 Agent 中追问' button → picker modal → jump to P5 with envelope pre-filled; Inspector 'current attached context' section"
+    - "M3-6: advisor service reads features/*.yaml + repos/*/.git + docs/as-is/, returns Suggestion[] with severity + action capability input_template + target_route; Dashboard top banner renders 3-tier (urgent/warn/info); each click executes engine.run(capability, input_template)"
+    - "M3-7: desktop/docs/M3-acceptance.md 8-step happy path + TROUBLESHOOTING.md M3 chapter + CHANGELOG desktop M3 section + PR"
+  risk_level: medium-high
+  dependencies: []
+  last-review-at: null

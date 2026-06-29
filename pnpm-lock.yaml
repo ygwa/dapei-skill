@@ -35,6 +35,8 @@ importers:
 
   engine: {}
 
+  packages/cdr: {}
+
   packages/core: {}
 
   packages/doc-gen:

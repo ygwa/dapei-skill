@@ -60,8 +60,16 @@ async function main() {
       const capability = parseArg("--capability", cli.args) || cli.args[0];
       const input = parseJson(parseArg("--input", cli.args));
       const { result } = await runCapability(capability, input, { rootDir, now: new Date() });
-      if ((result.data as any).text) console.log((result.data as any).text);
-      else console.log(JSON.stringify(result.data, null, 2));
+      // Print the data field. Capabilities that emit a text field
+      // (the engine's legacy "report"-style outputs) print it raw;
+      // everything else (including ok:false envelopes) prints the
+      // full result JSON so callers can inspect the error block.
+      const data = result.data as { text?: string } | null;
+      if (data && typeof data === "object" && typeof data.text === "string") {
+        console.log(data.text);
+      } else {
+        console.log(JSON.stringify(result, null, 2));
+      }
       return;
     }
 

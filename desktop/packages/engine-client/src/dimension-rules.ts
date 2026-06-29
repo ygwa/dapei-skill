@@ -72,12 +72,29 @@ const WORKSPACE_DIMENSION_BLOCKLIST: ReadonlyArray<RegExp> = [
   /^repos\.sync$/,
   // workspace init creates the dimension itself
   /^workspace\.init$/,
+  // M3-1 (ADR-0017): feature.close writes docs/decisions/<f>-decisions.md,
+  // docs/feature-impact/<f>.md, docs/architecture/*, etc. — all workspace-dim
+  // paths. The desktop Close wizard's handlers/feature-handlers.ts
+  // temporarily switches context to "workspace" before invoking, so this
+  // block is the canonical gate: feature-dim code paths cannot close a
+  // feature, period. (v2.0.0 auto-link via cdr.feature.link is fine
+  // because that capability is itself in the blocklist above.)
+  /^feature\.close$/,
   // reports (architectural reviews, daily reports) write to global docs/decisions/
   /^reporting\.architecturereview$/,
   /^reporting\.dailyreport$/
 ];
 
+/**
+ * Capabilities that are inherently feature-scoped and therefore always
+ * allowed from feature dimension. `feature.close` is intentionally
+ * EXCLUDED even though it shares the "feature." prefix — it writes
+ * docs/decisions/, docs/architecture/, docs/feature-impact/ which are
+ * workspace-dimension paths (ADR-0017). The blocklist regex check
+ * below is the canonical gate for it.
+ */
 function isFeatureScoped(capabilityId: string): boolean {
+  if (capabilityId === "feature.close") return false;
   return FEATURE_SCOPED_PREFIXES.some((p) => capabilityId.startsWith(p));
 }
 
