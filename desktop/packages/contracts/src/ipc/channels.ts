@@ -26,7 +26,9 @@ export const IPC_CHANNELS = {
     runStage: "dapei:feature:runStage",
     context: "dapei:feature:context",
     tasks: "dapei:feature:tasks",
-    close: "dapei:feature:close"
+    close: "dapei:feature:close",
+    prepareClose: "dapei:feature:prepareClose",
+    closeWithPromote: "dapei:feature:closeWithPromote"
   },
   knowledge: {
     portalBuild: "dapei:knowledge:portalBuild",

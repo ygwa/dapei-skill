@@ -35,7 +35,8 @@ import {
   cdrQuery,
   cdrPipelineStatus,
   cdrFeatureLink,
-  cdrBootstrap
+  cdrBootstrap,
+  cdrContextEnvelope
 } from "../../../cdr/src/capabilities.ts";
 import { docGenerate } from "../../../doc-gen/src/doc-gen.ts";
 import { memoryAppend } from "./domains/memory.ts";
@@ -105,6 +106,7 @@ export const capabilitySpecs: AnyCap[] = [
   cdrPipelineStatus,
   cdrFeatureLink,
   cdrBootstrap,
+  cdrContextEnvelope,
   // Documentation generation
   docGenerate
 ];

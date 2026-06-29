@@ -24,7 +24,7 @@ export function registerIpcHandlers(
   setRouterEngineAndContext(engine, getContext, setContext);
   registerWorkspaceHandlers(setContext, getContext);
   registerReposHandlers(services);
-  registerFeatureHandlers(services);
+  registerFeatureHandlers(services, engine, getContext, setContext);
   registerKnowledgeHandlers(services, getContext);
   registerAgentHandlers(agent);
 

@@ -23,7 +23,9 @@ const api: DesktopApi = {
     runStage: (name, stage, confirmed) => ipcRenderer.invoke(IPC_CHANNELS.feature.runStage, { name, stage, confirmed }),
     context: (name, stage) => ipcRenderer.invoke(IPC_CHANNELS.feature.context, { name, stage }),
     tasks: (name) => ipcRenderer.invoke(IPC_CHANNELS.feature.tasks, { name, action: "list" }),
-    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.feature.create, input)
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.feature.create, input),
+    prepareClose: (name) => ipcRenderer.invoke(IPC_CHANNELS.feature.prepareClose, { feature: name }),
+    closeWithPromote: (req) => ipcRenderer.invoke(IPC_CHANNELS.feature.closeWithPromote, req)
   },
   knowledge: {
     portalBuild: () => ipcRenderer.invoke(IPC_CHANNELS.knowledge.portalBuild),

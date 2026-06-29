@@ -60,6 +60,43 @@ export const featureTasksRequestSchema = z.object({
   content: z.string().optional()
 }).strict();
 
+/**
+ * M3-2 schemas for the Close Feature wizard. These mirror the engine-side
+ * shapes in `packages/core/src/capabilities/domains/feature.ts`
+ * (`featureClose` v3.0.0 + `cdr.context.envelope`).
+ */
+export const featurePrepareCloseRequestSchema = z.object({
+  feature: z.string().min(1).regex(/^[a-z0-9][a-z0-9-]{0,62}$/)
+}).strict();
+
+export const featureCloseWithPromoteRequestSchema = z.object({
+  feature: z.string().min(1).regex(/^[a-z0-9][a-z0-9-]{0,62}$/),
+  confirmed: z.boolean().optional(),
+  force: z.boolean().optional(),
+  promote_artifacts: z.object({
+    decisions: z.object({
+      skip: z.boolean().optional(),
+      target_path: z.string().min(1).optional()
+    }).strict().optional(),
+    architecture: z.object({
+      entries: z.array(z.object({
+        source_path: z.string().min(1),
+        target_path: z.string().min(1)
+      }).strict()).optional()
+    }).strict().optional(),
+    cognitive: z.object({
+      unlink: z.array(z.object({
+        kind: z.enum(["behavior", "state-machine", "domain", "business-rule", "capability-map"]),
+        id: z.string().min(1),
+        repo: z.string().optional()
+      }).strict()).optional()
+    }).strict().optional(),
+    reports: z.object({
+      copy_paths: z.array(z.string().min(1)).optional()
+    }).strict().optional()
+  }).strict().optional()
+}).strict();
+
 // ---- agent.* ----
 
 export const agentListRequestSchema = z.object({}).strict();
@@ -108,6 +145,8 @@ export const REQUEST_SCHEMAS = {
   [IPC_CHANNELS.feature.runStage]: featureRunStageRequestSchema,
   [IPC_CHANNELS.feature.context]: featureContextRequestSchema,
   [IPC_CHANNELS.feature.tasks]: featureTasksRequestSchema,
+  [IPC_CHANNELS.feature.prepareClose]: featurePrepareCloseRequestSchema,
+  [IPC_CHANNELS.feature.closeWithPromote]: featureCloseWithPromoteRequestSchema,
   [IPC_CHANNELS.agent.list]: agentListRequestSchema,
   [IPC_CHANNELS.agent.attach]: agentAttachRequestSchema,
   [IPC_CHANNELS.agent.detach]: agentDetachRequestSchema,

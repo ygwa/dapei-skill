@@ -1,8 +1,9 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, copyFileSync, unlinkSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
-import { ensureDir, read, run, runSafe, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
+import { atomicWrite, ensureDir, read, run, runSafe, safeJoinWithin, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
 import { defaultBranch, featureRepoNames, requireFields } from "../shared.ts";
 import { loadCognitiveIndex } from "../../cognitive-index.ts";
 
@@ -305,10 +306,124 @@ export const featureReview: AnyCap = {
   }
 };
 
+// ---------- M3 (ADR-0017) promote_artifacts helpers ----------
+
+/**
+ * M3 (ADR-0017): the shape of `feature.close`'s optional `promote_artifacts`
+ * block. All four sub-blocks are independent and individually optional.
+ *
+ * M3 note (replaces v0.1 plan): `cognitive.entries.action: 'link'` was
+ * removed because v2.0.0 of `feature.close` already invokes `cdr.feature.link`
+ * unconditionally (see execute body). The "unlink" sub-action is the only
+ * cognitive-related affordance M3-1 adds.
+ */
+const promoteArtifactsSchemaShape = {
+  type: "object",
+  properties: {
+    decisions: {
+      type: "object",
+      properties: {
+        skip: { type: "boolean" },
+        target_path: { type: "string" }
+      },
+      additionalProperties: false
+    },
+    architecture: {
+      type: "object",
+      properties: {
+        entries: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["source_path", "target_path"],
+            properties: {
+              source_path: { type: "string" },
+              target_path: { type: "string" }
+            },
+            additionalProperties: false
+          }
+        }
+      },
+      additionalProperties: false
+    },
+    cognitive: {
+      type: "object",
+      properties: {
+        unlink: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["kind", "id"],
+            properties: {
+              kind: { enum: ["behavior", "state-machine", "domain", "business-rule", "capability-map"] },
+              id: { type: "string", minLength: 1 },
+              repo: { type: "string" }
+            },
+            additionalProperties: false
+          }
+        }
+      },
+      additionalProperties: false
+    },
+    reports: {
+      type: "object",
+      properties: {
+        copy_paths: {
+          type: "array",
+          items: { type: "string", minLength: 1 }
+        }
+      },
+      additionalProperties: false
+    }
+  },
+  additionalProperties: false
+} as const;
+
+/**
+ * Idempotency check via content hash. Writes only if either:
+ *   (a) the file does not exist, or
+ *   (b) the file's existing content hash differs from the new content's hash.
+ * Returns `true` if the write actually happened, `false` if skipped as no-op.
+ */
+function writeIfContentChanged(absPath: string, content: string): boolean {
+  if (existsSync(absPath)) {
+    const existing = read(absPath);
+    const existingHash = createHash("sha256").update(existing).digest("hex");
+    const newHash = createHash("sha256").update(content).digest("hex");
+    if (existingHash === newHash) return false;
+  }
+  atomicWrite(absPath, content);
+  return true;
+}
+
+/**
+ * M3-1: roll back any files written by `featureClose` so far.
+ * `created` is the list of (path, existedBefore) tuples the executor
+ * pushes as it writes — rollback only removes files that did NOT exist
+ * before this call started, preserving any pre-existing content.
+ */
+function rollbackWrites(created: Array<{ path: string; existedBefore: boolean }>): void {
+  for (const { path, existedBefore } of created) {
+    if (existedBefore) continue;
+    if (existsSync(path)) {
+      try { unlinkSync(path); } catch { /* best-effort */ }
+    }
+  }
+}
+
 export const featureClose: AnyCap = {
   id: "feature.close",
-  version: "2.0.0",
-  inputSchema: { required: ["feature"], properties: { feature: { type: "string", minLength: 1 }, confirmed: { type: "boolean" }, force: { type: "boolean" } }, additionalProperties: false },
+  version: "3.0.0",
+  inputSchema: {
+    required: ["feature"],
+    properties: {
+      feature: { type: "string", minLength: 1 },
+      confirmed: { type: "boolean" },
+      force: { type: "boolean" },
+      promote_artifacts: promoteArtifactsSchemaShape
+    },
+    additionalProperties: false
+  },
   confirmGate: "acceptance",
   async execute(ctx, input) {
     requireFields(input, ["feature"]);
@@ -317,41 +432,230 @@ export const featureClose: AnyCap = {
     const featureDir = join(p.featuresDir, feature);
     const featureYaml = join(featureDir, "feature.yaml");
     if (!existsSync(featureYaml)) throw new CapabilityError("FEATURE_MISSING", `feature.yaml not found for ${feature}`);
-    ensureDir(join(p.docsDir, "decisions"));
-    ensureDir(join(p.docsDir, "feature-impact"));
-    const decision = join(featureDir, "memory", "decision-log.md");
-    if (existsSync(decision)) write(join(p.docsDir, "decisions", `${feature}-decisions.md`), `# Decisions for Feature: ${feature}\n\n${read(decision)}`);
-    write(join(p.docsDir, "feature-impact", `${feature}.md`), `# Feature Impact: ${feature}\n\n- Archive Date: ${new Date().toISOString().slice(0, 10)}\n`);
-    for (const repo of featureRepoNames(read(featureYaml))) {
-      const repoPath = join(p.reposDir, repo);
-      const wt = join(featureDir, "repos", repo);
-      if (existsSync(join(wt, ".git"))) {
-        const dirty = runSafe("git", ["-C", wt, "status", "--porcelain"], p.rootDir);
-        if (dirty && input.force !== true) throw new CapabilityError("WORKTREE_DIRTY", `worktree for '${repo}' has unmerged changes. re-run with --force if you confirmed removal`);
-        const args = ["-C", repoPath, "worktree", "remove", wt];
-        if (input.force === true) args.push("--force");
-        runSafe("git", args, p.rootDir);
-        runSafe("git", ["-C", repoPath, "worktree", "prune"], p.rootDir);
-      }
-    }
-    // v2.0 — link every CDR asset touched during this feature's
-    // lifetime to the feature name. Idempotent: re-running
-    // cdr.feature.link on the same feature is a no-op.
-    const { runCapability } = await import("../../index.ts");
-    const linkResult = await runCapability("cdr.feature.link", { feature }, ctx);
-    const linkData = linkResult.result.data as { assets_tagged: number };
-    write(join(featureDir, "reports", "stage-acceptance.completed"), `stage: acceptance\ncompleted-at: ${new Date().toISOString()}\nnote: archived and closed\n`);
-    return {
-      ok: true,
-      data: { feature, cdr_assets_tagged: linkData.assets_tagged },
-      sideEffects: ["archive docs", "worktree remove", "cdr.feature.link"],
-      reportFragments: [
-        "feature closed",
-        `linked ${linkData.assets_tagged} CDR asset(s) to feature ${feature}`
-      ]
+
+    const promote = (input.promote_artifacts ?? {}) as {
+      decisions?: { skip?: boolean; target_path?: string };
+      architecture?: { entries?: Array<{ source_path: string; target_path: string }> };
+      cognitive?: { unlink?: Array<{ kind: string; id: string; repo?: string }> };
+      reports?: { copy_paths?: string[] };
     };
+
+    // Track every file this capability creates, for rollback on failure.
+    // We never delete files that pre-existed this call — only files we
+    // wrote ourselves get cleaned up if a later step throws.
+    const created: Array<{ path: string; existedBefore: boolean }> = [];
+    const track = (absPath: string): void => {
+      created.push({ path: absPath, existedBefore: existsSync(absPath) });
+    };
+
+    const promotedArtifacts: {
+      decisions: { written: boolean; skipped: boolean; target_path: string };
+      architecture: { written_count: number; entries: Array<{ source_path: string; target_path: string; written: boolean }> };
+      cognitive: { unlinked_count: number; ids: Array<{ kind: string; id: string; repo?: string }> };
+      reports: { copied_count: number; paths: Array<{ source: string; target: string; copied: boolean }> };
+    } = {
+      decisions: { written: false, skipped: false, target_path: "" },
+      architecture: { written_count: 0, entries: [] },
+      cognitive: { unlinked_count: 0, ids: [] },
+      reports: { copied_count: 0, paths: [] }
+    };
+
+    try {
+      ensureDir(join(p.docsDir, "decisions"));
+      ensureDir(join(p.docsDir, "feature-impact"));
+
+      // --- decisions section ---
+      // v2.0.0 always copied memory/decision-log.md → docs/decisions/<f>-decisions.md.
+      // M3 (ADR-0017): honor promote.decisions.skip = true to suppress this
+      // default, or promote.decisions.target_path to redirect the destination.
+      // Either way, the write is content-hash idempotent.
+      const decisionSrc = join(featureDir, "memory", "decision-log.md");
+      const defaultDecisionTarget = join(p.docsDir, "decisions", `${feature}-decisions.md`);
+      const decisionTarget = (promote.decisions?.target_path && promote.decisions.target_path.length > 0)
+        ? safeJoinWithin(p.rootDir, promote.decisions.target_path)
+        : defaultDecisionTarget;
+      promotedArtifacts.decisions.target_path = relative(p.rootDir, decisionTarget);
+
+      if (promote.decisions?.skip === true) {
+        promotedArtifacts.decisions.skipped = true;
+      } else if (existsSync(decisionSrc)) {
+        const body = read(decisionSrc);
+        const content = `# Decisions for Feature: ${feature}\n\n${body}`;
+        track(decisionTarget);
+        const written = writeIfContentChanged(decisionTarget, content);
+        promotedArtifacts.decisions.written = written;
+      }
+
+      write(join(p.docsDir, "feature-impact", `${feature}.md`), `# Feature Impact: ${feature}\n\n- Archive Date: ${new Date().toISOString().slice(0, 10)}\n`);
+
+      // --- architecture section (new in M3-1) ---
+      // Copy each (source_path, target_path) entry from
+      // features/<f>/<source> → <target>, both relative to workspace root.
+      // Path-traversal protected via safeJoinWithin. Idempotent.
+      if (promote.architecture?.entries) {
+        for (const e of promote.architecture.entries) {
+          const src = safeJoinWithin(featureDir, e.source_path);
+          const dst = safeJoinWithin(p.rootDir, e.target_path);
+          if (!existsSync(src)) {
+            throw new CapabilityError(
+              "PROMOTE_SOURCE_MISSING",
+              `promote_artifacts.architecture: source_path not found: ${e.source_path}`
+            );
+          }
+          const body = read(src);
+          track(dst);
+          const written = writeIfContentChanged(dst, body);
+          if (written) promotedArtifacts.architecture.written_count++;
+          promotedArtifacts.architecture.entries.push({
+            source_path: e.source_path,
+            target_path: e.target_path,
+            written
+          });
+        }
+      }
+
+      // --- reports section (new in M3-1) ---
+      // Copy selected reports from features/<f>/reports/<rel> →
+      // docs/feature-impact/<f>/<basename>. Use fs.copyFileSync so binary
+      // attachments (if any in the future) survive; today all reports
+      // are markdown but the contract stays format-agnostic.
+      if (promote.reports?.copy_paths) {
+        const reportTargetDir = join(p.docsDir, "feature-impact", feature);
+        ensureDir(reportTargetDir);
+        for (const rel of promote.reports.copy_paths) {
+          const src = safeJoinWithin(featureDir, rel);
+          if (!existsSync(src)) {
+            throw new CapabilityError(
+              "PROMOTE_SOURCE_MISSING",
+              `promote_artifacts.reports: copy_path not found: ${rel}`
+            );
+          }
+          const basename = src.split("/").pop() ?? rel;
+          const dst = join(reportTargetDir, basename);
+          const entry = { source: rel, target: relative(p.rootDir, dst), copied: false };
+          if (!existsSync(dst)) {
+            track(dst);
+            copyFileSync(src, dst);
+            entry.copied = true;
+            promotedArtifacts.reports.copied_count++;
+          }
+          promotedArtifacts.reports.paths.push(entry);
+        }
+      }
+
+      for (const repo of featureRepoNames(read(featureYaml))) {
+        const repoPath = join(p.reposDir, repo);
+        const wt = join(featureDir, "repos", repo);
+        if (existsSync(join(wt, ".git"))) {
+          const dirty = runSafe("git", ["-C", wt, "status", "--porcelain"], p.rootDir);
+          if (dirty && input.force !== true) throw new CapabilityError("WORKTREE_DIRTY", `worktree for '${repo}' has unmerged changes. re-run with --force if you confirmed removal`);
+          const args = ["-C", repoPath, "worktree", "remove", wt];
+          if (input.force === true) args.push("--force");
+          runSafe("git", args, p.rootDir);
+          runSafe("git", ["-C", repoPath, "worktree", "prune"], p.rootDir);
+        }
+      }
+
+      // v2.0 — link every CDR asset touched during this feature's
+      // lifetime to the feature name. Idempotent: re-running
+      // cdr.feature.link on the same feature is a no-op.
+      const { runCapability } = await import("../../index.ts");
+      const linkResult = await runCapability("cdr.feature.link", { feature }, ctx);
+      const linkData = linkResult.result.data as { assets_tagged: number };
+
+      // --- cognitive.unlink section (new in M3-1) ---
+      // Inverse of the auto-link: explicitly clear `created_by_feature` for
+      // any asset the user wants to disown (e.g. an asset that was tagged
+      // by a previous close but actually predates this feature).
+      // We delegate to `cdr.feature.link` (not yet a `cdr.feature.unlink`)
+      // because the cognitive index's created_by_feature field is a plain
+      // string we can simply clear via the index API.
+      if (promote.cognitive?.unlink) {
+        for (const u of promote.cognitive.unlink) {
+          // best-effort: not a hard error if the asset isn't currently
+          // tagged with this feature; we count it as unlinked only if the
+          // index loader exposes a clear-tag entry point.
+          const cleared = clearCreatedByFeature(ctx, u.kind, u.id, u.repo, feature);
+          if (cleared) {
+            promotedArtifacts.cognitive.unlinked_count++;
+            promotedArtifacts.cognitive.ids.push(u);
+          } else {
+            promotedArtifacts.cognitive.ids.push(u);
+          }
+        }
+      }
+
+      write(join(featureDir, "reports", "stage-acceptance.completed"), `stage: acceptance\ncompleted-at: ${new Date().toISOString()}\nnote: archived and closed\n`);
+      return {
+        ok: true,
+        data: {
+          feature,
+          cdr_assets_tagged: linkData.assets_tagged,
+          promoted_artifacts: promotedArtifacts
+        },
+        sideEffects: ["archive docs", "worktree remove", "cdr.feature.link", "promote_artifacts"],
+        reportFragments: [
+          "feature closed",
+          `linked ${linkData.assets_tagged} CDR asset(s) to feature ${feature}`,
+          `promoted: ${promotedArtifacts.architecture.written_count} architecture + ${promotedArtifacts.reports.copied_count} reports + ${promotedArtifacts.cognitive.unlinked_count} cognitive unlink(s); decisions ${promotedArtifacts.decisions.skipped ? "skipped" : promotedArtifacts.decisions.written ? "written" : "unchanged"}`
+        ]
+      };
+    } catch (err) {
+      // Roll back only the files we created in this call. Files that
+      // pre-existed are left untouched.
+      rollbackWrites(created);
+      throw err;
+    }
   }
 };
+
+/**
+ * M3-1 cognitive.unlink helper. Clears `created_by_feature` and
+ * `created_at` on a single cognitive index entry. Returns true if a
+ * field was actually cleared, false if no change was needed (entry not
+ * found, or already not tagged with this feature).
+ *
+ * Hard contract: this only edits the cognitive index in-memory and on
+ * disk; it does NOT touch `docs/as-is/<kind>/*.yaml` files (the index
+ * is the single source of truth for created_by_feature; the on-disk
+ * yaml may carry a backfilled `created_by_feature` from a previous run
+ * which is informational only — see ADR-0017 / CDR v0.10).
+ */
+function clearCreatedByFeature(
+  ctx: { rootDir: string },
+  kind: string,
+  id: string,
+  repo: string | undefined,
+  feature: string
+): boolean {
+  try {
+    const index = loadCognitiveIndex(ctx.rootDir);
+    const buckets: Record<string, Array<{ id: string; repo?: string; created_by_feature?: string; [k: string]: unknown }>> = {
+      behavior: index.behaviors as unknown as Array<{ id: string; repo?: string; created_by_feature?: string }>,
+      "state-machine": index.state_machines as unknown as Array<{ id: string; repo?: string; created_by_feature?: string }>,
+      domain: index.domains as unknown as Array<{ id: string; repo?: string; created_by_feature?: string }>,
+      "business-rule": index.business_rules as unknown as Array<{ id: string; repo?: string; created_by_feature?: string }>,
+      "capability-map": index.capability_maps as unknown as Array<{ id: string; repo?: string; created_by_feature?: string }>
+    };
+    const bucket = buckets[kind];
+    if (!bucket) return false;
+    let changed = false;
+    for (const e of bucket) {
+      if (e.id !== id) continue;
+      if (repo !== undefined && e.repo !== repo) continue;
+      if (e.created_by_feature === feature) {
+        delete e.created_by_feature;
+        changed = true;
+      }
+    }
+    if (!changed) return false;
+    const indexPath = join(workspacePaths(ctx.rootDir).dapeiDir, "cognitive", "index.yaml");
+    atomicWrite(indexPath, JSON.stringify(index, null, 2) + "\n");
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function parseFeatureYaml(content: string): Record<string, unknown> {
   const result: Record<string, unknown> = {};

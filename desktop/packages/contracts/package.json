@@ -9,7 +9,8 @@
     "./ipc": "./src/ipc/index.ts",
     "./events": "./src/events/index.ts",
     "./plugin": "./src/plugin/index.ts",
-    "./acp": "./src/acp/index.ts"
+    "./acp": "./src/acp/index.ts",
+    "./feature": "./src/feature/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

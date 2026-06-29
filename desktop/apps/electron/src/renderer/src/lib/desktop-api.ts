@@ -35,7 +35,11 @@ function createDevDesktopApi(): DesktopApi {
       runStage: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } }),
       context: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } }),
       tasks: async () => ({ ok: true, text: "" }),
-      create: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } })
+      create: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } }),
+      prepareClose: async () => {
+        throw { code: "DEV_STUB", message: "dev stub — run main process for real preflight" };
+      },
+      closeWithPromote: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } })
     },
     knowledge: {
       portalBuild: async () => ({ ok: false, error: { code: "DEV_STUB", message: "dev stub" } }),

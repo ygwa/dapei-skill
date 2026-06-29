@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Plus } from "lucide-react";
+import { ArrowRight, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { CloseWizardModal, type WizardPreflight, type CloseWizardPayload } from "@dapei/desktop-ui";
 import { ensureDesktopApi } from "../../lib/desktop-api.ts";
 import { queryKeys } from "../../lib/query-keys.ts";
 
@@ -14,6 +15,12 @@ export function FeatureListView() {
   const [repos, setRepos] = useState("");
   const [objective, setObjective] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  // M3-2: Close wizard state. One feature can be in the wizard at a time.
+  const [closeTarget, setCloseTarget] = useState<string | null>(null);
+  const [preflight, setPreflight] = useState<WizardPreflight | null>(null);
+  const [preflightLoading, setPreflightLoading] = useState(false);
+  const [preflightError, setPreflightError] = useState<{ code: string; message: string } | null>(null);
 
   const workspacePath = decodeURIComponent(workspaceId);
 
@@ -37,6 +44,49 @@ export function FeatureListView() {
       queryClient.invalidateQueries({ queryKey: queryKeys.features.list(workspaceId) });
     },
     onError: (err: Error) => setError(err.message)
+  });
+
+  // M3-2: load preflight when the user clicks Close on a row.
+  const startClose = async (featureName: string): Promise<void> => {
+    setCloseTarget(featureName);
+    setPreflight(null);
+    setPreflightError(null);
+    setPreflightLoading(true);
+    try {
+      const result = await ensureDesktopApi().features.prepareClose(featureName);
+      setPreflight(result as WizardPreflight);
+    } catch (err) {
+      const e = err as { code?: string; message?: string };
+      setPreflightError({ code: e.code ?? "UNKNOWN", message: e.message ?? String(err) });
+    } finally {
+      setPreflightLoading(false);
+    }
+  };
+
+  const cancelClose = (): void => {
+    setCloseTarget(null);
+    setPreflight(null);
+    setPreflightError(null);
+  };
+
+  const closeMutation = useMutation({
+    mutationFn: async (payload: CloseWizardPayload) => {
+      if (!closeTarget) throw new Error("no target");
+      return ensureDesktopApi().features.closeWithPromote({
+        feature: closeTarget,
+        confirmed: true,
+        ...(payload.promote_artifacts ? { promote_artifacts: payload.promote_artifacts } : {})
+      });
+    },
+    onSuccess: (result) => {
+      if (result.ok) {
+        cancelClose();
+        queryClient.invalidateQueries({ queryKey: queryKeys.features.list(workspaceId) });
+      } else {
+        setPreflightError(result.error);
+      }
+    },
+    onError: (err: Error) => setPreflightError({ code: "UNKNOWN", message: err.message })
   });
 
   return (
@@ -67,29 +117,50 @@ export function FeatureListView() {
             </p>
           )}
           {features.map((f) => (
-            <button
+            <div
               key={f.name}
-              type="button"
-              onClick={() => navigate(`/w/${workspaceId}/features/${f.name}`)}
-              className="group flex w-full items-center rounded-lg border border-slate-200 bg-white p-4 text-left transition-all hover:border-indigo-400 hover:shadow-md"
+              className="group flex w-full items-center rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-indigo-400 hover:shadow-md"
             >
-              <div className="mr-3">
+              <button
+                type="button"
+                onClick={() => navigate(`/w/${workspaceId}/features/${f.name}`)}
+                className="mr-3 flex items-center text-left"
+              >
                 {f.active ? (
                   <span className="flex h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-500" />
                 ) : (
                   <span className="flex h-2.5 w-2.5 rounded-full bg-slate-300" />
                 )}
-              </div>
-              <div className="min-w-0 flex-1">
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/w/${workspaceId}/features/${f.name}`)}
+                className="min-w-0 flex-1 text-left"
+              >
                 <div className="flex items-center gap-3">
                   <h3 className="font-bold text-slate-800 group-hover:text-indigo-600">{f.name}</h3>
                   <span className="rounded border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[10px] uppercase text-slate-500">
                     {f.stage ?? "未开始"}
                   </span>
                 </div>
-              </div>
-              <ArrowRight className="ml-3 h-4 w-4 text-slate-300 group-hover:text-indigo-500" />
-            </button>
+              </button>
+              <button
+                type="button"
+                onClick={() => startClose(f.name)}
+                className="ml-2 inline-flex items-center rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
+                title="关闭 Feature 并回写选中的资产到 workspace 维度"
+              >
+                <X className="mr-1 h-3 w-3" />
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/w/${workspaceId}/features/${f.name}`)}
+                className="ml-2"
+              >
+                <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-indigo-500" />
+              </button>
+            </div>
           ))}
         </div>
       </div>
@@ -155,6 +226,16 @@ export function FeatureListView() {
           </div>
         </div>
       )}
+
+      <CloseWizardModal
+        open={closeTarget !== null}
+        preflight={preflight}
+        loading={preflightLoading}
+        loadError={preflightError}
+        onRetry={() => closeTarget && startClose(closeTarget)}
+        onCancel={cancelClose}
+        onConfirm={(payload) => closeMutation.mutate(payload)}
+      />
     </div>
   );
 }

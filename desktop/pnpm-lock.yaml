@@ -175,6 +175,9 @@ importers:
       '@dapei/desktop-engine-client':
         specifier: workspace:*
         version: link:../engine-client
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: ^6.0.3

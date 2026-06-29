@@ -3,6 +3,7 @@ import type { CapabilityInvokeRequest, CapabilityInvokeResponse } from "./ipc/ca
 export { IPC_CHANNELS } from "./ipc/channels.ts";
 
 import type { DesktopPushEvent } from "./events/push.ts";
+import type { ClosePreflight, FeatureCloseWithPromoteRequest, FeatureCloseResponse } from "./feature/types.ts";
 
 /** Repo summary surfaced to the renderer. */
 export interface RepoSummary {
@@ -52,6 +53,13 @@ export interface DesktopApi {
     context: (name: string, stage: string) => Promise<{ ok: boolean; runtimeContext?: string; error?: { code: string; message: string } }>;
     tasks: (name: string) => Promise<{ ok: boolean; text?: string; error?: { code: string; message: string } }>;
     create: (input: { name: string; repos: string; objective?: string }) => Promise<{ ok: boolean; feature?: string; error?: { code: string; message: string } }>;
+    /** M3-2: read preflight data for the Close wizard. */
+    prepareClose: (name: string) => Promise<ClosePreflight>;
+    /** M3-2: invoke feature.close with optional promote_artifacts. */
+    closeWithPromote: (req: FeatureCloseWithPromoteRequest) => Promise<
+      | { ok: true; data: FeatureCloseResponse["data"] }
+      | { ok: false; error: { code: string; message: string } }
+    >;
   };
   knowledge: {
     portalBuild: () => Promise<{ ok: boolean; error?: { code: string; message: string } }>;
@@ -84,3 +92,4 @@ export * from "./ipc/index.ts";
 export * from "./events/index.ts";
 export * from "./plugin/index.ts";
 export * from "./acp/index.ts";
+export * from "./feature/index.ts";
