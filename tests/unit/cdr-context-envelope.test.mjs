@@ -5,10 +5,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
-const repoRoot = "/Users/ygwang/Develop/github/dapei-skill";
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(__dirname, "../..");
 
 function runEngine(tmp, capabilityId, input = {}, extraEnv = {}) {
   return spawnSync(
