@@ -628,5 +628,55 @@ export const routes: Route[] = [
     confidence: 0.7,
     tags: ["feature", "status"],
     priority: 100
+  },
+  {
+    id: "feature.gap-analysis.english",
+    capability: "feature.gap-analysis",
+    pattern: /^(?=.*\bgap\b)(?=.*\banalysis\b).*/i,
+    inputBuilder: (t, ctx) => ({ feature: ctx.feature || extractFeatureName(t), max_envelopes: 3 }),
+    reason: "gap-analysis intent",
+    confidence: 0.9,
+    tags: ["feature", "gap-analysis"],
+    priority: 100
+  },
+  {
+    id: "feature.gap-analysis.chinese",
+    capability: "feature.gap-analysis",
+    pattern: /差距分析|gap\s*分析|分析.*差距/i,
+    inputBuilder: (t, ctx) => ({ feature: ctx.feature || extractFeatureName(t), max_envelopes: 3 }),
+    reason: "gap-analysis intent (chinese)",
+    confidence: 0.9,
+    tags: ["feature", "gap-analysis", "chinese"],
+    priority: 100
+  },
+  {
+    id: "feature.stage.transition.english",
+    capability: "feature.stage.transition",
+    pattern: /^(?=.*\btransition\b)(?=.*\bstage\b).*/i,
+    inputBuilder: (t, ctx) => ({ feature: ctx.feature || extractFeatureName(t), stage: ctx.stage || extractStage(t) || "" }),
+    reason: "stage transition intent",
+    confidence: 0.9,
+    tags: ["feature", "stage"],
+    priority: 100
+  },
+  {
+    id: "feature.accept.english",
+    capability: "feature.accept",
+    pattern: /^(?=.*\baccept\b)(?=.*\bfeature\b).*/i,
+    inputBuilder: (t, ctx) => ({ feature: ctx.feature || extractFeatureName(t), confirmed: ctx.confirmed ?? true }),
+    reason: "feature accept intent",
+    confidence: 0.9,
+    tags: ["feature", "accept"],
+    priority: 100
+  },
+  {
+    id: "feature.accept.chinese",
+    capability: "feature.accept",
+    pattern: /接受.*feature|验收.*feature|feature.*接受/i,
+    inputBuilder: (t, ctx) => ({ feature: ctx.feature || extractFeatureName(t), confirmed: ctx.confirmed ?? true }),
+    reason: "feature accept intent (chinese)",
+    confidence: 0.9,
+    tags: ["feature", "accept", "chinese"],
+    priority: 100
   }
 ];

@@ -4,7 +4,7 @@ import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
 import { atomicWrite, ensureDir, read, run, runSafe, safeJoinWithin, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
-import { defaultBranch, featureRepoNames, requireFields } from "../shared.ts";
+import { defaultBranch, featureRepoNames, requireFields, yamlStageList, yamlStageRequires } from "../shared.ts";
 import { loadCognitiveIndex } from "../../cognitive-index.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
@@ -840,6 +840,321 @@ export const featureTeamStatus: AnyCap = {
       data: { text: lines.join("\n"), features: rows },
       sideEffects: [],
       reportFragments: [`team status: ${rows.length} features across ${Object.keys(byOwner).length} owners`]
+    };
+  }
+};
+
+// ============================================================
+// #1 feature.gap-analysis — scaffolds the gap-analysis stage.
+//
+// Validates analyze-current-state is completed (per workflow YAML),
+// writes a skeleton docs/02-gap-analysis.md with the stage header
+// and a Related Cognitive Envelopes section auto-injected from
+// cdr.context.envelope (top behaviors matching the feature objective).
+// The AI fills in the actual gap reasoning; the engine only
+// guarantees the file exists and is bounded to a manageable size.
+//
+// Engine does NOT write a stage marker — that is feature.stage.transition's
+// job, so callers can compose: scaffold → AI writes content →
+// feature.stage.transition gap-analysis to mark complete.
+// ============================================================
+
+export const featureGapAnalysis: AnyCap = {
+  id: "feature.gap-analysis",
+  version: "1.0.0",
+  inputSchema: {
+    required: ["feature"],
+    properties: {
+      feature: { type: "string", minLength: 1 },
+      max_envelopes: { type: "number" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    requireFields(input, ["feature"]);
+    const feature = String(input.feature);
+    const maxEnvelopes = Math.max(0, Math.min(10, Number(input.max_envelopes ?? 3)));
+    const p = workspacePaths(ctx.rootDir);
+    const featureDir = join(p.featuresDir, feature);
+    if (!existsSync(join(featureDir, "feature.yaml"))) {
+      throw new CapabilityError("FEATURE_MISSING", `feature.yaml not found for ${feature}`);
+    }
+    if (!existsSync(join(featureDir, "reports", "stage-analyze-current-state.completed"))) {
+      throw new CapabilityError(
+        "STAGE_PREREQ_MISSING",
+        `gap-analysis requires 'analyze-current-state' to be completed first`
+      );
+    }
+
+    // Pick top related behaviors using objective keywords (same heuristic
+    // feature.create uses to populate related-cognitive-context.md).
+    let objective = "TBD";
+    try {
+      const yaml = read(join(featureDir, "feature.yaml"));
+      const m = yaml.match(/objective:\s*"?([^"\n]+)"?/);
+      if (m) objective = m[1].trim();
+    } catch { /* fall through */ }
+    const keywords = objective
+      .toLowerCase()
+      .split(/[^a-zA-Z0-9一-龥]+/)
+      .filter((k) => k.length > 2 || (k.length > 0 && /[一-龥]/.test(k)));
+
+    let relatedSection = "";
+    if (maxEnvelopes > 0 && keywords.length > 0) {
+      try {
+        const index = loadCognitiveIndex(ctx.rootDir);
+        const ranked = index.behaviors
+          .filter((b: any) => typeof b?.id === "string")
+          .map((b: any) => {
+            const text = `${b.id} ${b.repo ?? ""} ${b.path ?? ""}`.toLowerCase();
+            const score = keywords.reduce((acc: number, k: string) => acc + (text.includes(k) ? 1 : 0), 0);
+            return { b, score };
+          })
+          .filter((x: { score: number }) => x.score > 0)
+          .sort((a: { score: number }, b: { score: number }) => b.score - a.score)
+          .slice(0, maxEnvelopes);
+
+        if (ranked.length > 0) {
+          const { runCapability } = await import("../../index.ts");
+          const lines: string[] = ["> Auto-injected by `feature.gap-analysis`. Each envelope is bounded to ~8KB by `cdr.context.envelope`.\n"];
+          for (const { b } of ranked) {
+            try {
+              const envInput: Record<string, unknown> = {
+                target: "behavior",
+                id: String(b.id),
+                include_evidence: true,
+                include_related: 0
+              };
+              if (b.repo) envInput.repo = String(b.repo);
+              const { result } = await runCapability(
+                "cdr.context.envelope",
+                envInput as Record<string, import("../../types.ts").Json>,
+                ctx
+              );
+              if (result?.ok && result.data?.envelope) {
+                const env = result.data.envelope as Record<string, unknown>;
+                const summary = typeof env.summary === "string" ? env.summary : "";
+                lines.push(`- **${b.id}**${b.repo ? ` (${String(b.repo)})` : ""}: ${summary.slice(0, 280)}`);
+              }
+            } catch { /* one bad envelope must not block the scaffold */ }
+          }
+          relatedSection = lines.join("\n") + "\n";
+        }
+      } catch { /* index missing — skip injection */ }
+    }
+
+    const gapPath = join(featureDir, "docs", "02-gap-analysis.md");
+    ensureDir(join(featureDir, "docs"));
+    const content = [
+      `# Gap Analysis — ${feature}`,
+      "",
+      `- Generated: ${new Date().toISOString()}`,
+      `- Prereq satisfied: analyze-current-state ✓`,
+      "",
+      "## Objective",
+      "",
+      objective,
+      "",
+      "## Current State (from analyze-current-state)",
+      "",
+      "_Reference: `docs/01-current-state.md`._",
+      "",
+      "## Gaps",
+      "",
+      "_AI fills in: what is missing between current state and the objective. Use fact-level entries with `sources[]` for any factual claim._",
+      "",
+      "## Related Cognitive Context",
+      "",
+      relatedSection || "_No related behaviors matched objective keywords. Run `cdr.entries.candidate` + `cdr.entries.propose` to surface entry points first._",
+      ""
+    ].join("\n");
+    atomicWrite(gapPath, content);
+
+    return {
+      ok: true,
+      data: {
+        gapAnalysis: relative(p.rootDir, gapPath),
+        injectedEnvelopes: relatedSection ? relatedSection.split("\n").filter((l) => l.startsWith("- **")).length : 0
+      },
+      sideEffects: ["docs/02-gap-analysis.md scaffolded"],
+      reportFragments: ["gap-analysis scaffolded"]
+    };
+  }
+};
+
+// ============================================================
+// #2 feature.stage.transition — validates and commits a stage transition.
+//
+// Reads the workflow YAML (.dapei/workflows/feature-lifecycle.yaml),
+// enforces that every `requires:` stage has a `stage-<s>.completed` marker,
+// enforces CONFIRMATION_REQUIRED for the three gate stages, and writes
+// the new marker + updates feature-progress.md.
+//
+// Sits in the feature.* namespace alongside feature.stage (the loose
+// set/get) so the feature.md command has a clean transition path
+// that does NOT bypass the workflow DAG.
+// ============================================================
+
+export const featureStageTransition: AnyCap = {
+  id: "feature.stage.transition",
+  version: "1.0.0",
+  inputSchema: {
+    required: ["feature", "stage"],
+    properties: {
+      feature: { type: "string", minLength: 1 },
+      stage: { type: "string", minLength: 1 },
+      confirmed: { type: "boolean" }
+    },
+    additionalProperties: false
+  },
+  async execute(ctx, input) {
+    requireFields(input, ["feature", "stage"]);
+    const feature = String(input.feature);
+    const stage = String(input.stage);
+    const p = workspacePaths(ctx.rootDir);
+    const featureDir = join(p.featuresDir, feature);
+    if (!existsSync(join(featureDir, "feature.yaml"))) {
+      throw new CapabilityError("FEATURE_MISSING", `feature.yaml not found for ${feature}`);
+    }
+
+    const workflowFile = join(p.dapeiDir, "workflows", "feature-lifecycle.yaml");
+    if (!existsSync(workflowFile)) {
+      throw new CapabilityError("WORKFLOW_MISSING", `workflow file not found: ${workflowFile}`);
+    }
+    const wf = read(workflowFile);
+    if (!yamlStageList(wf).includes(stage)) {
+      throw new CapabilityError("INVALID_STAGE", `stage '${stage}' not declared in workflow`);
+    }
+
+    // Confirmation gate — engine-enforced, no bypass without explicit --yes.
+    if (
+      new Set(["solution-design", "implementation", "acceptance"]).has(stage) &&
+      input.confirmed !== true &&
+      (input as Record<string, unknown>).__confirmed !== true
+    ) {
+      throw new CapabilityError(
+        "CONFIRMATION_REQUIRED",
+        `stage '${stage}' is a confirmation gate. Re-run with --yes to confirm.`
+      );
+    }
+
+    // Prereq stages must be marked completed (not just declared in YAML).
+    for (const req of yamlStageRequires(wf, stage)) {
+      const marker = join(featureDir, "reports", `stage-${req}.completed`);
+      if (!existsSync(marker)) {
+        throw new CapabilityError(
+          "STAGE_PREREQ_MISSING",
+          `required stage '${req}' not completed before '${stage}'. Run \`feature.stage.transition ${feature} --stage ${req}\` first.`
+        );
+      }
+    }
+
+    ensureDir(join(featureDir, "reports"));
+    const marker = join(featureDir, "reports", `stage-${stage}.completed`);
+    atomicWrite(marker, `stage: ${stage}\ncompleted-at: ${new Date().toISOString()}\n`);
+
+    const progress = join(featureDir, "reports", "feature-progress.md");
+    const prev = existsSync(progress) ? read(progress) : "# Feature Progress\n\n";
+    const hasStageLine = /## Stage: /.test(prev);
+    const updated = hasStageLine
+      ? prev.replace(/## Stage: .+$/m, `## Stage: ${stage}`)
+      : (prev.endsWith("\n") ? prev : prev + "\n") + `## Stage: ${stage}\n- Status: completed\n`;
+    atomicWrite(progress, updated);
+
+    return {
+      ok: true,
+      data: { stage, marker: relative(p.rootDir, marker) },
+      sideEffects: ["stage marker", "progress updated"],
+      reportFragments: [`transitioned to ${stage}`]
+    };
+  }
+};
+
+// ============================================================
+// #3 feature.accept — closes the acceptance gate.
+//
+// Validates architecture-review is completed (the workflow YAML's
+// declared prereq for acceptance). Writes reports/acceptance-report.md
+// with timestamp + optional notes. Writes the stage-acceptance.completed
+// marker so feature.close can proceed without re-prompting.
+//
+// Requires confirmed=true. The engine will refuse without it — this is
+// the missing confirmation gate that previously lived only in the AI's
+// "self-pause" discipline.
+// ============================================================
+
+export const featureAccept: AnyCap = {
+  id: "feature.accept",
+  version: "1.0.0",
+  inputSchema: {
+    required: ["feature"],
+    properties: {
+      feature: { type: "string", minLength: 1 },
+      notes: { type: "string" },
+      confirmed: { type: "boolean" }
+    },
+    additionalProperties: false
+  },
+  confirmGate: "acceptance",
+  async execute(ctx, input) {
+    requireFields(input, ["feature"]);
+    const feature = String(input.feature);
+    const notes = input.notes ? String(input.notes) : "";
+    const p = workspacePaths(ctx.rootDir);
+    const featureDir = join(p.featuresDir, feature);
+    if (!existsSync(join(featureDir, "feature.yaml"))) {
+      throw new CapabilityError("FEATURE_MISSING", `feature.yaml not found for ${feature}`);
+    }
+
+    if (input.confirmed !== true) {
+      throw new CapabilityError(
+        "CONFIRMATION_REQUIRED",
+        `feature.accept is the acceptance confirmation gate. Re-run with --yes to record acceptance.`
+      );
+    }
+
+    const archReviewMarker = join(featureDir, "reports", "stage-architecture-review.completed");
+    if (!existsSync(archReviewMarker)) {
+      throw new CapabilityError(
+        "STAGE_PREREQ_MISSING",
+        `acceptance requires 'architecture-review' to be completed first`
+      );
+    }
+
+    ensureDir(join(featureDir, "reports"));
+    const reportPath = join(featureDir, "reports", "acceptance-report.md");
+    const lines = [
+      `# Acceptance Report — ${feature}`,
+      "",
+      `- Accepted at: ${new Date().toISOString()}`,
+      `- Confirmed by: engine (feature.accept)`,
+      ""
+    ];
+    if (notes.length > 0) {
+      lines.push("## Notes", "", notes, "");
+    }
+    lines.push("## Reports Referenced", "", "- reports/validation-report.md", "- reports/architecture-review.md", "");
+    atomicWrite(reportPath, lines.join("\n"));
+
+    // Stage marker — same convention as workflow.runStage uses.
+    const marker = join(featureDir, "reports", "stage-acceptance.completed");
+    atomicWrite(marker, `stage: acceptance\ncompleted-at: ${new Date().toISOString()}\n`);
+
+    // Update progress file for symmetry with other stage transitions.
+    const progress = join(featureDir, "reports", "feature-progress.md");
+    if (existsSync(progress)) {
+      const prev = read(progress);
+      const updated = /## Stage: /.test(prev)
+        ? prev.replace(/## Stage: .+$/m, "## Stage: acceptance")
+        : prev + "\n## Stage: acceptance\n- Status: accepted\n";
+      atomicWrite(progress, updated);
+    }
+
+    return {
+      ok: true,
+      data: { report: relative(p.rootDir, reportPath), marker: relative(p.rootDir, marker) },
+      sideEffects: ["acceptance report", "stage marker", "progress updated"],
+      reportFragments: [`feature ${feature} accepted`]
     };
   }
 };

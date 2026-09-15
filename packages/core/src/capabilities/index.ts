@@ -1,6 +1,6 @@
 import { workspaceInit, workspaceReport, workspaceStatus, workspaceValidate } from "./domains/workspace.ts";
 import { reposAdd, reposAnalyze, reposCheck, reposList, reposRemove, reposSync } from "./domains/repos.ts";
-import { featureClose, featureCreate, featureReview, featureStage, featureStatus, featureTasks, featureAssign, featureHandoff, featureTeamStatus } from "./domains/feature.ts";
+import { featureClose, featureCreate, featureReview, featureStage, featureStatus, featureTasks, featureAssign, featureHandoff, featureTeamStatus, featureGapAnalysis, featureStageTransition, featureAccept } from "./domains/feature.ts";
 import { contextBuild } from "./domains/context.ts";
 import { workflowRunStage, workflowStatus } from "./domains/workflow.ts";
 import { featureReport, featureGuardrail, validationDetect, validationExecute, validationReport, validationRun } from "./domains/reporting.ts";
@@ -74,6 +74,9 @@ export const capabilitySpecs: AnyCap[] = [
   featureAssign,
   featureHandoff,
   featureTeamStatus,
+  featureGapAnalysis,
+  featureStageTransition,
+  featureAccept,
   memoryAppend,
   auditQuery,
   cognitiveDiscover,
