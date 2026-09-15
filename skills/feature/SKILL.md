@@ -27,6 +27,9 @@ description: Use when managing feature lifecycle, creating features, or checking
 | 创建新 feature | `feature.create` |
 | 查看 feature 状态 | `feature.status` |
 | 获取/设置当前 stage | `feature.stage` |
+| 推进到下一个 stage（含确认门） | `feature.stage.transition` |
+| 生成 gap-analysis 文档（含 cognitive envelope） | `feature.gap-analysis` |
+| 验收 feature（最终确认门） | `feature.accept` |
 | 管理 backlog 任务 | `feature.tasks` |
 | 生成每日 review | `feature.review` |
 | 报告 feature 进展 | `feature.report` |
