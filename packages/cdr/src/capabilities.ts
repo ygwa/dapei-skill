@@ -4308,7 +4308,6 @@ export const cdrContextEnvelope: AnyCap = {
   id: "cdr.context.envelope",
   version: "1.0.0",
   inputSchema: {
-    type: "object",
     required: ["target", "id"],
     properties: {
       target: {
@@ -4383,6 +4382,7 @@ export const cdrContextEnvelope: AnyCap = {
         ok: false,
         data: null,
         sideEffects: [],
+        reportFragments: [],
         error: {
           code: "ENVELOPE_NOT_FOUND",
           message: `envelope target not found: ${target}.${id}${repo ? ` (repo=${repo})` : ""}`
@@ -4395,7 +4395,7 @@ export const cdrContextEnvelope: AnyCap = {
     const summary = readAssetSummary(absPath);
     const evidence = includeEvidence ? readAssetEvidence(absPath) : [];
     const related = includeRelated > 0
-      ? findRelatedIds(index, target as Parameters<typeof findRelatedIds>[0], id, repo)
+      ? findRelatedIds(index, target as Parameters<typeof findRelatedIds>[1], id, repo)
       : [];
 
     const envelope: Record<string, unknown> = {

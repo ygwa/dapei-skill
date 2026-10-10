@@ -84,6 +84,7 @@ export interface IndexDomainEntry extends StaleFields {
 export interface IndexCapabilityMapEntry extends StaleFields {
   product: string;
   path: string;
+  repo?: string;
   capability_count: number;
   created_by_feature?: string;
   updated_by_feature?: string;

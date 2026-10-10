@@ -845,7 +845,7 @@ export const featureTeamStatus: AnyCap = {
 };
 
 // ============================================================
-// #1 feature.gap-analysis — scaffolds the gap-analysis stage.
+// #1 feature.gap.analysis — scaffolds the gap-analysis stage.
 //
 // Validates analyze-current-state is completed (per workflow YAML),
 // writes a skeleton docs/02-gap-analysis.md with the stage header
@@ -860,7 +860,7 @@ export const featureTeamStatus: AnyCap = {
 // ============================================================
 
 export const featureGapAnalysis: AnyCap = {
-  id: "feature.gap-analysis",
+  id: "feature.gap.analysis",
   version: "1.0.0",
   inputSchema: {
     required: ["feature"],
@@ -916,7 +916,7 @@ export const featureGapAnalysis: AnyCap = {
 
         if (ranked.length > 0) {
           const { runCapability } = await import("../../index.ts");
-          const lines: string[] = ["> Auto-injected by `feature.gap-analysis`. Each envelope is bounded to ~8KB by `cdr.context.envelope`.\n"];
+          const lines: string[] = ["> Auto-injected by `feature.gap.analysis`. Each envelope is bounded to ~8KB by `cdr.context.envelope`.\n"];
           for (const { b } of ranked) {
             try {
               const envInput: Record<string, unknown> = {

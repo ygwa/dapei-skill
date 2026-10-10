@@ -51,7 +51,7 @@ Generate a gap-analysis scaffold for the feature, with up to `max_envelopes` rel
 
 ### Step 1: Verify analyze-current-state is complete
 
-Call `feature.gap-analysis` — the engine reads `features/<name>/reports/stage-analyze-current-state.completed`. If the marker is missing, halt and tell the user to finish analyze-current-state first.
+Call `feature.gap.analysis` — the engine reads `features/<name>/reports/stage-analyze-current-state.completed`. If the marker is missing, halt and tell the user to finish analyze-current-state first.
 
 ### Step 2: Generate the scaffold
 

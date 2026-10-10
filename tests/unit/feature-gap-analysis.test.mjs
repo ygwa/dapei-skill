@@ -49,12 +49,12 @@ async function setupFeature(tmp, opts = {}) {
   }
 }
 
-test("feature.gap-analysis: scaffolds docs/02-gap-analysis.md with stage header", async () => {
+test("feature.gap.analysis: scaffolds docs/02-gap-analysis.md with stage header", async () => {
   const tmp = mkdtempSync(join(tmpdir(), "dapei-gap-"));
   try {
     await setupFeature(tmp, { withIndex: false });
     const { result } = await core.runCapability(
-      "feature.gap-analysis",
+      "feature.gap.analysis",
       { feature: "demo" },
       { rootDir: tmp, now: new Date() }
     );
@@ -71,12 +71,12 @@ test("feature.gap-analysis: scaffolds docs/02-gap-analysis.md with stage header"
   }
 });
 
-test("feature.gap-analysis: refuses when analyze-current-state marker is missing", async () => {
+test("feature.gap.analysis: refuses when analyze-current-state marker is missing", async () => {
   const tmp = mkdtempSync(join(tmpdir(), "dapei-gap-"));
   try {
     await setupFeature(tmp, { withCurrentStateMarker: false });
     await assert.rejects(
-      core.runCapability("feature.gap-analysis", { feature: "demo" }, { rootDir: tmp, now: new Date() }),
+      core.runCapability("feature.gap.analysis", { feature: "demo" }, { rootDir: tmp, now: new Date() }),
       /gap-analysis requires 'analyze-current-state'/
     );
   } finally {
@@ -84,12 +84,12 @@ test("feature.gap-analysis: refuses when analyze-current-state marker is missing
   }
 });
 
-test("feature.gap-analysis: refuses for missing feature.yaml", async () => {
+test("feature.gap.analysis: refuses for missing feature.yaml", async () => {
   const tmp = mkdtempSync(join(tmpdir(), "dapei-gap-"));
   try {
     await core.runCapability("workspace.init", {}, { rootDir: tmp, now: new Date() });
     await assert.rejects(
-      core.runCapability("feature.gap-analysis", { feature: "ghost" }, { rootDir: tmp, now: new Date() }),
+      core.runCapability("feature.gap.analysis", { feature: "ghost" }, { rootDir: tmp, now: new Date() }),
       /feature.yaml not found/
     );
   } finally {
@@ -97,7 +97,7 @@ test("feature.gap-analysis: refuses for missing feature.yaml", async () => {
   }
 });
 
-test("feature.gap-analysis: with index, auto-injects at most max_envelopes related behaviors", async () => {
+test("feature.gap.analysis: with index, auto-injects at most max_envelopes related behaviors", async () => {
   const tmp = mkdtempSync(join(tmpdir(), "dapei-gap-"));
   try {
     await setupFeature(tmp, {
@@ -105,7 +105,7 @@ test("feature.gap-analysis: with index, auto-injects at most max_envelopes relat
       objective: "stabilize payment callback chain"
     });
     const { result } = await core.runCapability(
-      "feature.gap-analysis",
+      "feature.gap.analysis",
       { feature: "demo", max_envelopes: 2 },
       { rootDir: tmp, now: new Date() }
     );

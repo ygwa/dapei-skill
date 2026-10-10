@@ -631,7 +631,7 @@ export const routes: Route[] = [
   },
   {
     id: "feature.gap-analysis.english",
-    capability: "feature.gap-analysis",
+    capability: "feature.gap.analysis",
     pattern: /^(?=.*\bgap\b)(?=.*\banalysis\b).*/i,
     inputBuilder: (t, ctx) => ({ feature: ctx.feature || extractFeatureName(t), max_envelopes: 3 }),
     reason: "gap-analysis intent",
@@ -641,7 +641,7 @@ export const routes: Route[] = [
   },
   {
     id: "feature.gap-analysis.chinese",
-    capability: "feature.gap-analysis",
+    capability: "feature.gap.analysis",
     pattern: /差距分析|gap\s*分析|分析.*差距/i,
     inputBuilder: (t, ctx) => ({ feature: ctx.feature || extractFeatureName(t), max_envelopes: 3 }),
     reason: "gap-analysis intent (chinese)",
