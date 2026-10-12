@@ -9,6 +9,24 @@ import { contextBuild } from "./context.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
 
+/**
+ * Fallback stage list for `workflow.status` when the workspace has no
+ * `.dapei/workflows/feature-lifecycle.yaml` (hand-made / legacy workspaces that
+ * predate the workflow file). Mirror of the canonical 8-stage lifecycle shipped
+ * in that YAML; when the file exists its `stages:` list is used instead so an
+ * added 9th stage is reported without touching code.
+ */
+const FALLBACK_STAGES = [
+  "analyze-current-state",
+  "gap-analysis",
+  "solution-design",
+  "task-breakdown",
+  "implementation",
+  "local-validation",
+  "architecture-review",
+  "acceptance"
+];
+
 export const workflowRunStage: AnyCap = {
   id: "workflow.runStage",
   version: "1.0.0",
@@ -66,9 +84,16 @@ export const workflowStatus: AnyCap = {
     const content = read(progressFile);
     const stageMatch = content.match(/## Stage: (\S+)/);
     const currentStage = stageMatch ? stageMatch[1] : null;
+    // The stage list is owned by the workflow YAML (same source `runStage` and
+    // `feature.stage.transition` read via `yamlStageList`), so a workspace that
+    // declares an extra stage reports it here too. Workspaces without the
+    // workflow file fall back to the canonical 8-stage list (see FALLBACK_STAGES).
+    const workflowFile = join(p.dapeiDir, "workflows", "feature-lifecycle.yaml");
+    const declaredStages = existsSync(workflowFile) ? yamlStageList(read(workflowFile)) : [];
+    const stageList = declaredStages.length > 0 ? declaredStages : FALLBACK_STAGES;
     const completed: string[] = [];
-    for (const file of ["analyze-current-state", "gap-analysis", "solution-design", "task-breakdown", "implementation", "local-validation", "architecture-review", "acceptance"]) {
-      if (existsSync(join(featureDir, "reports", `stage-${file}.completed`))) completed.push(file);
+    for (const stage of stageList) {
+      if (existsSync(join(featureDir, "reports", `stage-${stage}.completed`))) completed.push(stage);
     }
 
     return { ok: true, data: { feature, currentStage, completed }, sideEffects: [], reportFragments: [] };

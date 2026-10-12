@@ -18,17 +18,111 @@ export interface GuardrailResult {
   reportPath: string;
 }
 
-function parseSimpleYamlRules(content: string): Array<Record<string, any>> {
+/** A single rule as declared in `.dapei/rules/*.yaml`. */
+export interface GuardrailRule {
+  id?: string;
+  title?: string;
+  severity?: string;
+  message?: string;
+  check?: Record<string, unknown>;
+}
+
+/**
+ * Parse one rule-pack YAML file with `js-yaml` (the same dependency
+ * `yaml-doc.ts` / `domains/cognitive.ts` use). Returns the `rules:` array and
+ * preserves every field the engine consumes (`id`, `title`, `severity`,
+ * `message`, `check`). A malformed document yields `[]` rather than throwing,
+ * preserving the previous lenient behaviour for hand-edited rule packs.
+ */
+function parseRuleFile(content: string): GuardrailRule[] {
   try {
-    const doc = load(content) as any;
-    if (doc && Array.isArray(doc.rules)) {
-      return doc.rules;
+    const doc = load(content);
+    if (doc && typeof doc === "object" && "rules" in doc && Array.isArray(doc.rules)) {
+      return doc.rules as GuardrailRule[];
     }
   } catch {
     // Return empty on parsing error to preserve backward compatibility
   }
   return [];
 }
+
+/** Everything a rule check can read. Pure: evaluators never mutate state. */
+export interface RuleCheckContext {
+  rootDir: string;
+  feature: string;
+  filesChanged: string[];
+}
+
+export interface RuleCheckOutcome {
+  failed: boolean;
+}
+
+export type RuleCheck = (check: Record<string, unknown>, ctx: RuleCheckContext) => RuleCheckOutcome;
+
+/**
+ * The rule-check registry: `check.type` → small pure evaluator returning
+ * whether the rule failed. This is the single dispatch table; adding a check
+ * type means adding one entry here, not another branch in the loop. An
+ * unknown/missing `check.type` has no evaluator and is handled by the caller
+ * (it fails the rule with an "unsupported check.type" finding).
+ */
+export const RULE_CHECKS: Record<string, RuleCheck> = {
+  // Every path in `check.files` must exist (`<feature>` expands to the feature).
+  "file-required": (check, ctx) => {
+    const files = Array.isArray(check.files) ? check.files.map((v) => String(v)) : [];
+    for (const f of files) {
+      if (!existsSync(join(ctx.rootDir, f.replace("<feature>", ctx.feature)))) return { failed: true };
+    }
+    return { failed: false };
+  },
+  // `check.regex` must match the feature directory name.
+  "folder-name-regex": (check, ctx) => {
+    const regex = typeof check.regex === "string" ? check.regex : "";
+    return { failed: Boolean(regex) && !new RegExp(regex).test(ctx.feature) };
+  },
+  // No changed file may match any glob in `check.patterns`.
+  "path-deny": (check, ctx) => {
+    const patterns = Array.isArray(check.patterns) ? check.patterns.map((v) => String(v)) : [];
+    for (const p of patterns) {
+      const reg = new RegExp("^" + p.replace(/\*\*\//g, ".*").replace(/\*\*/g, ".*").replace(/\*/g, "[^/]*") + "$");
+      if (ctx.filesChanged.some((x) => reg.test(x))) return { failed: true };
+    }
+    return { failed: false };
+  },
+  // `check.evidence_file` must exist and contain `check.condition` (if set).
+  "evidence-required": (check, ctx) => {
+    const f = typeof check.evidence_file === "string" ? check.evidence_file.replace("<feature>", ctx.feature) : "";
+    const full = join(ctx.rootDir, f);
+    if (!existsSync(full)) return { failed: true };
+    const cond = typeof check.condition === "string" ? check.condition : "";
+    if (cond && !readFileSync(full, "utf8").includes(cond)) return { failed: true };
+    return { failed: false };
+  },
+  // The cognitive index must hold at least `check.min_facts` fact behaviors.
+  "cognitive-artifact-required": (check, ctx) => {
+    const minFacts = Number(check.min_facts || 1);
+    const indexFile = join(ctx.rootDir, ".dapei", "cognitive", "index.yaml");
+    if (!existsSync(indexFile)) return { failed: true };
+    try {
+      const index = loadCognitiveIndex(ctx.rootDir);
+      const factCount = index.behaviors.filter((b) => b.kind === "fact").length;
+      return { failed: factCount < minFacts };
+    } catch {
+      return { failed: true };
+    }
+  }
+};
+
+/** Every `check.type` the registry can evaluate. */
+export const SUPPORTED_RULE_CHECK_TYPES: string[] = Object.keys(RULE_CHECKS);
+
+/**
+ * `check.type` values that are intentionally recognised-but-unsupported (they
+ * still fail the rule, but callers/tests know they are not a typo). Kept empty
+ * because the engine implements every type the shipped rule pack uses; unknown
+ * types are reported through the "unsupported check.type" finding.
+ */
+export const KNOWN_UNSUPPORTED_RULE_CHECK_TYPES: string[] = [];
 
 function modifiedFiles(rootDir: string, opts?: { ignoreSubmodules?: boolean }): string[] {
   if (!existsSync(join(rootDir, ".git"))) return [];
@@ -125,62 +219,21 @@ export function runGuardrail(rootDir: string, feature: string): GuardrailResult 
   const ruleFiles = existsSync(rulesDir) ? readdirSync(rulesDir).filter((f: string) => f.endsWith(".yaml")) : [];
 
   for (const rf of ruleFiles) {
-    const rules = parseSimpleYamlRules(readFileSync(join(rulesDir, rf), "utf8"));
+    const rules = parseRuleFile(readFileSync(join(rulesDir, rf), "utf8"));
     for (const rule of rules) {
       const rid = rule.id || "UNKNOWN";
       const title = rule.title || "";
       const severity = rule.severity || "medium";
       const message = rule.message || "failed rule check";
       const check = rule.check || {};
-      const type = check.type || "";
-      let failed = false;
+      const type = typeof check.type === "string" ? check.type : "";
       // Non-empty when the rule declares a check.type the engine does not implement.
       let unsupported: string | null = null;
 
-      if (type === "file-required") {
-        const required = Array.isArray(check.files) ? check.files : [];
-        for (const f of required) {
-          const resolved = f.replace("<feature>", feature);
-          if (!existsSync(join(rootDir, resolved))) {
-            failed = true;
-            break;
-          }
-        }
-      } else if (type === "folder-name-regex") {
-        const regex = check.regex || "";
-        if (regex && !(new RegExp(regex).test(feature))) failed = true;
-      } else if (type === "path-deny") {
-        const patterns = Array.isArray(check.patterns) ? check.patterns : [];
-        for (const p of patterns) {
-          const reg = new RegExp("^" + p.replace(/\*\*\//g, ".*").replace(/\*\*/g, ".*").replace(/\*/g, "[^/]*") + "$");
-          if (filesChanged.some((x) => reg.test(x))) {
-            failed = true;
-            break;
-          }
-        }
-      } else if (type === "evidence-required") {
-        const f = (check.evidence_file || "").replace("<feature>", feature);
-        const full = join(rootDir, f);
-        const cond = check.condition || "";
-        if (!existsSync(full)) failed = true;
-        else if (cond) {
-          const c = readFileSync(full, "utf8");
-          if (!c.includes(cond)) failed = true;
-        }
-      } else if (type === "cognitive-artifact-required") {
-        const minFacts = Number(check.min_facts || 1);
-        const indexFile = join(rootDir, ".dapei", "cognitive", "index.yaml");
-        if (!existsSync(indexFile)) {
-          failed = true;
-        } else {
-          try {
-            const index = loadCognitiveIndex(rootDir);
-            const factCount = index.behaviors.filter((b) => b.kind === "fact").length;
-            if (factCount < minFacts) failed = true;
-          } catch {
-            failed = true;
-          }
-        }
+      const evaluator = RULE_CHECKS[type];
+      let failed: boolean;
+      if (evaluator) {
+        failed = evaluator(check, { rootDir, feature, filesChanged }).failed;
       } else {
         // Unknown check.type: fail loudly instead of silently passing the rule.
         // A rule the engine cannot evaluate must never look "green".

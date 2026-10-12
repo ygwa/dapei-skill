@@ -46,9 +46,12 @@ import { dirname, join } from "node:path";
  * platform ships with a working tree-walk + manifest fallback at every
  * level; CodeGraph is an upgrade, not a dependency.
  *
- * CLI resolution: a one-shot `which codegraph` at construction time.
- * Tests can override the binary path by setting DAPEI_CODEGRAPH_BIN
- * in the environment.
+ * CLI resolution: at construction time the adapter first consults the
+ * workspace `.dapei/graph/.no-codegraph` marker (a negative cache from a
+ * previous probe); when present it skips the `which codegraph` spawn.
+ * Otherwise it runs a one-shot `which codegraph`. Tests can override the
+ * binary path by setting DAPEI_CODEGRAPH_BIN in the environment — that
+ * override always wins over the marker.
  */
 
 const CLI_BIN_ENV = "DAPEI_CODEGRAPH_BIN";
@@ -198,10 +201,29 @@ function gitDiffNameOnly(repoPath: string, base: string, head: string): string[]
  */
 export class CodeGraphAdapter {
   private readonly doctor: CodeGraphDoctor;
+  private readonly workspaceRoot: string;
   private readonly noCliMarkerPath: string;
 
   constructor(workspaceRoot: string) {
-    const probe = detectCliBinary();
+    this.workspaceRoot = workspaceRoot;
+    // Persistent "no codegraph here" marker at <workspace>/.dapei/graph/.no-codegraph.
+    // We *honour* it rather than deleting the marker API: in a workspace that
+    // has already established the CLI is absent, re-running `which codegraph`
+    // (plus `codegraph status`) on every capability construction is pure waste.
+    // The marker is only a negative cache, so DAPEI_CODEGRAPH_BIN still wins —
+    // an explicit binary override forces a fresh probe (and lets a dev opt in
+    // without deleting the marker by hand).
+    this.noCliMarkerPath = join(workspaceRoot, ".dapei", "graph", ".no-codegraph");
+    const override = process.env[CLI_BIN_ENV];
+    const markedUnavailable = !override && existsSync(this.noCliMarkerPath);
+    const probe = markedUnavailable
+      ? {
+          available: false,
+          binary: null,
+          reason:
+            "codegraph marked unavailable for this workspace (.dapei/graph/.no-codegraph); set DAPEI_CODEGRAPH_BIN to override"
+        }
+      : detectCliBinary();
     let version: string | null = null;
     let pendingSync: number | undefined;
     let filesTotal: number | undefined;
@@ -226,9 +248,6 @@ export class CodeGraphAdapter {
       files_total: filesTotal,
       languages
     };
-    // Persistent "no codegraph here" marker at <workspace>/.dapei/graph/.no-codegraph
-    // so we do not pay the probe cost on every capability call.
-    this.noCliMarkerPath = join(workspaceRoot, ".dapei", "graph", ".no-codegraph");
   }
 
   isAvailable(): boolean {
@@ -490,8 +509,10 @@ export class CodeGraphAdapter {
     if (!this.doctor.available || !this.doctor.binary) {
       return this.doctor;
     }
-    // Refresh the status in case the index has moved since construction.
-    const fresh = readCliStatus(this.doctor.binary, dirname(this.noCliMarkerPath) || ".");
+    // Refresh the status in case the index has moved since construction. Probe
+    // the workspace root — the same scope the constructor used — not the
+    // `.dapei/graph` directory that merely holds the no-CLI marker.
+    const fresh = readCliStatus(this.doctor.binary, this.workspaceRoot);
     return {
       ...this.doctor,
       pending_sync: typeof fresh.pending === "number" ? fresh.pending : this.doctor.pending_sync,
