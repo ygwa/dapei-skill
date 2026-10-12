@@ -128,12 +128,20 @@ test('every @dapei import is a declared dependency with an exported subpath', ()
     }
   }
 
+  // Root-level test files have no manifest of their own, so the root project's
+  // devDependencies are their declarations.
   const rootDeps = rootManifest.devDependencies ?? {};
-  for (const dir of ['engine', 'tests']) {
-    for (const file of listFiles(join(REPO_ROOT, dir))) {
-      for (const spec of specifiersOf(readFileSync(file, 'utf8'))) {
-        if (spec.startsWith('@dapei/')) check(file, spec, rootDeps);
-      }
+  for (const file of listFiles(join(REPO_ROOT, 'tests'))) {
+    for (const spec of specifiersOf(readFileSync(file, 'utf8'))) {
+      if (spec.startsWith('@dapei/')) check(file, spec, rootDeps);
+    }
+  }
+
+  // `engine/` is a workspace package like any other: it declares what it imports.
+  const engineDeps = readJson(join(REPO_ROOT, 'engine', 'package.json')).dependencies ?? {};
+  for (const file of listFiles(join(REPO_ROOT, 'engine'))) {
+    for (const spec of specifiersOf(readFileSync(file, 'utf8'))) {
+      if (spec.startsWith('@dapei/')) check(file, spec, engineDeps);
     }
   }
 
@@ -188,4 +196,21 @@ test('no declared @dapei dependency is unused', () => {
       `packages/${pkg} declares unused @dapei dependencies: ${unused.join(', ')}`
     );
   }
+
+  const engineManifest = readJson(join(REPO_ROOT, 'engine', 'package.json'));
+  const engineUsed = new Set();
+  for (const file of listFiles(join(REPO_ROOT, 'engine'))) {
+    for (const spec of specifiersOf(readFileSync(file, 'utf8'))) {
+      const match = BARE_SPEC.exec(spec);
+      if (match) engineUsed.add(match[1]);
+    }
+  }
+  const unusedEngine = dapeiDependencies(engineManifest)
+    .map((dep) => dep.slice('@dapei/'.length))
+    .filter((name) => !engineUsed.has(name));
+  assert.deepEqual(
+    unusedEngine,
+    [],
+    `engine/ declares unused @dapei dependencies: ${unusedEngine.join(', ')}`
+  );
 });

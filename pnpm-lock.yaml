@@ -51,7 +51,17 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
-  engine: {}
+  engine:
+    dependencies:
+      '@dapei/catalog':
+        specifier: workspace:*
+        version: link:../packages/catalog
+      '@dapei/core':
+        specifier: workspace:*
+        version: link:../packages/core
+      '@dapei/router':
+        specifier: workspace:*
+        version: link:../packages/router
 
   packages/catalog:
     dependencies:

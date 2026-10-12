@@ -5,5 +5,10 @@
   "type": "module",
   "bin": {
     "dapei-engine": "./dapei-engine.ts"
+  },
+  "dependencies": {
+    "@dapei/catalog": "workspace:*",
+    "@dapei/core": "workspace:*",
+    "@dapei/router": "workspace:*"
   }
 }
