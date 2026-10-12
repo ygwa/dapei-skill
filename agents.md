@@ -201,7 +201,7 @@ graph gains a cycle. Add a new subpath to the owning package's `exports` before 
 ### Runtime modes
 
 `scripts/dapei` resolves the engine in two modes: **source** (`engine/dapei-engine.ts` via node's
-type stripping) when the checkout has it, otherwise the **bundle** (`dist/dapei-engine.js`, built
+type stripping) when the checkout has it, otherwise the **bundle** (`skills/engine/dapei-engine.js`, built
 by `npm run build`, no flags needed). Source wins so an edited `.ts` is never shadowed by a stale
 bundle; set `DAPEI_USE_BUNDLE=1` to force the shipped artifact. CI smoke-tests both: the whole
 smoke suite runs once through the source and `npm run smoke:bundle` runs a copied-out bundle (no
@@ -227,12 +227,18 @@ exists, and a missing template there is a hard error.
 
 ### Engine entry (what an installed skill must be able to find)
 
-The skills are prose; every `@dapei` flow needs the engine to exist. `SKILL.md` (repo root)
-documents the contract — `scripts/dapei`, then `dist/dapei-engine.js`, then
-`engine/dapei-engine.ts` — and `scripts/validate-skills.mjs` fails the build if that section
-disappears. An installed skill therefore still needs the checkout (or a copied-out
-`dist/dapei-engine.js`); packaging the bundle *as* skill content is a release-time decision
-that ADR-0024's embedded templates now make a one-step change.
+The skills are prose; every `@dapei` flow needs the engine to exist, so the engine **ships as
+skill content**: `skills/engine/` is a plugin (SKILL.md + `.claude-plugin/plugin.json`) whose
+payload is the built bundle `skills/engine/dapei-engine.js` — one file, templates embedded, no
+TypeScript and no `node_modules` required (Node ≥ 20). The marketplace manifest lists it as the
+`dapei-engine` plugin, so installing the skill installs an engine; `skills/engine/SKILL.md` tells
+the agent how to resolve it (bundle → `scripts/dapei` → source) and what to do when it is missing.
+
+The bundle is committed, so it must not go stale: `npm run check:bundle` compares a fingerprint of
+the build inputs (engine, packages/&#42;&#42;/src, package manifests, runtime/templates) against
+`skills/engine/bundle-manifest.json` and fails CI when they disagree. Edit engine source → run
+`npm run build` → commit the bundle + manifest. The root `SKILL.md` documents the same entry
+contract, and `scripts/validate-skills.mjs` fails the build if that section disappears.
 
 ### Boundary with Feature dimension
 

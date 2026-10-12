@@ -53,6 +53,8 @@ still cosmetic:
    or the package graph gains a cycle.
 
 3. **One shipped artifact.** `dist/dapei-engine.js` (esbuild, self-contained)
+   — **moved to `skills/engine/dapei-engine.js` by ADR-0025, which also made it
+   committed skill content** —
    is *the* distribution artifact, and it is exercised: `npm run smoke:bundle`
    drives `workspace.init`, `cdr.index.list` and `route` through it with a plain
    `node` invocation, and CI runs the whole smoke suite twice — once through the

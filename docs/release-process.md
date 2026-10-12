@@ -76,6 +76,12 @@ After the bump, the script runs `npm run typecheck` and `npm run build` to
 verify nothing broke, then creates a single `chore(release): vX.Y.Z` commit
 and an annotated tag `vX.Y.Z`.
 
+`npm run build` writes the shipped engine bundle
+(`skills/engine/dapei-engine.js` + `bundle-manifest.json`); both are committed,
+and `release.sh` stages them. If you edit the engine between releases, run
+`npm run build` and commit the result — `npm run check:bundle` (part of
+`verify`) fails otherwise.
+
 ---
 
 ## What to do as a contributor

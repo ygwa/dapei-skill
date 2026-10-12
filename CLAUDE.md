@@ -95,7 +95,7 @@ The AI working in a feature workspace MUST NOT write to workspace-dimension path
 | Add a new capability | Add to `packages/core/src/capabilities/domains/<domain>.ts` (kernel domains) or `packages/cdr/src/capabilities.ts` (CDR), export it from the composition root `packages/catalog/src/index.ts`, add unit test in `tests/unit/`, add route in `packages/router/src/routes-table.ts` |
 | Import across packages | Use the package name + a subpath declared in the target's `exports` (`@dapei/core/types`, `@dapei/runtime-adapters/system`, …). Relative paths out of a package fail `tests/unit/package-boundaries.test.mjs` |
 | Add a cross-package import target | Add the subpath to the owning package's `exports` and the package to the importer's `dependencies`; the boundary test enforces both |
-| Ship a build | `npm run build` writes the single-file engine bundle `dist/dapei-engine.js`; `npm run smoke:bundle` proves it initializes a workspace, reaches a CDR capability and routes |
+| Ship a build | `npm run build` writes the shipped single-file engine bundle `skills/engine/dapei-engine.js` (+ `bundle-manifest.json`); it is committed, so `npm run check:bundle` fails CI when the sources changed without a rebuild. `npm run smoke:bundle` proves a copied-out bundle initialises a workspace, reaches a CDR capability and routes |
 | Change a SKILL.md | Edit the file, run `npm run validate:skills` |
 | Add a new skill | `mkdir skills/<name>`, create `SKILL.md` with frontmatter, run validator |
 | Add a new command (workflow) | Create `commands/<name>.md` with frontmatter (description, argument-hint), document workflow steps that reference capabilities by id |
