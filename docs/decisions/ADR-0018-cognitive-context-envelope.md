@@ -85,18 +85,17 @@ Those references live in the on-disk yaml files.
 
 v1.0.0 of `cdr.context.envelope` uses a **same-repo sibling heuristic**:
 for a target behavior, list state-machines / domains / business-rules
-in the same repo. This is a deliberate trade-off — the desktop UI can
-show a "siblings" hint rather than a precise cross-link. A future
-ADR (ADR-0019 / M3-6 advisor) may promote the heuristic to a true
-graph walk with full yaml scanning.
+in the same repo. This is a deliberate trade-off — callers can show a
+"siblings" hint rather than a precise cross-link. A future change may
+promote the heuristic to a true graph walk with full yaml scanning.
 
 ### Persistence
 
 The envelope is **not persisted to disk** by the engine. It is a
-function-of-state output. The desktop persists its own copy at
-`features/<f>/.dapei/last-attached-context.json` for the "what was
-last attached to this feature's session" UI affordance (M3-5 §7
-test #3: persistence).
+function-of-state output. (The desktop client used to keep its own copy
+at `features/<f>/.dapei/last-attached-context.json` for a "what was last
+attached to this session" affordance; that client is no longer in this
+repository — see ADR-0021.)
 
 ### Serialization to agent prompt (M3-5)
 
@@ -152,8 +151,10 @@ so the user can edit and send in one round trip.
 
 - **engine**: `cdr.context.envelope` v1.0.0 added to
   `packages/cdr/src/capabilities.ts` (Wave A.1 of the iteration).
-  Registered in `packages/core/src/capabilities/index.ts` (Wave A.2).
-- **desktop (M3-5)**: pending — services, IPC, UI, tests.
+  Registered in `packages/core/src/capabilities/index.ts` (Wave A.2); since the
+  composition root was extracted it is exported from
+  `packages/catalog/src/index.ts` (see ADR-0021).
+- **desktop (M3-5)**: left the repository with the desktop subtree (ADR-0021).
 
 ## Verification
 
