@@ -4,10 +4,38 @@ import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
 import { atomicWrite, ensureDir, read, run, runSafe, safeJoinWithin, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
-import { defaultBranch, featureRepoNames, requireFields, yamlStageList, yamlStageRequires } from "../shared.ts";
+import { assertStageConfirmation, assertStagePrereqs, defaultBranch, featureRepoNames, requireFields, yamlStageList } from "../shared.ts";
+import { guardStageAdvance } from "../../guardrail.ts";
 import { loadCognitiveIndex } from "../../cognitive-index.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
+
+/**
+ * Shared entry validation for every stage-advance path (`feature.stage` with
+ * `action=set` and `feature.stage.transition`). The workflow YAML is the single
+ * source of truth: the stage must be declared there, gate stages require
+ * `confirmed: true`, and every `requires:` stage must already be completed.
+ *
+ * Returns the resolved feature dir and the completion-marker path; callers run
+ * the guardrail and write the marker only after this passes.
+ */
+function resolveStageAdvance(rootDir: string, feature: string, stage: string, confirmed: boolean): { featureDir: string; marker: string } {
+  const featureDir = join(rootDir, "features", feature);
+  if (!existsSync(join(featureDir, "feature.yaml"))) {
+    throw new CapabilityError("FEATURE_MISSING", `feature.yaml not found for ${feature}`);
+  }
+  const workflowFile = join(rootDir, ".dapei", "workflows", "feature-lifecycle.yaml");
+  if (!existsSync(workflowFile)) {
+    throw new CapabilityError("WORKFLOW_MISSING", `workflow file not found: ${workflowFile}`);
+  }
+  const wf = read(workflowFile);
+  if (!yamlStageList(wf).includes(stage)) {
+    throw new CapabilityError("INVALID_STAGE", `stage '${stage}' not declared in workflow`);
+  }
+  assertStageConfirmation(wf, stage, confirmed);
+  assertStagePrereqs(wf, featureDir, stage);
+  return { featureDir, marker: join(featureDir, "reports", `stage-${stage}.completed`) };
+}
 
 function isRepoDirty(repoPath: string, rootDir: string): boolean {
   return Boolean(runSafe("git", ["-C", repoPath, "status", "--porcelain"], rootDir));
@@ -212,7 +240,8 @@ export const featureStage: AnyCap = {
     properties: {
       feature: { type: "string", minLength: 1 },
       action: { type: "string", enum: ["get", "set"] },
-      stage: { type: "string" }
+      stage: { type: "string" },
+      confirmed: { type: "boolean" }
     },
     additionalProperties: false
   },
@@ -234,16 +263,22 @@ export const featureStage: AnyCap = {
     if (action === "set") {
       requireFields(input, ["stage"]);
       const stage = String(input.stage);
+      // `set` is not a free-form marker writer: unknown stages, unmet
+      // prerequisites and unconfirmed gate stages are refused exactly like
+      // feature.stage.transition refuses them.
+      const resolved = resolveStageAdvance(p.rootDir, feature, stage, input.confirmed === true);
+      // Guardrail runs before the marker write; a FAIL in enforce mode aborts
+      // here and leaves no marker behind.
+      const guardFragments = guardStageAdvance(p.rootDir, feature);
       ensureDir(join(featureDir, "reports"));
-      const marker = join(featureDir, "reports", `stage-${stage}.completed`);
-      write(marker, `stage: ${stage}\nset-at: ${new Date().toISOString()}\n`);
+      write(resolved.marker, `stage: ${stage}\nset-at: ${new Date().toISOString()}\n`);
       const prev = existsSync(progressFile) ? read(progressFile) : "# Feature Progress\n";
       const hasStageLine = /## Stage: /.test(prev);
       const updated = hasStageLine
         ? prev.replace(/## Stage: .+$/m, `## Stage: ${stage}`)
         : (prev.endsWith('\n') ? prev : prev + '\n') + `## Stage: ${stage}\n`;
       write(progressFile, updated);
-      return { ok: true, data: { stage }, sideEffects: ["stage marker", "progress updated"], reportFragments: [`stage set to ${stage}`] };
+      return { ok: true, data: { stage }, sideEffects: ["stage marker", "progress updated"], reportFragments: [`stage set to ${stage}`, ...guardFragments] };
     }
 
     throw new CapabilityError("INVALID_ACTION", `unknown action: ${action}`);
@@ -306,10 +341,10 @@ export const featureReview: AnyCap = {
   }
 };
 
-// ---------- M3 (ADR-0017) promote_artifacts helpers ----------
+// ---------- M3 (ADR-0022) promote_artifacts helpers ----------
 
 /**
- * M3 (ADR-0017): the shape of `feature.close`'s optional `promote_artifacts`
+ * M3 (ADR-0022): the shape of `feature.close`'s optional `promote_artifacts`
  * block. All four sub-blocks are independent and individually optional.
  *
  * M3 note (replaces v0.1 plan): `cognitive.entries.action: 'link'` was
@@ -466,7 +501,7 @@ export const featureClose: AnyCap = {
 
       // --- decisions section ---
       // v2.0.0 always copied memory/decision-log.md → docs/decisions/<f>-decisions.md.
-      // M3 (ADR-0017): honor promote.decisions.skip = true to suppress this
+      // M3 (ADR-0022): honor promote.decisions.skip = true to suppress this
       // default, or promote.decisions.target_path to redirect the destination.
       // Either way, the write is content-hash idempotent.
       const decisionSrc = join(featureDir, "memory", "decision-log.md");
@@ -619,7 +654,7 @@ export const featureClose: AnyCap = {
  * disk; it does NOT touch `docs/as-is/<kind>/*.yaml` files (the index
  * is the single source of truth for created_by_feature; the on-disk
  * yaml may carry a backfilled `created_by_feature` from a previous run
- * which is informational only — see ADR-0017 / CDR v0.10).
+ * which is informational only — see ADR-0022 / CDR v0.10).
  */
 function clearCreatedByFeature(
   ctx: { rootDir: string },
@@ -1012,45 +1047,17 @@ export const featureStageTransition: AnyCap = {
     const feature = String(input.feature);
     const stage = String(input.stage);
     const p = workspacePaths(ctx.rootDir);
-    const featureDir = join(p.featuresDir, feature);
-    if (!existsSync(join(featureDir, "feature.yaml"))) {
-      throw new CapabilityError("FEATURE_MISSING", `feature.yaml not found for ${feature}`);
-    }
+    // Declared-in-workflow, gate confirmation (gate list read from the YAML)
+    // and prerequisite markers — identical contract to feature.stage set.
+    const resolved = resolveStageAdvance(p.rootDir, feature, stage, input.confirmed === true);
+    const featureDir = resolved.featureDir;
 
-    const workflowFile = join(p.dapeiDir, "workflows", "feature-lifecycle.yaml");
-    if (!existsSync(workflowFile)) {
-      throw new CapabilityError("WORKFLOW_MISSING", `workflow file not found: ${workflowFile}`);
-    }
-    const wf = read(workflowFile);
-    if (!yamlStageList(wf).includes(stage)) {
-      throw new CapabilityError("INVALID_STAGE", `stage '${stage}' not declared in workflow`);
-    }
-
-    // Confirmation gate — engine-enforced, no bypass without explicit --yes.
-    if (
-      new Set(["solution-design", "implementation", "acceptance"]).has(stage) &&
-      input.confirmed !== true &&
-      (input as Record<string, unknown>).__confirmed !== true
-    ) {
-      throw new CapabilityError(
-        "CONFIRMATION_REQUIRED",
-        `stage '${stage}' is a confirmation gate. Re-run with --yes to confirm.`
-      );
-    }
-
-    // Prereq stages must be marked completed (not just declared in YAML).
-    for (const req of yamlStageRequires(wf, stage)) {
-      const marker = join(featureDir, "reports", `stage-${req}.completed`);
-      if (!existsSync(marker)) {
-        throw new CapabilityError(
-          "STAGE_PREREQ_MISSING",
-          `required stage '${req}' not completed before '${stage}'. Run \`feature.stage.transition ${feature} --stage ${req}\` first.`
-        );
-      }
-    }
+    // Guardrail runs before the marker is written: in a non-report
+    // guardrail_mode a FAIL aborts the transition and leaves no marker behind.
+    const guardFragments = guardStageAdvance(p.rootDir, feature);
 
     ensureDir(join(featureDir, "reports"));
-    const marker = join(featureDir, "reports", `stage-${stage}.completed`);
+    const marker = resolved.marker;
     atomicWrite(marker, `stage: ${stage}\ncompleted-at: ${new Date().toISOString()}\n`);
 
     const progress = join(featureDir, "reports", "feature-progress.md");
@@ -1065,7 +1072,7 @@ export const featureStageTransition: AnyCap = {
       ok: true,
       data: { stage, marker: relative(p.rootDir, marker) },
       sideEffects: ["stage marker", "progress updated"],
-      reportFragments: [`transitioned to ${stage}`]
+      reportFragments: [`transitioned to ${stage}`, ...guardFragments]
     };
   }
 };

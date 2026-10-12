@@ -4,9 +4,19 @@ import { join } from "node:path";
 import { runSafe } from "../../runtime-adapters/src/system.ts";
 import { loadCognitiveIndex } from "./cognitive-index.ts";
 import { defaultBranch, featureRepoNames } from "./capabilities/shared.ts";
+import { CapabilityError } from "./types.ts";
 import { load } from "js-yaml";
 
 export type GuardrailStatus = "PASS" | "WARN" | "FAIL";
+
+export interface GuardrailResult {
+  status: GuardrailStatus;
+  findings: string[];
+  /** Ids of the checks that actually failed (e.g. `BASE-002`, `DDD-001`). */
+  failedChecks: string[];
+  mode: string;
+  reportPath: string;
+}
 
 function parseSimpleYamlRules(content: string): Array<Record<string, any>> {
   try {
@@ -47,18 +57,20 @@ function readWorkspaceConfig(rootDir: string): { guardrailMode: string; submodul
   return { guardrailMode, submodulePointerPolicy };
 }
 
-function baseRepoHealthFindings(rootDir: string, feature: string): { findings: string[]; status: GuardrailStatus } {
+function baseRepoHealthFindings(rootDir: string, feature: string): { findings: string[]; status: GuardrailStatus; failedChecks: string[] } {
   const findings: string[] = [];
+  const failedChecks: string[] = [];
   let status: GuardrailStatus = "PASS";
 
   const featureYamlPath = join(rootDir, "features", feature, "feature.yaml");
-  if (!existsSync(featureYamlPath)) return { findings, status };
+  if (!existsSync(featureYamlPath)) return { findings, status, failedChecks };
   const repos = featureRepoNames(readFileSync(featureYamlPath, "utf8"));
 
   for (const repo of repos) {
     const repoPath = join(rootDir, "repos", repo);
     if (!existsSync(join(repoPath, ".git"))) {
       findings.push(`BASE-001 base repo missing: repos/${repo} (Severity: high)`);
+      failedChecks.push("BASE-001");
       status = "FAIL";
       continue;
     }
@@ -66,6 +78,7 @@ function baseRepoHealthFindings(rootDir: string, feature: string): { findings: s
     const dirty = runSafe("git", ["-C", repoPath, "status", "--porcelain"], rootDir);
     if (dirty) {
       findings.push(`BASE-002 base repo dirty (禁止在基座仓库开发): repos/${repo} (Severity: high)`);
+      failedChecks.push("BASE-002");
       status = "FAIL";
     }
 
@@ -73,14 +86,15 @@ function baseRepoHealthFindings(rootDir: string, feature: string): { findings: s
     const current = runSafe("git", ["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"], rootDir) || "HEAD";
     if (current !== base) {
       findings.push(`BASE-003 base repo not on default branch (expected '${base}', got '${current}'): repos/${repo} (Severity: high)`);
+      failedChecks.push("BASE-003");
       status = "FAIL";
     }
   }
 
-  return { findings, status };
+  return { findings, status, failedChecks };
 }
 
-export function runGuardrail(rootDir: string, feature: string): { status: GuardrailStatus; findings: string[]; mode: string; reportPath: string } {
+export function runGuardrail(rootDir: string, feature: string): GuardrailResult {
   const featureDir = join(rootDir, "features", feature);
   if (!existsSync(featureDir)) {
     throw new Error(`feature not found: ${feature}`);
@@ -90,6 +104,7 @@ export function runGuardrail(rootDir: string, feature: string): { status: Guardr
   const ignoreSubmodules = submodulePointerPolicy === "ignore";
 
   const findings: string[] = [];
+  const failedChecks: string[] = [];
   let status: GuardrailStatus = "PASS";
   const filesChanged = modifiedFiles(rootDir, { ignoreSubmodules });
 
@@ -97,10 +112,12 @@ export function runGuardrail(rootDir: string, feature: string): { status: Guardr
   // This enforces the "repos is read-only base pool" discipline.
   const baseHealth = baseRepoHealthFindings(rootDir, feature);
   findings.push(...baseHealth.findings);
+  failedChecks.push(...baseHealth.failedChecks);
   if (baseHealth.status === "FAIL") status = "FAIL";
 
   if (!existsSync(join(featureDir, "feature.yaml"))) {
     findings.push("LAYER-002 missing feature.yaml (Severity: high)");
+    failedChecks.push("LAYER-002");
     status = "FAIL";
   }
 
@@ -117,6 +134,8 @@ export function runGuardrail(rootDir: string, feature: string): { status: Guardr
       const check = rule.check || {};
       const type = check.type || "";
       let failed = false;
+      // Non-empty when the rule declares a check.type the engine does not implement.
+      let unsupported: string | null = null;
 
       if (type === "file-required") {
         const required = Array.isArray(check.files) ? check.files : [];
@@ -162,10 +181,20 @@ export function runGuardrail(rootDir: string, feature: string): { status: Guardr
             failed = true;
           }
         }
+      } else {
+        // Unknown check.type: fail loudly instead of silently passing the rule.
+        // A rule the engine cannot evaluate must never look "green".
+        unsupported = type || "(missing)";
+        failed = true;
       }
 
       if (failed) {
         findings.push(`${rid} ${title} - ${message} (Severity: ${severity})`);
+        failedChecks.push(rid);
+        if (unsupported !== null) {
+          findings.push(`${rid}: unsupported check.type '${unsupported}' - rule treated as failing`);
+        }
+        // Aggregation only ever escalates: never downgrade a FAIL to WARN.
         if (["high", "blocker"].includes(severity)) status = "FAIL";
         else if (status !== "FAIL") status = "WARN";
       }
@@ -189,5 +218,38 @@ export function runGuardrail(rootDir: string, feature: string): { status: Guardr
   ].join("\n");
   writeFileSync(reportPath, body, "utf8");
 
-  return { status, findings, mode, reportPath };
+  return { status, findings, failedChecks, mode, reportPath };
+}
+
+/**
+ * Stage-advance guardrail gate.
+ *
+ * Call this immediately BEFORE writing a stage completion marker. It decides
+ * whether the advance may proceed based on the workspace `guardrail_mode`:
+ *
+ * - `report` (and any mode that is not an enforcing one): never blocks; the
+ *   caller keeps advancing and appends the returned summary fragment.
+ * - `enforce` (any non-`report` mode): a FAIL status throws
+ *   `CapabilityError("GUARDRAIL_FAILED")` naming the failing rule ids. Because
+ *   the caller calls this before the marker write, no marker is left behind.
+ *
+ * Returns the reportFragments the caller should surface.
+ */
+export function guardStageAdvance(rootDir: string, feature: string): string[] {
+  // No feature workspace yet (e.g. early scaffold calls) -> nothing to guard.
+  if (!existsSync(join(rootDir, "features", feature))) return [];
+
+  const result = runGuardrail(rootDir, feature);
+  const findingSummary = result.findings.length > 0 ? `${result.findings.length} finding(s)` : "no findings";
+  const summary = `guardrail: ${result.status} (mode=${result.mode}, ${findingSummary})`;
+
+  if (result.status === "FAIL" && result.mode !== "report") {
+    const failing = result.failedChecks.length > 0 ? result.failedChecks.join(", ") : "(unattributed)";
+    throw new CapabilityError(
+      "GUARDRAIL_FAILED",
+      `guardrail FAIL (guardrail_mode=${result.mode}) blocks stage advance; failing rules: ${failing}`
+    );
+  }
+
+  return [summary];
 }

@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync } from 'node:
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-const core = await import('../../packages/core/src/index.ts');
+const core = await import('../../packages/catalog/src/index.ts');
 
 function cleanTmp(tmp) {
   rmSync(tmp, { recursive: true, force: true });
@@ -83,6 +83,12 @@ test('feature.stage get returns current stage after set', async () => {
     await core.runCapability('feature.stage', {
       feature: 'test-feature',
       action: 'set',
+      stage: 'analyze-current-state'
+    }, { rootDir: tmp, now: new Date() });
+
+    await core.runCapability('feature.stage', {
+      feature: 'test-feature',
+      action: 'set',
       stage: 'gap-analysis'
     }, { rootDir: tmp, now: new Date() });
 
@@ -149,10 +155,15 @@ test('feature.stage returns sideEffects after set', async () => {
   try {
     await setupWorkspaceWithFeature(tmp);
 
+    // `set` now enforces the workflow DAG + gate confirmation, so walk the
+    // prerequisites in order before the solution-design gate.
+    await core.runCapability('feature.stage', { feature: 'test-feature', action: 'set', stage: 'analyze-current-state' }, { rootDir: tmp, now: new Date() });
+    await core.runCapability('feature.stage', { feature: 'test-feature', action: 'set', stage: 'gap-analysis' }, { rootDir: tmp, now: new Date() });
     const { result } = await core.runCapability('feature.stage', {
       feature: 'test-feature',
       action: 'set',
-      stage: 'solution-design'
+      stage: 'solution-design',
+      confirmed: true
     }, { rootDir: tmp, now: new Date() });
 
     assert.ok(Array.isArray(result.sideEffects));
@@ -167,10 +178,13 @@ test('feature.stage reportFragments contains stage info', async () => {
   try {
     await setupWorkspaceWithFeature(tmp);
 
+    await core.runCapability('feature.stage', { feature: 'test-feature', action: 'set', stage: 'analyze-current-state' }, { rootDir: tmp, now: new Date() });
+    await core.runCapability('feature.stage', { feature: 'test-feature', action: 'set', stage: 'gap-analysis' }, { rootDir: tmp, now: new Date() });
     const { result } = await core.runCapability('feature.stage', {
       feature: 'test-feature',
       action: 'set',
-      stage: 'solution-design'
+      stage: 'solution-design',
+      confirmed: true
     }, { rootDir: tmp, now: new Date() });
 
     assert.ok(result.reportFragments.some(f => f.includes('solution-design')), 'reportFragments should mention stage');

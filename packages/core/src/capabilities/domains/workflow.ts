@@ -3,7 +3,8 @@ import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
 import { ensureDir, read, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
-import { requireFields, yamlStageList, yamlStageOutputs, yamlStageRequires } from "../shared.ts";
+import { assertStageConfirmation, assertStagePrereqs, requireFields, yamlStageList, yamlStageOutputs } from "../shared.ts";
+import { guardStageAdvance } from "../../guardrail.ts";
 import { contextBuild } from "./context.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
@@ -16,19 +17,21 @@ export const workflowRunStage: AnyCap = {
     requireFields(input, ["feature", "stage"]);
     const feature = String(input.feature);
     const stage = String(input.stage);
-    if (new Set(["solution-design", "implementation", "acceptance"]).has(stage) && input.confirmed !== true && input.__confirmed !== true) {
-      throw new CapabilityError("CONFIRMATION_REQUIRED", `stage '${stage}' requires confirmation. re-run with --yes`);
-    }
-    await contextBuild.execute(ctx, { feature, stage });
     const p = workspacePaths(ctx.rootDir);
     const featureDir = join(p.featuresDir, feature);
     const workflowFile = join(p.dapeiDir, "workflows", "feature-lifecycle.yaml");
+    // Confirmation gate first, so a gated stage refuses even when the workspace
+    // has no workflow file yet. The gate list is read from the workflow YAML.
+    const declaredWorkflow = existsSync(workflowFile) ? read(workflowFile) : "";
+    assertStageConfirmation(declaredWorkflow, stage, input.confirmed === true);
+    await contextBuild.execute(ctx, { feature, stage });
     if (!existsSync(workflowFile)) throw new CapabilityError("WORKFLOW_MISSING", `workflow file not found: ${workflowFile}`);
     const wf = read(workflowFile);
     if (!yamlStageList(wf).includes(stage)) throw new CapabilityError("INVALID_STAGE", `stage '${stage}' not found in workflow`);
-    for (const req of yamlStageRequires(wf, stage)) {
-      if (!existsSync(join(featureDir, "reports", `stage-${req}.completed`))) throw new CapabilityError("STAGE_PREREQ_MISSING", `required stage '${req}' not completed before '${stage}'`);
-    }
+    assertStagePrereqs(wf, featureDir, stage);
+    // Guardrail runs before any marker is written: in a non-report
+    // guardrail_mode a FAIL aborts the advance and leaves no marker behind.
+    const guardFragments = guardStageAdvance(p.rootDir, feature);
     ensureDir(join(featureDir, "reports"));
     for (const output of yamlStageOutputs(wf, stage)) {
       if (!output || ["code changes", "all reports", "layered context", "feature manifest", "repos/"].includes(output)) continue;
@@ -41,7 +44,7 @@ export const workflowRunStage: AnyCap = {
     write(marker, `stage: ${stage}\ncompleted-at: ${new Date().toISOString()}\n`);
     const progress = join(featureDir, "reports", "feature-progress.md");
     write(progress, `${existsSync(progress) ? read(progress) : "# Feature Progress\n"}\n## Stage: ${stage}\n- Status: completed\n`);
-    return { ok: true, data: { stage, marker: relative(p.rootDir, marker) }, sideEffects: ["stage marker"], reportFragments: ["workflow stage completed"] };
+    return { ok: true, data: { stage, marker: relative(p.rootDir, marker) }, sideEffects: ["stage marker"], reportFragments: ["workflow stage completed", ...guardFragments] };
   }
 };
 

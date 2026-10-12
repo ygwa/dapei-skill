@@ -19,6 +19,15 @@ description: Use when managing feature lifecycle, creating features, or checking
 **确认点约束**：阶段确认点（solution-design / implementation / acceptance）不能被 Agent 自行跳过。
 - 确认点必须由用户明确确认，或用户在请求中明确要求连续推进
 - "轻量确认"、"快速过一下"、"用户没时间" 不能替代正式确认与产物记录
+- 确认点名单来自 `.dapei/workflows/feature-lifecycle.yaml` 的 `gates:`，引擎据此校验（不是 Agent 记忆里的清单）
+- 确认点阶段不写 `stage-<stage>.completed` 标记，除非显式传入 `confirmed: true`
+- 未完成前置 stage 时，写入 stage 标记会被引擎拒绝（`STAGE_PREREQ_MISSING`）
+- 未在 workflow YAML 中声明的 stage 一律拒绝（`INVALID_STAGE`），不要用拼写近似值推进
+
+**Guardrail 门禁**：`.dapei/workspace.yaml` 的 `guardrail_mode` 决定 guardrail 的处置方式。
+- `report`（默认）：guardrail 失败只记录 + 汇总到 reportFragments，不阻断推进
+- 其他值（如 `enforce`）：guardrail 判定 FAIL 时，阶段推进被拒绝（`GUARDRAIL_FAILED`，消息点名失败规则 id），且不写任何 stage 标记
+- 未知的规则校验类型（check.type）不再静默通过：会产出 finding 并把状态至少抬到 WARN，需要时直接 FAIL
 
 ## 路由能力
 
@@ -26,7 +35,8 @@ description: Use when managing feature lifecycle, creating features, or checking
 |------|------------|
 | 创建新 feature | `feature.create` |
 | 查看 feature 状态 | `feature.status` |
-| 获取/设置当前 stage | `feature.stage` |
+| 获取当前 stage | `feature.stage`（`action=get`） |
+| 推进 stage（校验 workflow DAG + 确认点 + guardrail） | `feature.stage`（`action=set`） |
 | 管理 backlog 任务 | `feature.tasks` |
 | 生成每日 review | `feature.review` |
 | 报告 feature 进展 | `feature.report` |

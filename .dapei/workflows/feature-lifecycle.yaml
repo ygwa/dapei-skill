@@ -2,6 +2,17 @@ version: 0.1
 name: feature-lifecycle
 description: AI SDLC lifecycle for one isolated feature workspace
 
+# Stages that cross a confirmation boundary: advancing into one of these
+# requires an explicit `confirmed: true` (CLI `--yes`) and, when
+# `guardrail_mode` is not `report`, a non-FAIL guardrail run.
+# This list is the single source of truth for the gate stage ids — the engine
+# reads it (see yamlGateStages in packages/core/src/capabilities/shared.ts)
+# instead of hardcoding them.
+gates:
+  - solution-design
+  - implementation
+  - acceptance
+
 stages:
   - id: analyze-current-state
     requires: []

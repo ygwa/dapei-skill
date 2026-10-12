@@ -10,10 +10,3 @@ rules:
       evidence_file: "features/<feature>/memory/decision-log.md"
       condition: "cross-domain-change=true"
     message: record rationale before introducing cross-domain coupling
-
-  - id: DDD-002
-    title: ubiquitous language alignment
-    severity: low
-    check:
-      type: glossary-match
-      source: "docs/glossary"

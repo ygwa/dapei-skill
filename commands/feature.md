@@ -76,11 +76,21 @@ Advance the feature to a named stage in the lifecycle DAG. Enforces prereqs and 
 Call `feature.stage.transition` with `{ feature, stage }`. The engine:
 - Refuses if the stage is not declared in `.dapei/workflows/feature-lifecycle.yaml`.
 - Refuses if any required prior stage marker is missing.
-- Refuses `solution-design` / `implementation` / `acceptance` without `confirmed=true` — these are confirmation gates.
+- Refuses gate stages without `confirmed=true`. The gate list is read from the `gates:` block of the workflow YAML (`solution-design`, `implementation`, `acceptance` in the standard workflow), not hardcoded in the engine.
+
+`feature.stage` with `action=set` is NOT a free-form marker writer: it runs the
+identical validation (declared stage, prerequisite markers, gate confirmation)
+and refuses anything the transition path would refuse.
 
 ### Step 2: Write the stage marker
 
-The engine writes `features/<name>/reports/stage-<stage-name>.completed` and appends to `feature-progress.md`.
+The engine runs the guardrail, then writes
+`features/<name>/reports/stage-<stage-name>.completed` and appends to `feature-progress.md`.
+When the workspace `.dapei/workspace.yaml` sets `guardrail_mode` to anything
+other than `report`, a FAIL guardrail aborts the advance before the marker
+(`GUARDRAIL_FAILED`, naming the failing rule ids) and no marker is written. In
+`report` mode the advance proceeds and the guardrail summary is surfaced in the
+report fragments.
 
 ### Step 3: Report
 
@@ -148,6 +158,7 @@ A close report:
 - Feature names must be `[a-z0-9-]+`.
 - Mapping a repo that is not in the registry triggers a friendly error referencing the `repos.add` capability so the registry can be populated first.
 - `create` does NOT advance the stage DAG — the user controls progression.
+- `feature.stage` with `action=set` is validated identically to the stage transition (workflow-declared stage, prerequisite markers, gate confirmation) and is not a free-form marker writer; `action=get` is unchanged.
 - `close` is the ONLY routine path where feature-dimension content writes to workspace-dimension. The boundary is explicit; do not bypass.
 - `close` MUST pause for confirmation before Step 3.
 - The lifecycle has 8 stages: `analyze-current-state`, `gap-analysis`, `solution-design`, `task-breakdown`, `implementation`, `local-validation`, `architecture-review`, `acceptance`. Three stages — `solution-design`, `implementation`, `acceptance` — are confirmation gates that require `confirmed=true`.

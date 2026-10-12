@@ -39,6 +39,61 @@ export function yamlStageList(workflowYaml: string): string[] {
   return out;
 }
 
+/**
+ * Confirmation-gate stages declared by the workflow YAML (`gates:`), which is
+ * the single source of truth for the gate list. Workspaces whose workflow does
+ * not declare `gates:` fall back to the canonical three gates (mirrored in the
+ * `confirmGate` union in types.ts) so pre-existing workspaces keep enforcing.
+ */
+export const DEFAULT_GATE_STAGES = ["solution-design", "implementation", "acceptance"];
+
+export function yamlGateStages(workflowYaml: string): string[] {
+  const out: string[] = [];
+  let inGates = false;
+  for (const raw of workflowYaml.split("\n")) {
+    const line = raw.replace(/\r$/, "");
+    if (!inGates) {
+      const inline = line.match(/^gates:\s*\[(.*)\]\s*(?:#.*)?$/);
+      if (inline) {
+        for (const item of inline[1].split(",")) {
+          const v = item.trim().replace(/["']/g, "");
+          if (v) out.push(v);
+        }
+        continue;
+      }
+      if (/^gates:\s*(?:#.*)?$/.test(line)) inGates = true;
+      continue;
+    }
+    const item = line.match(/^\s+-\s+([^\s#]+)/);
+    if (item) {
+      out.push(item[1].replace(/["']/g, ""));
+      continue;
+    }
+    if (line.trim() === "" || line.trimStart().startsWith("#")) continue;
+    inGates = false;
+  }
+  return out.length > 0 ? out : [...DEFAULT_GATE_STAGES];
+}
+
+/** Throws CONFIRMATION_REQUIRED unless the gate stage has been explicitly confirmed. */
+export function assertStageConfirmation(workflowYaml: string, stage: string, confirmed: boolean): void {
+  if (!yamlGateStages(workflowYaml).includes(stage)) return;
+  if (confirmed) return;
+  throw new CapabilityError(
+    "CONFIRMATION_REQUIRED",
+    `stage '${stage}' is a confirmation gate and requires confirmation. Re-run with --yes to confirm.`
+  );
+}
+
+/** Throws STAGE_PREREQ_MISSING unless every `requires:` stage of `stage` is completed. */
+export function assertStagePrereqs(workflowYaml: string, featureDir: string, stage: string): void {
+  for (const req of yamlStageRequires(workflowYaml, stage)) {
+    if (!existsSync(join(featureDir, "reports", `stage-${req}.completed`))) {
+      throw new CapabilityError("STAGE_PREREQ_MISSING", `required stage '${req}' not completed before '${stage}'`);
+    }
+  }
+}
+
 export function yamlStageRequires(workflowYaml: string, stage: string): string[] {
   const lines = workflowYaml.split("\n");
   let inStage = false;
