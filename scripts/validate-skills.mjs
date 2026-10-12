@@ -275,7 +275,7 @@ function validateRootSkill(repoRoot) {
       message: "does not document the engine entry point (expected a `dapei-engine` invocation)"
     });
   }
-  const entryForms = ["scripts/dapei", "dist/dapei-engine.js"];
+  const entryForms = ["skills/engine/dapei-engine.js", "scripts/dapei"];
   if (!entryForms.some((form) => content.includes(form))) {
     errors.push({
       path: rootSkill,

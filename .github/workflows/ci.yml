@@ -91,7 +91,7 @@ jobs:
       - name: Build engine bundle (esbuild)
         run: npm run build
 
-      - name: Shipped engine bundle smoke (dist/dapei-engine.js)
+      - name: Shipped engine bundle smoke (skills/engine/dapei-engine.js)
         run: npm run smoke:bundle
 
       - name: Unit tests (tests/unit)
@@ -131,7 +131,7 @@ jobs:
         run: ./scripts/dapei-guardrail --all
 
   schema-validate:
-    name: YAML Schema Validation
+    name: Templates, Schemas and Shipped Bundle
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -150,6 +150,9 @@ jobs:
 
       - name: Check embedded template assets are fresh
         run: npm run check:assets
+
+      - name: Check the shipped engine bundle is fresh
+        run: npm run check:bundle
 
       - name: Validate shipped templates and workspace YAML
         run: |

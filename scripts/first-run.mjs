@@ -17,7 +17,7 @@
  * subprocess: the bootstrap never imports engine TypeScript directly, so it
  * needs no build step and no `--experimental-strip-types` on this file. The
  * engine itself is resolved like everywhere else — source when the checkout
- * has `engine/dapei-engine.ts`, otherwise the built `dist/dapei-engine.js`
+ * has `engine/dapei-engine.ts`, otherwise the built `skills/engine/dapei-engine.js`
  * (force with DAPEI_USE_BUNDLE=1).
  *
  * Exit codes:
@@ -34,7 +34,7 @@ import { execFileSync, execSync } from "node:child_process";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
 const SOURCE_ENGINE = join(REPO_ROOT, "engine/dapei-engine.ts");
-const BUNDLE_ENGINE = join(REPO_ROOT, "dist/dapei-engine.js");
+const BUNDLE_ENGINE = join(REPO_ROOT, "skills/engine/dapei-engine.js");
 
 const COGNITIVE_DIR = ".dapei/cognitive";
 const PORTAL_DIR = ".dapei/docs-portal";

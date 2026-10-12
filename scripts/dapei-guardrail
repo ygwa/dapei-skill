@@ -20,7 +20,7 @@ SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export DAPEI_ENGINE_HOME="${DAPEI_ENGINE_HOME:-$SCRIPT_ROOT}"
 
 SOURCE_ENGINE="$SCRIPT_ROOT/engine/dapei-engine.ts"
-BUNDLE_ENGINE="$SCRIPT_ROOT/dist/dapei-engine.js"
+BUNDLE_ENGINE="$SCRIPT_ROOT/skills/engine/dapei-engine.js"
 
 if [[ "${DAPEI_USE_BUNDLE:-}" != "1" && -f "$SOURCE_ENGINE" ]]; then
   ENGINE=(--experimental-strip-types "$SOURCE_ENGINE")

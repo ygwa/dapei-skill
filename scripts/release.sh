@@ -199,7 +199,9 @@ run git add \
   .claude-plugin/marketplace.json \
   skills/*/.claude-plugin/plugin.json \
   CHANGELOG.md \
-  pnpm-lock.yaml
+  pnpm-lock.yaml \
+  skills/engine/dapei-engine.js \
+  skills/engine/bundle-manifest.json
 
 log "==> Committing"
 commit_msg="chore(release): v$next_version

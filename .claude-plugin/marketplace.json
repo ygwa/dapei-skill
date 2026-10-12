@@ -16,6 +16,11 @@
       "category": "engineering"
     },
     {
+      "name": "dapei-engine",
+      "source": "./skills/engine",
+      "category": "engineering"
+    },
+    {
       "name": "dapei-repos",
       "source": "./skills/repos",
       "category": "engineering"

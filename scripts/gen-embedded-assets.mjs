@@ -2,7 +2,7 @@
 /**
  * gen-embedded-assets.mjs — bake `runtime/templates/**` into the engine.
  *
- * The shipped engine is a single file (`dist/dapei-engine.js`). It must be able
+ * The shipped engine is a single file (`skills/engine/dapei-engine.js`). It must be able
  * to initialise a workspace anywhere, with no source tree next to it, so the
  * template assets travel inside it: this script writes them into
  * `packages/core/src/generated/embedded-assets.ts`, which `workspace.init`

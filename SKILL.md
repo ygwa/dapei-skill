@@ -45,7 +45,7 @@ version: 3.2.0
 | 顺序 | 入口 | 何时用 |
 |---|---|---|
 | 1 | `bash <repo>/scripts/dapei …` | 有仓库检出时统一入口；它自己会在源码/产物之间选择 |
-| 2 | `node <repo>/dist/dapei-engine.js run --capability <id> --input '<json>'` | 已构建的单文件产物：无需 TypeScript、无需 `node_modules`、无需 `--experimental-strip-types`（Node ≥ 20） |
+| 2 | `node <repo>/skills/engine/dapei-engine.js run --capability <id> --input '<json>'` | 已构建的单文件产物：无需 TypeScript、无需 `node_modules`、无需 `--experimental-strip-types`（Node ≥ 20） |
 | 3 | `node --experimental-strip-types <repo>/engine/dapei-engine.ts run --capability <id> --input '<json>'` | 源码模式（Node ≥ 22.6） |
 
 - `<repo>` 是 dapei-skill 检出目录；可用 `DAPEI_ENGINE_HOME` 显式指定（`scripts/dapei` 会设置它）。

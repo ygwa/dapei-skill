@@ -1,0 +1,16 @@
+{
+  "name": "dapei-engine",
+  "version": "3.2.0",
+  "description": "The executable dapei engine: how to locate and invoke it (shipped bundle, wrapper, or source).",
+  "author": {
+    "name": "ygwa",
+    "url": "https://github.com/ygwa"
+  },
+  "keywords": [
+    "dapei",
+    "engine",
+    "bundle",
+    "capability"
+  ],
+  "license": "MIT"
+}

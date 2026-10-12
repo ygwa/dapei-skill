@@ -2,7 +2,7 @@
 /**
  * smoke-bundle.mjs — prove the shipped artifact works, on its own.
  *
- * `dist/dapei-engine.js` is the single-file engine bundle produced by
+ * `skills/engine/dapei-engine.js` is the single-file engine bundle produced by
  * `npm run build` (esbuild). It is what a checkout-less consumer runs: no
  * TypeScript sources, no `--experimental-strip-types`, no workspace links.
  *
@@ -30,7 +30,7 @@ import { execFileSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
-const BUNDLE = join(REPO_ROOT, "dist", "dapei-engine.js");
+const BUNDLE = join(REPO_ROOT, "skills", "engine", "dapei-engine.js");
 
 function fail(msg) {
   console.error(`[smoke:bundle] FAIL: ${msg}`);
@@ -101,7 +101,7 @@ try {
   assertFullEngine(foreignBundle, ws2, env2, "shipped-out");
 
   console.log(
-    "[smoke:bundle] PASS — dist/dapei-engine.js initialises a complete workspace, reaches cdr.index.list and routes, both in-repo and copied out with no engine home (embedded templates)"
+    "[smoke:bundle] PASS — skills/engine/dapei-engine.js initialises a complete workspace, reaches cdr.index.list and routes, both in-repo and copied out with no engine home (embedded templates)"
   );
 } finally {
   rmSync(root, { recursive: true, force: true });

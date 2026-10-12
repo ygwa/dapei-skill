@@ -6,7 +6,7 @@ set -euo pipefail
 # Two runtime modes, chosen by what actually exists in the checkout:
 #   * source mode — `engine/dapei-engine.ts` through node's type stripping
 #                   (daily development: what you edit is what runs)
-#   * bundle mode — `dist/dapei-engine.js`, the shipped single-file artifact
+#   * bundle mode — `skills/engine/dapei-engine.js`, the shipped single-file artifact
 #                   built by `npm run build` (no TypeScript, no workspace
 #                   links, no type-stripping flag)
 #
@@ -17,7 +17,7 @@ SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export DAPEI_ENGINE_HOME="${DAPEI_ENGINE_HOME:-$SCRIPT_ROOT}"
 
 SOURCE_ENGINE="$SCRIPT_ROOT/engine/dapei-engine.ts"
-BUNDLE_ENGINE="$SCRIPT_ROOT/dist/dapei-engine.js"
+BUNDLE_ENGINE="$SCRIPT_ROOT/skills/engine/dapei-engine.js"
 
 if [[ "${DAPEI_USE_BUNDLE:-}" != "1" && -f "$SOURCE_ENGINE" ]]; then
   exec node --experimental-strip-types "$SOURCE_ENGINE" "$@"
