@@ -9,27 +9,32 @@
  *   S2. Probe required tools (node >= 22.6, npm, git)
  *   S3. Verify workspace contracts (repos/, docs/, features/ exist)
  *   S4. Ensure .dapei/cognitive/ exists (create if missing)
- *   S5. Seed fixtures if .dapei/cognitive/ is empty (copy tests/fixtures/sample-node-repo/docs/as-is/ → .dapei/cognitive/)
- *   S6. Run cdr.profile + cdr.index.list to validate fixtures
- *   S7. Generate portal preview (skip if docs-portal/ exists)
+ *   S5. Optionally seed sample CDR artifacts (--with-samples only; default writes nothing)
+ *   S6. Validate the workspace's cognitive index through the engine CLI (cdr.index.list)
+ *   S7. Generate the documentation portal through the engine CLI (cdr.doc.generate)
+ *
+ * All engine work goes through `dapei-engine run --capability ...` as a
+ * subprocess: the bootstrap never imports engine TypeScript directly, so it
+ * needs no build step and no `--experimental-strip-types` on this file.
  *
  * Exit codes:
  *   0 — success
  *   1 — pre-flight failure (missing tool, missing dir)
- *   2 — runtime failure (cdr.* capability threw)
+ *   2 — engine failure (capability threw or engine missing)
  */
 
-import { existsSync, mkdirSync, cpSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, cpSync, readdirSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
+const ENGINE = join(REPO_ROOT, "engine/dapei-engine.ts");
 
 const COGNITIVE_DIR = ".dapei/cognitive";
 const PORTAL_DIR = ".dapei/docs-portal";
-const FIXTURE_SRC = join(REPO_ROOT, "tests/fixtures/sample-node-repo/docs/as-is");
+const SAMPLE_SRC = join(REPO_ROOT, "tests/fixtures/sample-node-repo/docs/as-is");
 
 const REQUIRED_DIRS = ["repos", "docs", "features"];
 
@@ -40,6 +45,23 @@ function step(msg) {
 function fail(msg, code = 1) {
   console.error(`[first-run] FAIL: ${msg}`);
   process.exit(code);
+}
+
+/**
+ * Run one capability through the engine CLI and return its stdout.
+ * Throws on a non-zero exit (unknown capability, schema failure, capability error).
+ */
+function runCapability(capability, input, workspace) {
+  return execFileSync(
+    process.execPath,
+    ["--experimental-strip-types", ENGINE, "run", "--capability", capability, "--input", JSON.stringify(input)],
+    {
+      cwd: workspace,
+      env: { ...process.env, DAPEI_WORKSPACE_ROOT: workspace, DAPEI_ENGINE_HOME: REPO_ROOT },
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    }
+  );
 }
 
 // S1: detect workspace root
@@ -104,70 +126,69 @@ function s4_ensureCognitive(workspace) {
   }
 }
 
-// S5: seed fixtures if empty
-function s5_seedFixtures(workspace) {
-  step("S5: seed fixtures if cognitive/ is empty");
+// S5: optionally seed sample CDR artifacts (opt-in via --with-samples)
+function s5_seedSamples(workspace, withSamples) {
+  step("S5: seed sample artifacts (opt-in)");
+  if (!withSamples) {
+    step("  skipped (pass --with-samples to copy the sample-node-repo artifacts)");
+    return false;
+  }
   const cog = join(workspace, COGNITIVE_DIR);
   const entries = readdirSync(cog);
   if (entries.length > 0) {
     step(`  cognitive/ not empty (${entries.length} entries); skip seed`);
     return false;
   }
-  if (!existsSync(FIXTURE_SRC)) {
-    step(`  fixture source missing: ${FIXTURE_SRC}; skip seed`);
+  if (!existsSync(SAMPLE_SRC)) {
+    step(`  sample source missing: ${SAMPLE_SRC}; skip seed`);
     return false;
   }
-  cpSync(FIXTURE_SRC, cog, { recursive: true });
-  step(`  seeded from ${FIXTURE_SRC}`);
+  cpSync(SAMPLE_SRC, cog, { recursive: true });
+  step(`  seeded from ${SAMPLE_SRC}`);
   return true;
 }
 
-// S6: validate fixtures via cdr.profile + cdr.index.list
-async function s6_validateFixtures(workspace) {
-  step("S6: validate fixtures via cdr.* capabilities");
+// S6: validate the workspace's cognitive index through the engine CLI
+function s6_validateCognitive(workspace) {
+  step("S6: validate cognitive index via cdr.index.list");
   try {
-    const { runCapability } = await import(join(REPO_ROOT, "packages/core/dist/index.js"));
-    const ctx = { workspace, repo: "sample-node-repo" };
-    await runCapability("cdr.profile", {}, ctx);
-    await runCapability("cdr.index.list", {}, ctx);
-    step("  cdr.profile + cdr.index.list OK");
+    const out = runCapability("cdr.index.list", {}, workspace);
+    const summary = out.trim().split("\n")[0] ?? "";
+    step(`  engine reached${summary ? `: ${summary.slice(0, 120)}` : ""}`);
   } catch (e) {
-    // Fallback: validate via simple YAML load
-    step(`  cdr.* unavailable (${e.message}); skipping deep validation`);
+    fail(`cdr.index.list failed: ${String(e.stderr || e.message).trim()}`, 2);
   }
 }
 
-// S7: generate portal preview (skip if exists)
+// S7: generate the documentation portal through the engine (skip if present)
 function s7_generatePortal(workspace) {
-  step("S7: generate portal preview");
+  step("S7: generate documentation portal via cdr.doc.generate");
   const p = join(workspace, PORTAL_DIR);
   if (existsSync(p) && readdirSync(p).length > 0) {
     step(`  ${PORTAL_DIR} exists and non-empty; skip generation`);
     return;
   }
   try {
-    execSync("node --experimental-strip-types scripts/cdr-doc-generate.mjs", {
-      cwd: REPO_ROOT,
-      stdio: "inherit",
-    });
+    runCapability("cdr.doc.generate", {}, workspace);
     step(`  portal generated at ${PORTAL_DIR}`);
   } catch (e) {
-    step(`  portal generation skipped (${e.message})`);
+    fail(`cdr.doc.generate failed: ${String(e.stderr || e.message).trim()}`, 2);
   }
 }
 
 async function main() {
   console.log("[first-run] dapei-skill bootstrap starting...");
+  const withSamples = process.argv.includes("--with-samples");
   const workspace = s1_detectWorkspace();
   step(`  workspace: ${workspace}`);
   s2_probeTools();
   s3_verifyContracts(workspace);
   s4_ensureCognitive(workspace);
-  const seeded = s5_seedFixtures(workspace);
-  await s6_validateFixtures(workspace);
+  const seeded = s5_seedSamples(workspace, withSamples);
+  s6_validateCognitive(workspace);
   s7_generatePortal(workspace);
-  console.log(`[first-run] done. ${seeded ? "fixtures seeded." : "existing fixtures preserved."}`);
-  console.log(`[first-run] next: @dapei initialize the current project workspace`);
+  console.log(`[first-run] done.${seeded ? " samples seeded." : " workspace unchanged beyond .dapei/."}`);
+  console.log("[first-run] next: @dapei initialize the current project workspace");
 }
 
 main().catch((e) => {

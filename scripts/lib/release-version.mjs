@@ -3,23 +3,25 @@
 //
 // Single source of truth for reading/writing version across the dapei-skill repo.
 //
-// Version sources (6):
+// Version sources:
 //   - package.json (root)
 //   - engine/package.json
-//   - packages/core/package.json
-//   - packages/router/package.json
-//   - packages/runtime-adapters/package.json
+//   - packages/{core,cdr,catalog,router,runtime-adapters}/package.json
 //   - SKILL.md (YAML frontmatter)
+//   - .claude-plugin/plugin.json and skills/*/.claude-plugin/plugin.json
 //
-// Subcommand `check`  : assert all 6 sources currently agree; exit 0 / 1.
-// Subcommand `set`    : write `NEW_VERSION` into all 6 sources; update CHANGELOG.
+// `packages/doc-gen` is deliberately excluded: it tracks its own 1.x line for
+// the VitePress portal generator.
+//
+// Subcommand `check`  : assert all sources currently agree; exit 0 / 1.
+// Subcommand `set`    : write `NEW_VERSION` into all sources; update CHANGELOG.
 //
 // Exit codes:
 //   0  ok
 //   1  generic error
 //   2  version drift detected (check only)
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27,13 +29,25 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_ROOT = resolve(__dirname, "..", "..");
 
+const SHARED_PACKAGES = ["core", "cdr", "catalog", "router", "runtime-adapters"];
+
+// Every skill ships its own marketplace manifest; they all track the product
+// version. Enumerated from disk so a newly added skill cannot be forgotten.
+const SKILL_PLUGIN_SOURCES = (
+  existsSync(join(REPO_ROOT, "skills")) ? readdirSync(join(REPO_ROOT, "skills"), { withFileTypes: true }) : []
+)
+  .filter((e) => e.isDirectory() && existsSync(join(REPO_ROOT, "skills", e.name, ".claude-plugin", "plugin.json")))
+  .map((e) => e.name)
+  .sort()
+  .map((name) => ({ key: `skills/${name}`, file: `skills/${name}/.claude-plugin/plugin.json`, kind: "json" }));
+
 export const VERSION_SOURCES = [
   { key: "root", file: "package.json", kind: "json" },
   { key: "engine", file: "engine/package.json", kind: "json" },
-  { key: "packages/core", file: "packages/core/package.json", kind: "json" },
-  { key: "packages/router", file: "packages/router/package.json", kind: "json" },
-  { key: "packages/runtime-adapters", file: "packages/runtime-adapters/package.json", kind: "json" },
+  ...SHARED_PACKAGES.map((p) => ({ key: `packages/${p}`, file: `packages/${p}/package.json`, kind: "json" })),
   { key: "SKILL.md", file: "SKILL.md", kind: "skill-md" },
+  { key: ".claude-plugin", file: ".claude-plugin/plugin.json", kind: "json" },
+  ...SKILL_PLUGIN_SOURCES,
 ];
 
 function readVersion(source) {

@@ -10,17 +10,19 @@
 /features/*/repos/
 /features/*/context/runtime-context.md
 /features/*/context/context-index.yaml
+# Generated on every guardrail run (report mode); see feature.guardrail
+/features/*/reports/guardrail-report.md
 
 # Dependencies
 node_modules/
 node_modules
 .pnpm-store/
+# pnpm is the only supported package manager; see docs/release-process.md
+package-lock.json
 
 # Build outputs
 dist/
 build/
-desktop/out/
-desktop/**/out/
 
 # Agent / IDE scratch (never commit)
 /.omo/

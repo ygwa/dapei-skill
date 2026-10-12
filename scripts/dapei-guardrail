@@ -1,14 +1,64 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# dapei-guardrail — run the engine's `feature.guardrail` capability.
+#
+# Usage:
+#   scripts/dapei-guardrail <feature-name>   # one feature
+#   scripts/dapei-guardrail --all            # every feature under features/
+#
+# These are maintainer/CI entry points, not user-facing commands: users reach
+# the guardrail through `@dapei ...` conversation. Report mode (the default) is
+# non-blocking — the guardrail only fails this script when the engine itself
+# errors, or when the workspace sets `guardrail_mode` to a blocking mode and the
+# capability refuses to report success.
+
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENGINE="$SCRIPT_ROOT/engine/dapei-engine.ts"
-
-feature="${1:-}"
-if [[ -z "$feature" ]]; then
-  echo "Usage: dapei-guardrail <feature-name>" >&2
-  exit 1
-fi
-
 export DAPEI_ENGINE_HOME="$SCRIPT_ROOT"
-exec node --experimental-strip-types "$ENGINE" run --capability guardrail.run --input "{\"feature\":\"$feature\"}"
+
+run_guardrail() {
+  node --experimental-strip-types "$ENGINE" run \
+    --capability feature.guardrail \
+    --input "{\"feature\":\"$1\"}"
+}
+
+list_features() {
+  local dir
+  for dir in "$SCRIPT_ROOT"/features/*/; do
+    [ -d "$dir" ] || continue
+    basename "$dir"
+  done
+}
+
+usage() {
+  echo "Usage: dapei-guardrail <feature-name> | --all" >&2
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+  "")
+    usage
+    exit 1
+    ;;
+  --all)
+    checked=0
+    while IFS= read -r feature; do
+      [ -n "$feature" ] || continue
+      echo "=== guardrail: $feature"
+      run_guardrail "$feature"
+      checked=$((checked + 1))
+    done < <(list_features)
+    if [ "$checked" -eq 0 ]; then
+      echo "=== guardrail: no features found under $SCRIPT_ROOT/features"
+    else
+      echo "=== guardrail: checked $checked feature(s)"
+    fi
+    ;;
+  *)
+    run_guardrail "$1"
+    ;;
+esac

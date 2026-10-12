@@ -1,6 +1,6 @@
 {
   "name": "dapei-workflow",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "Drive the 8-stage feature DAG and build per-stage context bundles.",
   "author": {
     "name": "ygwa",

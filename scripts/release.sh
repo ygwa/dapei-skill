@@ -163,12 +163,12 @@ log "    push:     $PUSH"
 log "    files affected:"
 log "      - package.json"
 log "      - engine/package.json"
-log "      - packages/core/package.json"
-log "      - packages/router/package.json"
-log "      - packages/runtime-adapters/package.json"
+log "      - packages/*/package.json"
 log "      - SKILL.md (frontmatter)"
+log "      - .claude-plugin/plugin.json"
+log "      - skills/*/.claude-plugin/plugin.json"
 log "      - CHANGELOG.md"
-log "      - package-lock.json"
+log "      - pnpm-lock.yaml"
 log ""
 
 if [[ "$YES" != true ]]; then
@@ -180,8 +180,8 @@ fi
 log "==> Bumping version"
 run node "$LIB" bump "$BUMP_KIND" --changelog "--date=$(date +%Y-%m-%d)"
 
-log "==> Syncing package-lock.json"
-run npm install --package-lock-only --no-audit --no-fund
+log "==> Syncing pnpm-lock.yaml"
+run pnpm install --lockfile-only
 
 # Re-verify version sources are in sync (catches any logic bugs)
 if ! node "$LIB" check >/dev/null; then
@@ -193,19 +193,19 @@ log "==> Staging files"
 run git add \
   package.json \
   engine/package.json \
-  packages/core/package.json \
-  packages/router/package.json \
-  packages/runtime-adapters/package.json \
+  packages/*/package.json \
   SKILL.md \
+  .claude-plugin/plugin.json \
+  skills/*/.claude-plugin/plugin.json \
   CHANGELOG.md \
-  package-lock.json
+  pnpm-lock.yaml
 
 log "==> Committing"
 commit_msg="chore(release): v$next_version
 
-- bump version across all 6 sources
+- bump version across every version source
 - move [Unreleased] entries to [$next_version]
-- refresh package-lock"
+- refresh pnpm-lock.yaml"
 run git commit -m "$commit_msg"
 
 if [[ "$NO_TAG" == true ]]; then

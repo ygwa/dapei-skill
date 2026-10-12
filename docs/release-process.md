@@ -51,21 +51,26 @@ beats one major a quarter.
 ## What changes when a release is cut
 
 `scripts/release.sh patch|minor|major [--changelog]` (changelog is on by
-default) updates **all six** version sources atomically:
+default) updates **every** version source atomically:
 
 1. `package.json` (root)
 2. `engine/package.json`
-3. `packages/core/package.json`
-4. `packages/router/package.json`
-5. `packages/runtime-adapters/package.json`
-6. `SKILL.md` YAML frontmatter
+3. `packages/{core,cdr,catalog,router,runtime-adapters}/package.json`
+4. `SKILL.md` YAML frontmatter
+5. `.claude-plugin/plugin.json` (marketplace meta plugin)
+6. `skills/*/.claude-plugin/plugin.json` (one per skill)
+
+`packages/doc-gen` is deliberately excluded — it tracks its own 1.x line for the
+VitePress portal generator. The authoritative list is `VERSION_SOURCES` in
+`scripts/lib/release-version.mjs`.
 
 Plus:
 
 - `CHANGELOG.md` — moves accumulated `[Unreleased]` content into a new dated
   `## [X.Y.Z] - YYYY-MM-DD` section above the previous version, then resets
   `[Unreleased]` to an empty template.
-- `package-lock.json` — refreshed via `npm install --package-lock-only`.
+- `pnpm-lock.yaml` — refreshed via `pnpm install --lockfile-only` (pnpm is the
+  only supported package manager; `package-lock.json` is not used).
 
 After the bump, the script runs `npm run typecheck` and `npm run build` to
 verify nothing broke, then creates a single `chore(release): vX.Y.Z` commit
@@ -119,9 +124,11 @@ If any of the above fails, the script will tell you. Do not bypass with
 ## How CI prevents drift
 
 `.github/workflows/ci.yml` runs the `version-consistency` job on every push
-and PR. It fails the build the moment any of the 6 sources disagrees. This
+and PR. It fails the build the moment any version source disagrees (product
+packages, `SKILL.md`, and every `.claude-plugin/plugin.json` manifest). This
 is the safety net that catches the kind of drift that already happened
-historically (sub-packages stuck at 2.1.0 while the root was at 2.2.0).
+historically (sub-packages stuck at 2.1.0 while the root was at 2.2.0, and the
+marketplace manifests stuck at 3.1.0 while the product was at 3.2.0).
 
 To reproduce locally: `bash scripts/check-version-consistency.sh`.
 
