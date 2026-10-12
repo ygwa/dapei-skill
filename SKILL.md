@@ -38,7 +38,20 @@ version: 3.2.0
 
 ## 工程执行层说明
 
-- 内部执行接口：
+### 引擎入口（Engine entry — 每个 `@dapei` 调用都要先解析到它）
+
+技能本身只有 prose：**没有引擎入口时，一个 capability 也执行不了**。执行前按顺序解析（第一个存在的就是答案）：
+
+| 顺序 | 入口 | 何时用 |
+|---|---|---|
+| 1 | `bash <repo>/scripts/dapei …` | 有仓库检出时统一入口；它自己会在源码/产物之间选择 |
+| 2 | `node <repo>/dist/dapei-engine.js run --capability <id> --input '<json>'` | 已构建的单文件产物：无需 TypeScript、无需 `node_modules`、无需 `--experimental-strip-types`（Node ≥ 20） |
+| 3 | `node --experimental-strip-types <repo>/engine/dapei-engine.ts run --capability <id> --input '<json>'` | 源码模式（Node ≥ 22.6） |
+
+- `<repo>` 是 dapei-skill 检出目录；可用 `DAPEI_ENGINE_HOME` 显式指定（`scripts/dapei` 会设置它）。
+- 两种模式都受支持：`scripts/dapei` 在有源码时用源码（避免改完 `.ts` 被陈旧产物遮蔽），否则用产物；`DAPEI_USE_BUNDLE=1` 强制产物。
+- 找不到引擎时**必须报错并告知用户缺少什么**，不要假装调用成功。
+- 其它内部执行接口：
   - `dapei-engine run --capability <id> --input <json>`
   - `dapei-engine route --intent "..." --context <json>`
 - `scripts/dapei` 仅是维护者兼容入口的薄适配层。

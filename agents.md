@@ -204,8 +204,35 @@ graph gains a cycle. Add a new subpath to the owning package's `exports` before 
 type stripping) when the checkout has it, otherwise the **bundle** (`dist/dapei-engine.js`, built
 by `npm run build`, no flags needed). Source wins so an edited `.ts` is never shadowed by a stale
 bundle; set `DAPEI_USE_BUNDLE=1` to force the shipped artifact. CI smoke-tests both: the whole
-smoke suite runs once through the source and `npm run smoke:bundle` runs `workspace.init`,
-`cdr.index.list` and `route` through the bundle.
+smoke suite runs once through the source and `npm run smoke:bundle` runs a copied-out bundle (no
+templates beside it, no `DAPEI_ENGINE_HOME`) through `workspace.init`, `cdr.index.list` and `route`.
+
+The bundle is standalone because its templates are embedded: `npm run gen:assets` bakes
+`runtime/templates/**` into `packages/core/src/generated/embedded-assets.ts` (committed) and
+`npm run check:assets` fails CI when that copy is stale. Disk always wins when an engine home
+exists, and a missing template there is a hard error.
+
+### Where workspace assets live
+
+| Path | What it is | Who owns it |
+| --- | --- | --- |
+| `runtime/templates/dapei/**` | the pristine scaffolds a new workspace receives (commands, schemas, workflow, rules, cognitive index) | product; the single source for `workspace.init` |
+| `runtime/templates/*.md.template` | feature document templates (01–06) | product |
+| `.dapei/**` (this repo) | **this repository's own** workspace config, seeded from the table above and then edited | this repo; runtime state (`.dapei/audit/`, `.dapei/cognitive/`) is gitignored |
+| `<workspace>/docs/**` | durable knowledge, plain markdown | the workspace |
+| `<workspace>/.dapei/docs-portal/**` | the generated portal — the only site builder in the product | `cdr.doc.generate` |
+
+`workspace.init` writes nothing outside its declared `outputs`: it no longer touches the host
+`package.json`. See `docs/decisions/ADR-0024-workspace-assets-single-home.md`.
+
+### Engine entry (what an installed skill must be able to find)
+
+The skills are prose; every `@dapei` flow needs the engine to exist. `SKILL.md` (repo root)
+documents the contract — `scripts/dapei`, then `dist/dapei-engine.js`, then
+`engine/dapei-engine.ts` — and `scripts/validate-skills.mjs` fails the build if that section
+disappears. An installed skill therefore still needs the checkout (or a copied-out
+`dist/dapei-engine.js`); packaging the bundle *as* skill content is a release-time decision
+that ADR-0024's embedded templates now make a one-step change.
 
 ### Boundary with Feature dimension
 

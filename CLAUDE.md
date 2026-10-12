@@ -134,11 +134,14 @@ npm run verify   # typecheck + validate:skills + build + test + smoke
 3. If the body now references a new capability id, the validator will warn if it is unregistered.
 4. Run `npm run verify`.
 
-### After bumping a schema
+### After bumping an artifact contract
 
-1. Add a migration entry in `.dapei/schemas/CHANGELOG.md` (if it exists; otherwise create it).
+1. Artifact shape contracts live in code — `packages/core/src/evidence.ts` plus each
+   capability's `inputSchema`. There is no `.dapei/schemas/*.yaml` layer any more
+   (ADR-0024 deleted it: nothing read those files).
 2. Update any fixture files in `tests/fixtures/` or `tests/ai-behavior/fixtures/`.
-3. Bump version (schemas are a public contract; minor at minimum).
+3. Bump the capability `version` (they are a public contract; minor at minimum) and
+   note it in `CHANGELOG.md`.
 
 ## What NOT to do
 

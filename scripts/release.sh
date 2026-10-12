@@ -196,6 +196,7 @@ run git add \
   packages/*/package.json \
   SKILL.md \
   .claude-plugin/plugin.json \
+  .claude-plugin/marketplace.json \
   skills/*/.claude-plugin/plugin.json \
   CHANGELOG.md \
   pnpm-lock.yaml

@@ -44,6 +44,6 @@ The engine REJECTS any artifact where `kind` does not match the supplied evidenc
 
 ## References
 
-- `.dapei/schemas/evidence.schema.yaml`
-- `packages/core/src/evidence.ts`
+- `packages/core/src/evidence.ts` (the artifact contract; the `.dapei/schemas/evidence.schema.yaml`
+  file listed here was deleted by ADR-0024 — it never had a runtime reader)
 - `agents.md` § P1 Red Lines

@@ -47,6 +47,7 @@ export const VERSION_SOURCES = [
   ...SHARED_PACKAGES.map((p) => ({ key: `packages/${p}`, file: `packages/${p}/package.json`, kind: "json" })),
   { key: "SKILL.md", file: "SKILL.md", kind: "skill-md" },
   { key: ".claude-plugin", file: ".claude-plugin/plugin.json", kind: "json" },
+  { key: ".claude-plugin/marketplace.json", file: ".claude-plugin/marketplace.json", kind: "json" },
   ...SKILL_PLUGIN_SOURCES,
 ];
 

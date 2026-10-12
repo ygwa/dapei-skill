@@ -211,9 +211,21 @@ export function validateCommandsDir(commandsDir, opts = {}) {
   return { errors, warnings, info };
 }
 
-function loadCapabilityIds(repoRoot) {
-  // Best-effort static parse of capability files (no TS imports needed).
-  // We cannot evaluate TS; fall back to scanning capability files for `id:` patterns.
+async function loadCapabilityIds(repoRoot) {
+  // Preferred: ask the engine itself. `packages/catalog` is the composition
+  // root, so this is the complete, rename-proof set of capability ids. Needs
+  // the pnpm workspace links plus Node's type stripping (>= 22.18 strips by
+  // default); when either is missing we fall back to the static scan below.
+  try {
+    const { capabilitySpecs } = await import("@dapei/catalog");
+    const ids = new Set(capabilitySpecs.map((spec) => spec.id));
+    if (ids.size > 0) return ids;
+  } catch {
+    // fall through to the static scan
+  }
+
+  // Fallback: best-effort static parse of capability files (no TS imports needed).
+  // We cannot evaluate TS; scan capability files for `id:` patterns.
   // Source directories cover the core capability domains
   // (`packages/core/src/capabilities/domains`, composed by
   // `packages/catalog/src`), the extracted CDR package (`packages/cdr`),
@@ -228,9 +240,11 @@ function loadCapabilityIds(repoRoot) {
   const ids = new Set();
   for (const dir of sourceDirs) {
     if (!existsSync(dir)) continue;
-    for (const f of readdirSync(dir)) {
-      if (!f.endsWith(".ts")) continue;
-      const content = readFileSync(join(dir, f), "utf8");
+    const entries = readdirSync(dir, { recursive: true });
+    for (const entry of entries) {
+      const name = String(entry);
+      if (!name.endsWith(".ts")) continue;
+      const content = readFileSync(join(dir, name), "utf8");
       const re = /\bid:\s*['"`]([a-z][a-z0-9.-]+)['"`]/gi;
       let m;
       while ((m = re.exec(content))) ids.add(m[1]);
@@ -238,6 +252,43 @@ function loadCapabilityIds(repoRoot) {
   }
   if (ids.size === 0) return null;
   return ids;
+}
+
+/**
+ * The router SKILL.md (repo root) is the only place that tells the agent how to
+ * reach the engine. Without that contract an installed skill is prose only, so
+ * assert it stays documented.
+ */
+function validateRootSkill(repoRoot) {
+  const errors = [];
+  const warnings = [];
+  const info = [];
+  const rootSkill = join(repoRoot, "SKILL.md");
+  if (!existsSync(rootSkill)) {
+    errors.push({ path: rootSkill, message: "repo-root SKILL.md is missing" });
+    return { errors, warnings, info };
+  }
+  const content = readFileSync(rootSkill, "utf8");
+  if (!content.includes("dapei-engine")) {
+    errors.push({
+      path: rootSkill,
+      message: "does not document the engine entry point (expected a `dapei-engine` invocation)"
+    });
+  }
+  const entryForms = ["scripts/dapei", "dist/dapei-engine.js"];
+  if (!entryForms.some((form) => content.includes(form))) {
+    errors.push({
+      path: rootSkill,
+      message: `engine entry section names none of: ${entryForms.join(", ")}`
+    });
+  }
+  if (!content.includes("DAPEI_USE_BUNDLE")) {
+    warnings.push({
+      path: rootSkill,
+      message: "engine entry section does not mention DAPEI_USE_BUNDLE (source vs shipped bundle selection)"
+    });
+  }
+  return { errors, warnings, info };
 }
 
 function printReport(label, { errors, warnings, info }) {
@@ -250,14 +301,14 @@ function printReport(label, { errors, warnings, info }) {
   for (const i of info) console.log(COLOR.dim(`  info  ${i.path}: ${i.message}`));
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   let repoRoot = process.cwd();
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--dir" && args[i + 1]) repoRoot = resolve(args[i + 1]);
   }
 
-  const knownCapabilities = loadCapabilityIds(repoRoot);
+  const knownCapabilities = await loadCapabilityIds(repoRoot);
   const skillsDir = join(repoRoot, "skills");
   const result = validateSkillsDir(skillsDir, { knownCapabilities });
 
@@ -267,9 +318,13 @@ function main() {
   const cmdResult = validateCommandsDir(commandsDir, { knownCapabilities });
   printReport(`commands/ (${basename(repoRoot)})`, cmdResult);
 
-  const totalErrors = result.errors.length + cmdResult.errors.length;
-  const totalWarnings = result.warnings.length + cmdResult.warnings.length;
-  const totalInfo = result.info.length + cmdResult.info.length;
+  const rootResult = validateRootSkill(repoRoot);
+  printReport(`SKILL.md (engine entry)`, rootResult);
+
+  const all = [result, cmdResult, rootResult];
+  const totalErrors = all.reduce((n, r) => n + r.errors.length, 0);
+  const totalWarnings = all.reduce((n, r) => n + r.warnings.length, 0);
+  const totalInfo = all.reduce((n, r) => n + r.info.length, 0);
   console.log(COLOR.bold(`\nSummary: ${totalErrors} errors, ${totalWarnings} warnings, ${totalInfo} info`));
   process.exit(totalErrors > 0 ? 1 : 0);
 }

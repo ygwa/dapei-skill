@@ -43,22 +43,24 @@ description: Initialize, validate, and inspect a dapei workspace (root-level rep
 ├── .dapei/
 │   ├── workspace.yaml       # workspace 元数据
 │   ├── commands.yaml        # capability 意图定义
-│   ├── schemas/             # artifact schema
-│   │   ├── behavior.schema.yaml
-│   │   ├── state-machine.schema.yaml
-│   │   └── evidence.schema.yaml
-│   └── rules/               # dapei 规则
-│       ├── naming.yaml
-│       ├── layering.yaml
-│       └── ddd.yaml
+│   ├── feature.schema.yaml  # feature manifest schema
+│   ├── repos.schema.yaml    # repo registry schema
+│   ├── workflows/           # 阶段 DAG（feature-lifecycle.yaml 含 gates）
+│   ├── rules/               # guardrail 规则（naming/layering/ddd/api/cognitive）
+│   └── cognitive/index.yaml # CDR 资产目录（由 cdr.* 能力维护）
 ├── repos/                   # managed repo 基座池
 ├── features/                # feature 执行工作区
+├── runtime/
+│   ├── templates/           # feature 文档模板（01-06）
+│   └── ai-rules/
 └── docs/
-    ├── as-is/               # durable 现状认知
-    │   └── behavior/
+    ├── as-is/               # durable 现状认知（profiles/entries/behavior/state-machines/…）
     ├── architecture/        # 架构知识
     └── decisions/           # 决策记录
 ```
+
+> 工作区自身**不带站点构建器**：文档门户由 `cdr.doc.generate` 生成到
+> `.dapei/docs-portal/`（唯一一套渲染器，见 ADR-0024）。
 
 3. 初始化 `.dapei/workspace.yaml`：
 ```yaml
