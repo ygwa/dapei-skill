@@ -11,7 +11,7 @@
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { runCapability } from "../../../packages/core/src/index.ts";
+import { runCapability } from "../../../packages/catalog/src/index.ts";
 import type { Action, Transcript, Trace } from "./types.ts";
 import { TraceRecorder } from "./trace-recorder.ts";
 

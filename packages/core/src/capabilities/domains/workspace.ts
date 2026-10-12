@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { CapabilityError } from "../../types.ts";
 import type { CapabilityResult, CapabilitySpec } from "../../types.ts";
 import { copyIfMissing, ensureDir, isConformingWorkspace, isEffectivelyEmpty, read, runSafe, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
@@ -7,11 +8,58 @@ import { parseReposYamlNames } from "../shared.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
 
+/**
+ * Locate the engine home: the directory that ships the workspace
+ * scaffolds (`runtime/templates/` plus `.dapei/commands.yaml`).
+ *
+ * `DAPEI_ENGINE_HOME` is an explicit override (set by the `scripts/dapei`
+ * shell wrapper). When it is unset — i.e. whenever a consumer other than
+ * that wrapper calls `workspace.init` — we derive the location from this
+ * module's own path by walking up the directory tree. Falling back to the
+ * *target* workspace root would silently copy nothing, so a missing
+ * engine home is a hard `ENGINE_HOME_NOT_FOUND` error instead.
+ */
+function resolveEngineHome(): string {
+  const candidates: string[] = [];
+  const override = process.env.DAPEI_ENGINE_HOME;
+  if (override) candidates.push(override);
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 12; i++) {
+    candidates.push(dir);
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  for (const candidate of candidates) {
+    if (existsSync(join(candidate, "runtime", "templates")) && existsSync(join(candidate, ".dapei", "commands.yaml"))) {
+      return candidate;
+    }
+  }
+  throw new CapabilityError(
+    "ENGINE_HOME_NOT_FOUND",
+    `could not locate the dapei engine home (a directory containing runtime/templates/ and .dapei/commands.yaml). Set DAPEI_ENGINE_HOME to override. Searched: ${candidates.join(", ")}`
+  );
+}
+
+
 export const workspaceInit: AnyCap = {
   id: "workspace.init",
   version: "1.0.0",
   inputSchema: {},
-  outputs: [".dapei/workspace.yaml"],
+  outputs: [
+    ".dapei/workspace.yaml",
+    ".dapei/commands.yaml",
+    ".dapei/*.schema.yaml",
+    ".dapei/workflows/",
+    ".dapei/rules/",
+    ".dapei/schemas/",
+    ".dapei/cognitive/index.yaml",
+    "runtime/templates/",
+    "runtime/ai-rules/",
+    "docs/.vitepress/",
+    "docs/scripts/",
+    "package.json"
+  ],
   async execute(ctx): Promise<CapabilityResult> {
     const p = workspacePaths(ctx.rootDir);
     ensureDir(p.rootDir);
@@ -46,7 +94,7 @@ export const workspaceInit: AnyCap = {
       write(workspaceFile, `version: 0.2\nworkspace:\n  name: ${basename(p.rootDir)}\n  root: .\n  default_branch: main\n  locale: zh-CN\n  repos_file: .dapei/repos.yaml\n\nrepos:\n  root_dir: repos\n  feature_repo_mode: worktree\n  management_mode: submodule\n  managed_repos: []\n\nquality_gates:\n  guardrail_mode: report\n  required_reports:\n    - feature-progress\n    - daily-report\n    - architecture-review\n    - validation-report\n`);
     }
 
-    const engineHome = process.env.DAPEI_ENGINE_HOME || p.rootDir;
+    const engineHome = resolveEngineHome();
     const sourceDapei = join(engineHome, ".dapei");
     const sourceTemplates = join(engineHome, "runtime", "templates");
     const files = ["commands.yaml", "feature.schema.yaml", "repos.schema.yaml", "workflows/feature-lifecycle.yaml", "rules/api.yaml", "rules/ddd.yaml", "rules/layering.yaml", "rules/naming.yaml"];
@@ -81,8 +129,13 @@ export const workspaceInit: AnyCap = {
       }
     });
 
-    // Merge VitePress dev dependencies and package scripts
+    // Merge VitePress dev dependencies and package scripts into the host
+    // package.json. A merge that fails (unparseable host manifest) is
+    // reported rather than silently swallowed, so callers can see that
+    // the workspace did not get the docs tooling wired up.
     const packageJsonPath = join(p.rootDir, "package.json");
+    const reportFragments = ["workspace initialized"];
+    const artifactPaths = [".dapei/workspace.yaml", ".dapei/commands.yaml"];
     const newScripts = {
       "docs:build-assets": "node --experimental-strip-types docs/scripts/build-cognitive-pages.ts",
       "docs:dev": "npm run docs:build-assets && vitepress dev docs",
@@ -101,8 +154,11 @@ export const workspaceInit: AnyCap = {
         current.scripts = { ...current.scripts, ...newScripts };
         current.devDependencies = { ...current.devDependencies, ...newDevDeps };
         write(packageJsonPath, JSON.stringify(current, null, 2) + "\n");
+        reportFragments.push("merged docs scripts + devDependencies into package.json");
+        artifactPaths.push("package.json");
       } catch (e) {
-        // Safe fallback
+        const reason = e instanceof Error ? e.message : String(e);
+        reportFragments.push(`package.json merge skipped: ${reason}`);
       }
     } else {
       const initPkg = {
@@ -114,13 +170,15 @@ export const workspaceInit: AnyCap = {
         devDependencies: newDevDeps
       };
       write(packageJsonPath, JSON.stringify(initPkg, null, 2) + "\n");
+      reportFragments.push("created package.json with docs scripts + devDependencies");
+      artifactPaths.push("package.json");
     }
 
     if (!existsSync(join(p.docsDir, "agents.md"))) {
       write(join(p.docsDir, "agents.md"), "# Workspace Agents\n\nUse this workspace as the durable source of engineering context.\n");
     }
 
-    return { ok: true, data: { message: `workspace initialized at ${p.rootDir}` }, sideEffects: ["filesystem"], reportFragments: ["workspace initialized"] };
+    return { ok: true, data: { message: `workspace initialized at ${p.rootDir}` }, sideEffects: ["filesystem"], reportFragments, artifactPaths };
   }
 };
 

@@ -14,15 +14,19 @@ const FIXTURE_ROOT = join(REPO_ROOT, 'tests/fixtures/sample-node-repo/docs/as-is
 /**
  * T4.1 — round 3 acceptance test for `scripts/first-run.mjs`.
  *
- * 4 test cases (design § C-5):
- *   1. empty workspace → first-run seeds fixtures and produces portal
- *   2. re-run on existing workspace is idempotent (no overwrite, no error)
- *   3. existing workspace with seeded cognitive/ is preserved (no re-seed)
- *   4. round 1 regression: portal generation still works end-to-end
+ * 5 test cases:
+ *   1. empty workspace → first-run initializes it and writes no sample artifacts
+ *   2. empty workspace + `--with-samples` → sample artifacts are seeded
+ *   3. re-run on existing workspace is idempotent (no overwrite, no error)
+ *   4. existing workspace with seeded cognitive/ is preserved (no re-seed)
+ *   5. round 1 regression: portal generation still works end-to-end
+ *
+ * Sample seeding is opt-in (`--with-samples`): the bootstrap no longer copies
+ * the test fixtures into a user workspace by default.
  */
 
-function runFirstRun(cwd) {
-  return execFileSync('node', [FIRST_RUN], {
+function runFirstRun(cwd, args = []) {
+  return execFileSync('node', [FIRST_RUN, ...args], {
     cwd,
     stdio: 'pipe',
     encoding: 'utf8',
@@ -42,29 +46,49 @@ function seedCognitiveDir(workspace) {
   return cog;
 }
 
-test('first-run on empty workspace seeds fixtures and produces portal', () => {
+test('first-run on empty workspace initializes it without writing sample artifacts', () => {
   const workspace = emptyWorkspace();
   try {
     // S1: detect workspace — must contain repos/ or .dapei/. Pre-create empty dirs
-    // so S3 passes; S5 will seed .dapei/cognitive/ from fixture.
+    // so S3 passes.
     mkdirSync(join(workspace, 'repos'), { recursive: true });
     mkdirSync(join(workspace, 'docs'), { recursive: true });
     mkdirSync(join(workspace, 'features'), { recursive: true });
 
     const out = runFirstRun(workspace);
 
-    // S5 evidence: .dapei/cognitive/ should now contain fixture artifacts
+    // S4 creates .dapei/cognitive/; S5 must not touch it unless --with-samples.
     const cog = join(workspace, '.dapei/cognitive');
     assert.ok(existsSync(cog), `cognitive dir missing: ${cog}`);
+    assert.deepEqual(readdirSync(cog), [], 'default run must not seed sample artifacts');
+    assert.match(out, /S5: seed sample artifacts \(opt-in\)/);
+    assert.match(out, /pass --with-samples/);
+    assert.match(out, /workspace:/);
+    assert.match(out, /done/);
+
+    // S7 produces the portal
+    assert.ok(existsSync(join(workspace, '.dapei/docs-portal')), 'portal not generated');
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('first-run --with-samples seeds the sample CDR artifacts', () => {
+  const workspace = emptyWorkspace();
+  try {
+    mkdirSync(join(workspace, 'repos'), { recursive: true });
+    mkdirSync(join(workspace, 'docs'), { recursive: true });
+    mkdirSync(join(workspace, 'features'), { recursive: true });
+
+    const out = runFirstRun(workspace, ['--with-samples']);
+
+    const cog = join(workspace, '.dapei/cognitive');
     const cogEntries = readdirSync(cog);
-    assert.ok(cogEntries.length > 0, 'cognitive dir empty after first-run');
+    assert.ok(cogEntries.length > 0, 'cognitive dir empty after --with-samples');
     // Fixture has behavior/order-create.yaml — verify it landed
     const orderCreate = join(cog, 'behavior/order-create.yaml');
     assert.ok(existsSync(orderCreate), `expected fixture file missing: ${orderCreate}`);
-
-    // Output should mention workspace and "done"
-    assert.match(out, /workspace:/);
-    assert.match(out, /done/);
+    assert.match(out, /seeded from/);
   } finally {
     rmSync(workspace, { recursive: true, force: true });
   }
@@ -77,8 +101,8 @@ test('first-run is idempotent on existing workspace', () => {
     mkdirSync(join(workspace, 'docs'), { recursive: true });
     mkdirSync(join(workspace, 'features'), { recursive: true });
 
-    // First run: seeds
-    runFirstRun(workspace);
+    // First run: seeds (samples are opt-in)
+    runFirstRun(workspace, ['--with-samples']);
     const cog = join(workspace, '.dapei/cognitive');
     const firstEntries = readdirSync(cog);
     assert.ok(firstEntries.length > 0, 'first-run did not seed');
@@ -89,7 +113,7 @@ test('first-run is idempotent on existing workspace', () => {
     const beforeSecond = readFileSync(userFile, 'utf8');
 
     // Second run: should be no-op on cognitive/ contents (per D4)
-    runFirstRun(workspace);
+    runFirstRun(workspace, ['--with-samples']);
 
     assert.ok(existsSync(userFile), 'first-run deleted user file');
     const afterSecond = readFileSync(userFile, 'utf8');
@@ -114,9 +138,9 @@ test('first-run skips re-seeding when cognitive/ already has entries', () => {
     const markerPath = join(cog, 'previous-marker.yaml');
     assert.ok(existsSync(markerPath));
 
-    const out = runFirstRun(workspace);
+    const out = runFirstRun(workspace, ['--with-samples']);
 
-    // S5 emits "skip seed" message
+    // S5 emits "not empty" + "skip seed" messages
     assert.match(out, /not empty/);
     assert.match(out, /skip seed/);
     // Marker preserved
@@ -131,7 +155,7 @@ test('round 1 regression: cdr.doc.generate still produces a buildable portal', a
   // portal-generation behavior into round 3 acceptance.
   const workspace = emptyWorkspace();
   try {
-    const core = await import('../../packages/core/src/index.ts');
+    const core = await import('../../packages/catalog/src/index.ts');
     await core.runCapability('workspace.init', {}, { rootDir: workspace, now: new Date() });
 
     mkdirSync(join(workspace, 'repos/demo/src'), { recursive: true });

@@ -49,7 +49,7 @@ tests/                      unit / integration / scenarios / ai-behavior
 | Layer | Role | Lives in |
 |---|---|---|
 | **Skill** | A domain of knowledge — when loaded into the AI's context, it teaches the AI how to think about that domain | `skills/<name>/SKILL.md` |
-| **Capability** | A single deterministic engine operation with input schema, validation, and audit logging | `packages/*/src/capabilities/domains/*.ts` registered in `packages/core/src/capabilities/index.ts` |
+| **Capability** | A single deterministic engine operation with input schema, validation, and audit logging | `packages/{core,cdr}/src/capabilities/**` registered in `packages/core/src/capabilities/index.ts` (kernel) and exported by the composition root `packages/catalog/src/index.ts` |
 | **Command** | A user-triggered workflow that chains 2+ capabilities to produce a deliverable | `commands/<name>.md` (added in P1) |
 
 ### Frontmatter contract (enforced by `scripts/validate-skills.mjs`)
@@ -92,7 +92,7 @@ The AI working in a feature workspace MUST NOT write to workspace-dimension path
 
 | Task | Skill / Tooling |
 |---|---|
-| Add a new capability | Add to `packages/*/src/capabilities/domains/<domain>.ts`, register in `packages/core/src/capabilities/index.ts`, add unit test in `tests/unit/`, add route in `packages/router/src/index.ts` |
+| Add a new capability | Add to `packages/core/src/capabilities/domains/<domain>.ts` (kernel domains) or `packages/cdr/src/capabilities.ts` (CDR), export it from the composition root `packages/catalog/src/index.ts`, add unit test in `tests/unit/`, add route in `packages/router/src/routes-table.ts` |
 | Change a SKILL.md | Edit the file, run `npm run validate:skills` |
 | Add a new skill | `mkdir skills/<name>`, create `SKILL.md` with frontmatter, run validator |
 | Add a new command (workflow) | Create `commands/<name>.md` with frontmatter (description, argument-hint), document workflow steps that reference capabilities by id |

@@ -39,13 +39,6 @@ export interface ProvenanceFields {
   mode: ProvenanceMode;
 }
 
-const PROVENANCE_KEYS = [
-  "created_by_feature",
-  "updated_by_feature",
-  "created_at",
-  "updated_at"
-];
-
 export function applyProvenance<T extends Record<string, unknown>>(
   doc: T,
   fields: ProvenanceFields
@@ -83,6 +76,3 @@ export function provenanceFromContext(
   };
 }
 
-export function hasProvenance(doc: Record<string, unknown>): boolean {
-  return PROVENANCE_KEYS.some((k) => doc[k] !== undefined && doc[k] !== null && doc[k] !== "");
-}

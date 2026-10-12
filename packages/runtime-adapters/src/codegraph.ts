@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 /**
@@ -501,12 +501,3 @@ export class CodeGraphAdapter {
   }
 }
 
-export function loadCodeGraphMarker(workspaceRoot: string): string | null {
-  const p = join(workspaceRoot, ".dapei", "graph", ".no-codegraph");
-  if (!existsSync(p)) return null;
-  try {
-    return readFileSync(p, "utf8");
-  } catch {
-    return null;
-  }
-}

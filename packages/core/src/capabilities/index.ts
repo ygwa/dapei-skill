@@ -12,40 +12,21 @@ import {
   cognitiveStateSuggest,
   cognitiveExplore
 } from "./domains/cognitive.ts";
-import {
-  cdrProfile,
-  cdrEntriesCandidate,
-  cdrEntriesPropose,
-  cdrEntriesPrepare,
-  cdrEntriesConfirm,
-  cdrDomainCompose,
-  cdrCapabilityMapInit,
-  cdrIndexList,
-  cdrBehaviorUpsert,
-  cdrStateDerive,
-  cdrBusinessCompose,
-  cdrAssetStaleCheck,
-  cdrArchitectureDriftCheck,
-  cdrBusinessCrossLink,
-  cdrCrossRepoDocGenerate,
-  cdrStaleScan,
-  cdrDomainSuggest,
-  cdrCapabilityMapSynth,
-  cdrReverseClusterDocGenerate,
-  cdrQuery,
-  cdrPipelineStatus,
-  cdrFeatureLink,
-  cdrBootstrap,
-  cdrContextEnvelope
-} from "../../../cdr/src/capabilities.ts";
-import { docGenerate } from "../../../doc-gen/src/doc-gen.ts";
 import { memoryAppend } from "./domains/memory.ts";
 import { auditQuery } from "./domains/audit.ts";
 import type { CapabilitySpec } from "../types.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
 
-export const capabilitySpecs: AnyCap[] = [
+/**
+ * Core capability specs — the kernel-owned capabilities only.
+ *
+ * Capabilities implemented by sibling packages (`packages/cdr`,
+ * `packages/doc-gen`) are NOT listed here: core must not depend on
+ * them. The composition root (`packages/catalog/src/index.ts`) composes
+ * these specs with the cdr/doc-gen specs into the full registry.
+ */
+export const coreCapabilitySpecs: AnyCap[] = [
   workspaceInit,
   workspaceReport,
   workspaceStatus,
@@ -84,36 +65,5 @@ export const capabilitySpecs: AnyCap[] = [
   cognitiveArtifactUpsert,
   cognitiveArtifactList,
   cognitiveStateSuggest,
-  cognitiveExplore,
-  // CDR capabilities
-  cdrProfile,
-  cdrEntriesCandidate,
-  cdrEntriesPropose,
-  cdrEntriesPrepare,
-  cdrEntriesConfirm,
-  cdrDomainCompose,
-  cdrCapabilityMapInit,
-  cdrIndexList,
-  cdrBehaviorUpsert,
-  cdrStateDerive,
-  cdrBusinessCompose,
-  cdrAssetStaleCheck,
-  cdrArchitectureDriftCheck,
-  cdrBusinessCrossLink,
-  cdrCrossRepoDocGenerate,
-  cdrStaleScan,
-  cdrDomainSuggest,
-  cdrCapabilityMapSynth,
-  cdrReverseClusterDocGenerate,
-  cdrQuery,
-  cdrPipelineStatus,
-  cdrFeatureLink,
-  cdrBootstrap,
-  cdrContextEnvelope,
-  // Documentation generation
-  docGenerate
+  cognitiveExplore
 ];
-
-export const capabilities: Record<string, AnyCap> = Object.fromEntries(
-  capabilitySpecs.map((spec) => [spec.id, spec])
-);

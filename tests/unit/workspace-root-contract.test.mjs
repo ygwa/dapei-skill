@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-const core = await import('../../packages/core/src/index.ts');
+const core = await import('../../packages/catalog/src/index.ts');
 
 function cleanTmp(tmp) {
   rmSync(tmp, { recursive: true, force: true });
@@ -38,9 +38,13 @@ test('workspace.init creates .dapei/ directly under root', async () => {
     assert.ok(existsSync(join(tmp, '.dapei')), '.dapei/ should exist at root');
     assert.ok(existsSync(join(tmp, '.dapei', 'workspace.yaml')), '.dapei/workspace.yaml should exist');
 
-    // NOTE: commands.yaml and other template files are only copied when DAPEI_ENGINE_HOME
-    // is set to the project root (they come from .dapei/ in the engine home).
-    // Without DAPEI_ENGINE_HOME set, only the hardcoded workspace.yaml is created.
+    // The engine home is now derived from this module's location when
+    // DAPEI_ENGINE_HOME is unset, so the workspace scaffolds are copied
+    // instead of silently skipped. (This block previously documented the
+    // old silent no-op behaviour.)
+    assert.ok(existsSync(join(tmp, '.dapei', 'commands.yaml')), '.dapei/commands.yaml should be copied from the engine home');
+    assert.ok(existsSync(join(tmp, '.dapei', 'rules', 'api.yaml')), '.dapei/rules/api.yaml should be copied');
+    assert.ok(existsSync(join(tmp, 'runtime', 'templates', '01-current-state.md.template')), 'runtime templates should be copied');
   } finally {
     cleanTmp(tmp);
   }

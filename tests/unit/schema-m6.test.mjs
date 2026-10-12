@@ -1,8 +1,8 @@
 // M6 schema-extension tests.
 //
 // Locks the v0.10 input-schema contract: items (array element
-// schema), nested properties (object property schema), $ref (named
-// sub-schema), and the existing flat shape. Error messages carry
+// schema), nested properties (object property schema), and the
+// existing flat shape. Error messages carry
 // the dotted/bracketed path so callers see e.g.
 // `field 'sources[0].file' must be string`.
 //
@@ -168,99 +168,10 @@ test('schema: nested additionalProperties=false rejects unknown child', () => {
 });
 
 // ---------------------------------------------------------------------------
-// $ref (named sub-schema)
-// ---------------------------------------------------------------------------
-
-test('schema: $ref to SourceRef accepts a valid source', () => {
-  const schema = {
-    properties: {
-      source: { $ref: 'SourceRef' }
-    }
-  };
-  assert.doesNotThrow(() => validateInputSchema({
-    source: { file: 'src/routes/orders.ts', line: 6, repo: 'sample-app' }
-  }, schema));
-});
-
-test('schema: $ref to SourceRef rejects missing file', () => {
-  const schema = {
-    properties: { source: { $ref: 'SourceRef' } }
-  };
-  assert.throws(
-    () => validateInputSchema({ source: { line: 6 } }, schema),
-    /missing field: source.file/
-  );
-});
-
-test('schema: $ref to ConfidenceBlock accepts a valid block', () => {
-  const schema = {
-    properties: {
-      confidence: { $ref: 'ConfidenceBlock' }
-    }
-  };
-  assert.doesNotThrow(() => validateInputSchema({
-    confidence: { level: 'high', kind: 'fact' }
-  }, schema));
-});
-
-test('schema: $ref to ConfidenceBlock rejects bad enum value', () => {
-  const schema = {
-    properties: { confidence: { $ref: 'ConfidenceBlock' } }
-  };
-  assert.throws(
-    () => validateInputSchema({ confidence: { level: 'critical', kind: 'fact' } }, schema),
-    /field 'confidence.level' must be one of: high, medium, low/
-  );
-});
-
-test('schema: $ref to unknown name is ignored (passes through)', () => {
-  // Unknown $ref values are treated as no-op (the resolved def is the
-  // original). This keeps the validator forward-compatible with new
-  // named refs that may be added later.
-  const schema = {
-    properties: { x: { $ref: 'NotARealRef' } }
-  };
-  assert.doesNotThrow(() => validateInputSchema({ x: 'anything' }, schema));
-});
-
-// ---------------------------------------------------------------------------
-// Combined — items + properties + $ref in one schema
-// ---------------------------------------------------------------------------
-
-test('schema: real-world input — sources array of $ref SourceRef objects', () => {
-  const schema = {
-    properties: {
-      sources: {
-        type: 'array',
-        items: { $ref: 'SourceRef' }
-      },
-      confidence: { $ref: 'ConfidenceBlock' }
-    }
-  };
-  assert.doesNotThrow(() => validateInputSchema({
-    sources: [
-      { file: 'a.ts', line: 1, repo: 'x' },
-      { file: 'b.ts', line: 2, repo: 'x' }
-    ],
-    confidence: { level: 'high', kind: 'fact' }
-  }, schema));
-  assert.throws(
-    () => validateInputSchema({
-      sources: [
-        { file: 'a.ts' },
-        { line: 2 }
-      ],
-      confidence: { level: 'high', kind: 'fact' }
-    }, schema),
-    /missing field: sources\[1\].file/
-  );
-});
-
-// ---------------------------------------------------------------------------
 // Backwards compatibility — schema shape additions are additive
 // ---------------------------------------------------------------------------
 
-test('schema: existing pre-M6 schemas still work (string property, no items/nested/$ref)', () => {
+test('schema: existing pre-M6 schemas still work (string property, no items/nested properties)', () => {
   const schema = {
     required: ['name'],
     properties: { name: { type: 'string', minLength: 1 } },

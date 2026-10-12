@@ -6,7 +6,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'node:child_process';
 
-const core = await import('../../packages/core/src/index.ts');
+const core = await import('../../packages/catalog/src/index.ts');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const mallOrderFixture = join(__dirname, '../fixtures/mall-order');
 const mallPaymentFixture = join(__dirname, '../fixtures/mall-payment');

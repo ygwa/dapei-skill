@@ -4,12 +4,17 @@
   "private": true,
   "type": "module",
   "description": "VitePress documentation portal generator for dapei cognitive assets",
+  "exports": {
+    "./doc-gen": "./src/doc-gen.ts"
+  },
   "scripts": {
     "dev": "vitepress dev",
     "build": "vitepress build",
     "preview": "vitepress preview"
   },
   "dependencies": {
+    "@dapei/core": "workspace:*",
+    "@dapei/runtime-adapters": "workspace:*",
     "vitepress": "^1.6.0",
     "vue": "^3.5.0"
   }

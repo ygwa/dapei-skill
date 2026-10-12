@@ -22,7 +22,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..');
 const FIXTURE = join(REPO_ROOT, 'tests', 'fixtures', 'sample-node-repo');
 
-const core = await import('../../packages/core/src/index.ts');
+const core = await import('../../packages/catalog/src/index.ts');
 
 function cleanTmp(t) { rmSync(t, { recursive: true, force: true }); }
 function initFixtureRepo(targetPath) {

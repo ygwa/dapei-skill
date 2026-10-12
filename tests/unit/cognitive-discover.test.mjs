@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, readFileSync, existsSync, mkdirSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const core = await import('../../packages/core/src/index.ts');
+const core = await import('../../packages/catalog/src/index.ts');
 
 test('cognitive.discover provides tree and manifests without prescribing entry search', async () => {
   const tmp = mkdtempSync(join(tmpdir(), 'dapei-disc-'));

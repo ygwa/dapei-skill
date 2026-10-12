@@ -20,7 +20,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..');
 const SKILLS_DIR = join(REPO_ROOT, 'skills');
 
-const capabilities = await import('../../packages/core/src/capabilities/index.ts');
+const capabilities = await import('../../packages/catalog/src/index.ts');
 const router = await import('../../packages/router/src/index.ts');
 
 const REGISTERED_CAPABILITIES = new Set(Object.keys(capabilities.capabilities));

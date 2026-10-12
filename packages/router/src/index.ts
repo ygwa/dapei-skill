@@ -1,12 +1,12 @@
 // Router entry point.
 
-import { routes, type Route } from "./routes-table.ts";
+import { routes, type Route, type RouteInput } from "./routes-table.ts";
 import { pickBest, FALLBACK_ROUTE } from "./matcher.ts";
 import { detectConflicts, summarizeConflict, type RouteConflict } from "./conflict.ts";
 
 export interface RouteResult {
   capability: string;
-  input: Record<string, string>;
+  input: RouteInput;
   reason: string;
   confidence: number;
 }
@@ -23,7 +23,7 @@ export function introspectConflicts(): { conflicts: RouteConflict[]; text: strin
   return { conflicts, text };
 }
 
-export { routes, type Route } from "./routes-table.ts";
+export { routes, type Route, type RouteInput } from "./routes-table.ts";
 export { pickBest, FALLBACK_ROUTE } from "./matcher.ts";
 export { detectConflicts, summarizeConflict, type RouteConflict } from "./conflict.ts";
 export { STAGES } from "./extractors.ts";

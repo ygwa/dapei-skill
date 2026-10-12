@@ -47,7 +47,7 @@ test('cdr.profile populates the codegraph block when the CLI is available', asyn
   const tmp = mkdtempSync(join(tmpdir(), 'dapei-cg-'));
   withFakeCli();
   try {
-    const core = await import('../../packages/core/src/index.ts');
+    const core = await import('../../packages/catalog/src/index.ts');
     await core.runCapability('workspace.init', {}, c(tmp));
     const srcDir = await seedFixtureRepo(tmp, 'mall-order');
     await core.runCapability('repos.add', { name: 'mall-order', url: srcDir }, c(tmp));
@@ -75,7 +75,7 @@ test('cdr.entries.candidate returns backend=native when the CLI is available', a
   const tmp = mkdtempSync(join(tmpdir(), 'dapei-cg-'));
   withFakeCli();
   try {
-    const core = await import('../../packages/core/src/index.ts');
+    const core = await import('../../packages/catalog/src/index.ts');
     await core.runCapability('workspace.init', {}, c(tmp));
     const srcDir = await seedFixtureRepo(tmp, 'mall-order');
     await core.runCapability('repos.add', { name: 'mall-order', url: srcDir }, c(tmp));
@@ -100,7 +100,7 @@ test('cdr.entries.candidate falls back to tree walk when the CLI is missing', as
     // Strip the fake CLI from PATH so the real `codegraph` lookup fails.
     process.env.PATH = '/usr/bin:/bin';
     delete process.env.DAPEI_CODEGRAPH_BIN;
-    const core = await import('../../packages/core/src/index.ts');
+    const core = await import('../../packages/catalog/src/index.ts');
     await core.runCapability('workspace.init', {}, c(tmp));
     const srcDir = await seedFixtureRepo(tmp, 'mall-order');
     await core.runCapability('repos.add', { name: 'mall-order', url: srcDir }, c(tmp));
@@ -125,7 +125,7 @@ test('cdr.behavior.upsert rejects a structured call whose target is not in codeg
     // Force the fake to return an empty callee list so the validation
     // cannot find any target.
     process.env.FAKE_CODEGRAPH_CALLEES_JSON = '{"callees":[]}';
-    const core = await import('../../packages/core/src/index.ts');
+    const core = await import('../../packages/catalog/src/index.ts');
     await core.runCapability('workspace.init', {}, c(tmp));
     const srcDir = await seedFixtureRepo(tmp, 'mall-order');
     await core.runCapability('repos.add', { name: 'mall-order', url: srcDir }, c(tmp));
@@ -163,7 +163,7 @@ test('cdr.behavior.upsert accepts a structured call whose target matches codegra
   try {
     process.env.PATH = `${fakeCli}${origPath ? ':' + origPath : ''}`;
     process.env.FAKE_CODEGRAPH_CALLEES_JSON = '{"callees":[{"name":"PaymentClient","kind":"method"}]}';
-    const core = await import('../../packages/core/src/index.ts');
+    const core = await import('../../packages/catalog/src/index.ts');
     await core.runCapability('workspace.init', {}, c(tmp));
     const srcDir = await seedFixtureRepo(tmp, 'mall-order');
     await core.runCapability('repos.add', { name: 'mall-order', url: srcDir }, c(tmp));
@@ -199,7 +199,7 @@ test('cdr.behavior.upsert skips codegraph check when the CLI is missing (gracefu
   try {
     process.env.PATH = '/usr/bin:/bin';
     delete process.env.DAPEI_CODEGRAPH_BIN;
-    const core = await import('../../packages/core/src/index.ts');
+    const core = await import('../../packages/catalog/src/index.ts');
     await core.runCapability('workspace.init', {}, c(tmp));
     const srcDir = await seedFixtureRepo(tmp, 'mall-order');
     await core.runCapability('repos.add', { name: 'mall-order', url: srcDir }, c(tmp));
@@ -237,7 +237,7 @@ test('cdr.stale.scan: marks behavior stale when its source file is in the diff',
   withFakeCli();
   try {
     process.env.PATH = `${fakeCli}${origPath ? ':' + origPath : ''}`;
-    const core = await import('../../packages/core/src/index.ts');
+    const core = await import('../../packages/catalog/src/index.ts');
     await core.runCapability('workspace.init', {}, c(tmp));
     const srcDir = await seedFixtureRepo(tmp, 'mall-order');
     await core.runCapability('repos.add', { name: 'mall-order', url: srcDir }, c(tmp));
@@ -300,7 +300,7 @@ test('cdr.stale.scan: returns 0 changes when the diff is empty', async () => {
   withFakeCli();
   try {
     process.env.PATH = `${fakeCli}${origPath ? ':' + origPath : ''}`;
-    const core = await import('../../packages/core/src/index.ts');
+    const core = await import('../../packages/catalog/src/index.ts');
     await core.runCapability('workspace.init', {}, c(tmp));
     const srcDir = await seedFixtureRepo(tmp, 'mall-order');
     await core.runCapability('repos.add', { name: 'mall-order', url: srcDir }, c(tmp));

@@ -1,11 +1,14 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, isAbsolute } from "node:path";
-import { capabilitySpecs } from "./capabilities/index.ts";
+import { coreCapabilitySpecs, type AnyCap } from "./capabilities/index.ts";
 import { CapabilityRegistry } from "./capability-registry.ts";
 import { validateInputSchema } from "./schema.ts";
 import { CapabilityError } from "./types.ts";
 import type { CapabilityContext, Json } from "./types.ts";
+
+export { coreCapabilitySpecs };
+export type { AnyCap };
 
 /**
  * v0.10 audit log entry schema. The `schema_version` field lets readers
@@ -35,16 +38,6 @@ function ensureAuditDir(rootDir: string): string {
   return dir;
 }
 
-function hashFile(absPath: string): string | undefined {
-  try {
-    if (!existsSync(absPath)) return undefined;
-    const content = readFileSync(absPath);
-    return createHash("sha256").update(content).digest("hex").slice(0, 16);
-  } catch {
-    return undefined;
-  }
-}
-
 function safeHash(absPath: string): string | undefined {
   try {
     if (!existsSync(absPath)) return undefined;
@@ -55,15 +48,41 @@ function safeHash(absPath: string): string | undefined {
   }
 }
 
-function workspaceRel(rootDir: string, absPath: string): string {
-  if (!isAbsolute(absPath)) return absPath;
-  const rel = absPath.startsWith(rootDir) ? absPath.slice(rootDir.length).replace(/^\/+/, "") : absPath;
-  return rel;
+/**
+ * The capability registry used by `runCapability`.
+ *
+ * `coreCapabilitySpecs` are the kernel-owned capabilities (workspace,
+ * repos, feature, cognitive, ...). Capabilities implemented by sibling
+ * packages (`packages/cdr`, `packages/doc-gen`) are NOT imported by
+ * core — the composition root (`packages/catalog`) registers the full
+ * spec list here at import time via `registerCapabilitySpecs`. This
+ * keeps the package graph acyclic (catalog → core/cdr/doc-gen) while
+ * still letting internal core callers (e.g. feature.close invoking
+ * cdr.feature.link) resolve any registered capability through
+ * `runCapability`.
+ */
+let registeredSpecs: AnyCap[] = coreCapabilitySpecs;
+
+export function registerCapabilitySpecs(specs: AnyCap[]): void {
+  registeredSpecs = specs;
 }
 
-export async function runCapability(id: string, input: Record<string, Json>, ctx: CapabilityContext) {
+/**
+ * Generic capability runner. Validates the input against the spec's
+ * schema, enforces the confirm gate, auto-populates `ctx.feature` from
+ * the input envelope, appends the audit-log entry, and returns
+ * `{ spec, result, ctx }`. This is the single implementation shared by
+ * `runCapability` (registered specs) and the composition root's
+ * `runCapability` in `packages/catalog`.
+ */
+export async function runCapabilityWith(
+  specs: AnyCap[],
+  id: string,
+  input: Record<string, Json>,
+  ctx: CapabilityContext
+) {
   const registry = new CapabilityRegistry();
-  registry.registerMany(capabilitySpecs);
+  registry.registerMany(specs);
   const spec = registry.get(id);
   if (!spec) throw new CapabilityError("CAPABILITY_NOT_FOUND", `unknown capability: ${id}`);
   validateInputSchema(input, spec.inputSchema);
@@ -129,6 +148,16 @@ export async function runCapability(id: string, input: Record<string, Json>, ctx
   const auditFile = join(ensureAuditDir(effectiveCtx.rootDir), "capability.log");
   appendFileSync(auditFile, `${JSON.stringify(log)}\n`, "utf8");
   return { spec, result, ctx: effectiveCtx };
+}
+
+/**
+ * Run a capability against the currently registered spec set. Internal
+ * core callers (cross-domain invocations such as feature.close →
+ * cdr.feature.link) use this; consumers outside core get the same
+ * behaviour from the composition root's `runCapability`.
+ */
+export async function runCapability(id: string, input: Record<string, Json>, ctx: CapabilityContext) {
+  return runCapabilityWith(registeredSpecs, id, input, ctx);
 }
 
 /**

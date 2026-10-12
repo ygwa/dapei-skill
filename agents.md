@@ -156,15 +156,28 @@ CDR is the **L3 process-asset layer** that sits between `repos/` (raw code) and 
 
 ### Cross-package split
 
-CDR is implemented across three packages, each with one responsibility:
+CDR is implemented across a small set of packages, each with one responsibility:
 
 | Package | Responsibility | Public surface |
 | --- | --- | --- |
-| `packages/core` | All atomic capabilities, evidence validation, cognitive index, router | `runCapability(id, input, ctx)` |
+| `packages/core` | Kernel (types, evidence validation, cognitive index, schema validation, guardrail, audit) + the kernel capability domains + the generic capability runner | `runCapabilityWith(specs, id, input, ctx)`, `registerCapabilitySpecs()` |
+| `packages/cdr` | CDR capabilities (profile, entries, behavior, state, domain, business rules, cross-repo, portal data) | capability specs exported from `src/capabilities.ts` |
+| `packages/catalog` | **Composition root**: assembles core + cdr + doc-gen specs and binds `runCapability` | `runCapability(id, input, ctx)`, `capabilitySpecs`, `capabilities` |
 | `packages/router` | NL intent → capability mapping, extractor functions | `routeIntent(text, ctx)` |
 | `packages/doc-gen` | VitePress portal generation + Vue 3 components | `cdr.doc.generate` capability |
+| `packages/runtime-adapters` | Thin shell I/O adapters (filesystem, git, CodeGraph CLI) | `system`, `codegraph` |
+
+The dependency direction is one-way: `catalog → {core, cdr, doc-gen}`, `cdr → core`,
+`doc-gen → core`, `core → runtime-adapters`. `packages/core` must never import
+`packages/cdr` or `packages/doc-gen`; consumers (`engine/`, tests, `scripts/validate-skills.mjs`)
+import the composition root instead. See `docs/decisions/ADR-0021`.
 
 `packages/doc-gen/` is intentionally a **separate workspace package** so the VitePress + Vue dependency footprint does not pollute the core engine. The portal is generated to `<workspace>/.dapei/docs-portal/` (workspace-dimension, not feature-dimension).
+
+One consequence worth knowing: because the runner lives in `core` and the full spec list is
+registered by `catalog`, a kernel capability that internally calls a CDR capability resolves it
+through the registered set (e.g. `feature.close` → `cdr.feature.link`). Importing `packages/core`
+alone gives you the kernel specs only.
 
 ### Boundary with Feature dimension
 

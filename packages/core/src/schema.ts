@@ -46,7 +46,7 @@ export interface CapabilityMapSpec {
 }
 
 // ---------------------------------------------------------------------------
-// v0.10 — extend validateInputSchema with items, nested properties, $ref.
+// v0.10 — extend validateInputSchema with items and nested properties.
 //
 // The base shape (type/enum/minLength/required/additionalProperties) is
 // unchanged. New optional fields on a property def:
@@ -59,12 +59,6 @@ export interface CapabilityMapSpec {
 //     When type === "object", each key is validated against the
 //     nested def. additionalProperties on the nested def is
 //     independent of the top-level flag.
-//
-//   $ref?: "SourceRef" | "ConfidenceBlock"
-//     Lightweight named reference. The two registered refs match
-//     the most common v0.10 shapes — capability authors don't need
-//     to repeat the field list. Resolved refs behave exactly like
-//     the resolved def.
 //
 // Error messages carry the dotted/bracketed path so callers see
 // e.g. `field 'sources[0].file' must be string` rather than the
@@ -79,7 +73,6 @@ export interface PropertyDef {
   properties?: Record<string, PropertyDef>;
   required?: string[];
   additionalProperties?: boolean;
-  $ref?: "SourceRef" | "ConfidenceBlock";
 }
 
 export interface InputSchema {
@@ -88,82 +81,49 @@ export interface InputSchema {
   additionalProperties?: boolean;
 }
 
-const REF_DEFS: Record<string, PropertyDef> = {
-  SourceRef: {
-    type: "object",
-    required: ["file"],
-    additionalProperties: true,
-    properties: {
-      file: { type: "string", minLength: 1 },
-      line: { type: "number" },
-      symbol_handle: { type: "string" },
-      repo: { type: "string" }
-    }
-  },
-  ConfidenceBlock: {
-    type: "object",
-    required: ["level", "kind"],
-    additionalProperties: true,
-    properties: {
-      level: { type: "string", enum: ["high", "medium", "low"] },
-      kind: { type: "string", enum: ["fact", "inference", "unknown"] },
-      evidence_type: { type: "string" }
-    }
-  }
-};
-
-function resolveRef(def: PropertyDef): PropertyDef {
-  if (def.$ref && REF_DEFS[def.$ref]) {
-    return { ...REF_DEFS[def.$ref], ...def };
-  }
-  return def;
-}
-
 function validateProperty(
   value: Json,
   def: PropertyDef,
   path: string
 ): void {
-  const effective = resolveRef(def);
-
-  if (effective.type && jsonTypeOf(value) !== effective.type) {
-    throw new CapabilityError("INVALID_INPUT", `field '${path}' must be ${effective.type}`);
+  if (def.type && jsonTypeOf(value) !== def.type) {
+    throw new CapabilityError("INVALID_INPUT", `field '${path}' must be ${def.type}`);
   }
 
-  if (effective.minLength !== undefined && typeof value === "string" && value.length < effective.minLength) {
-    throw new CapabilityError("INVALID_INPUT", `field '${path}' must have minLength ${effective.minLength}`);
+  if (def.minLength !== undefined && typeof value === "string" && value.length < def.minLength) {
+    throw new CapabilityError("INVALID_INPUT", `field '${path}' must have minLength ${def.minLength}`);
   }
 
-  if (effective.enum && !effective.enum.includes(value as string | number | boolean)) {
-    throw new CapabilityError("INVALID_INPUT", `field '${path}' must be one of: ${effective.enum.join(", ")}`);
+  if (def.enum && !def.enum.includes(value as string | number | boolean)) {
+    throw new CapabilityError("INVALID_INPUT", `field '${path}' must be one of: ${def.enum.join(", ")}`);
   }
 
-  if (effective.type === "array" && Array.isArray(value)) {
-    if (effective.items) {
+  if (def.type === "array" && Array.isArray(value)) {
+    if (def.items) {
       for (let i = 0; i < value.length; i++) {
-        validateProperty(value[i] as Json, effective.items, `${path}[${i}]`);
+        validateProperty(value[i] as Json, def.items, `${path}[${i}]`);
       }
     }
   }
 
-  if (effective.type === "object" && value && typeof value === "object" && !Array.isArray(value)) {
+  if (def.type === "object" && value && typeof value === "object" && !Array.isArray(value)) {
     const obj = value as Record<string, Json>;
-    if (effective.required) {
-      for (const k of effective.required) {
+    if (def.required) {
+      for (const k of def.required) {
         if (obj[k] === undefined || obj[k] === null || obj[k] === "") {
           throw new CapabilityError("INVALID_INPUT", `missing field: ${path}.${k}`);
         }
       }
     }
-    if (effective.properties) {
-      for (const [k, childDef] of Object.entries(effective.properties)) {
+    if (def.properties) {
+      for (const [k, childDef] of Object.entries(def.properties)) {
         if (obj[k] === undefined) continue;
         validateProperty(obj[k] as Json, childDef, `${path}.${k}`);
       }
     }
-    if (effective.additionalProperties === false) {
-      const allow = new Set(Object.keys(effective.properties || {}));
-      if (effective.required) for (const k of effective.required) allow.add(k);
+    if (def.additionalProperties === false) {
+      const allow = new Set(Object.keys(def.properties || {}));
+      if (def.required) for (const k of def.required) allow.add(k);
       for (const k of Object.keys(obj)) {
         if (!allow.has(k)) {
           throw new CapabilityError("INVALID_INPUT", `unexpected field: ${path}.${k}`);

@@ -18,14 +18,6 @@ export function parseYamlDocument(content: string): Record<string, YamlValue> {
   }
 }
 
-export function stringifyYamlValue(value: YamlValue, indent = 0): string {
-  try {
-    return dump(value, { indent: 2, skipInvalid: true }).trimEnd();
-  } catch (err: any) {
-    throw new CapabilityError("INVALID_YAML", err?.message || String(err));
-  }
-}
-
 export function stringifyYamlDocument(doc: Record<string, YamlValue>): string {
   try {
     return dump(doc, { indent: 2, skipInvalid: true });

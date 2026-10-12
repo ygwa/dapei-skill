@@ -12,9 +12,9 @@ skinparam rectangle {
   Height 30
 }
 
-title CapabilityRegistry — 19 个能力
+title CapabilityRegistry — 64 个能力（由 packages/catalog 组合）
 
-package "capabilities/index.ts" as CAPS {
+package "packages/catalog/src/index.ts" as CAPS {
   rectangle "workspace.init" #lightgreen
   rectangle "repos.add" #lightgreen
   rectangle "repos.sync" #lightgreen

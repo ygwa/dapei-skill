@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
-import { runCapability } from "../packages/core/src/index.ts";
+import { runCapability } from "../packages/catalog/src/index.ts";
 import { routeIntent } from "../packages/router/src/index.ts";
 import { CapabilityError } from "../packages/core/src/types.ts";
 

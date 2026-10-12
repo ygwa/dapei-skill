@@ -2,13 +2,13 @@
 // conflict detector (conflict.ts). Extracted into its own module so
 // neither depends on the other.
 
-import type { Route } from "./routes-table.ts";
+import type { Route, RouteInput } from "./routes-table.ts";
 
 export interface MatchResult {
   route: Route;
   result: {
     capability: string;
-    input: Record<string, string>;
+    input: RouteInput;
     reason: string;
     confidence: number;
   };

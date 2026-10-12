@@ -31,7 +31,7 @@ package "CognitiveRuntime" as Cognitive #lightgreen {
 
 package "CapabilityEngine" as CapEngine #lightgreen {
   rectangle "CapabilityRegistry"
-  rectangle "capabilities/index.ts (19 specs)"
+  rectangle "catalog/src/index.ts (64 specs)"
 }
 
 package "DomainCapabilities" as Domain #lightgreen {

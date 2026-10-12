@@ -827,7 +827,7 @@ title: "Behaviors — entry type: ${type}"
 
 // cdr-portal-aggregation Round 1 T3.4 (BG-9, see docs/04-technical-design.md).
 // Renders /entries/<repo>/index.md for each repo with confirmed entries.
-// Uses the real cdr.entries.propose schema (see packages/core/src/capabilities/domains/cdr.ts):
+// Uses the real cdr.entries.propose schema (see packages/cdr/src/capabilities.ts):
 // each entries/<repo>.yaml has shape { repo, generated_at, entry_count, entries: [...] }
 // and each entry inside has { id, type, status, anchor, line, method?, path?, summary?, sources }.
 function generateEntriesPage(entryDoc: ParsedDoc): string {

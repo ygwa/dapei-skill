@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const core = await import('../../packages/core/src/index.ts');
+const core = await import('../../packages/catalog/src/index.ts');
 
 async function setupAggregationWorkspace() {
   const tmp = mkdtempSync(join(tmpdir(), 'dapei-cpa-'));

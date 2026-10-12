@@ -1,0 +1,15 @@
+{
+  "name": "@dapei/catalog",
+  "version": "3.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Composition root: composes the core, cdr, and doc-gen capability specs into the engine's public surface",
+  "exports": {
+    "./index": "./src/index.ts"
+  },
+  "dependencies": {
+    "@dapei/core": "workspace:*",
+    "@dapei/cdr": "workspace:*",
+    "@dapei/doc-gen": "workspace:*"
+  }
+}

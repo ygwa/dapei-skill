@@ -72,6 +72,7 @@ The full process we actually use — not theory, but lessons learned through rea
 - Skill Router layer: user still invokes `@dapei ...`
 - **Cognitive Runtime layer**: Agent-driven behavior analysis with structured YAML artifacts and evidence validation (`cognitive.discover`, `cognitive.artifact.upsert`, …)
 - Atomic Capability layer: `dapei-engine` executes typed capabilities such as `workspace.init`, `repos.analyze`, `workflow.runStage`
+- Composition root: `packages/catalog` assembles the capability specs from `packages/core` (kernel + core capabilities), `packages/cdr` (cognitive discovery) and `packages/doc-gen` (portal). The kernel never imports upward, so the package graph stays acyclic
 - Runtime substrate layer: worktree/filesystem/git remains the deterministic source of truth
 
 North Star: **让 AI 持续参与系统认知** — understand how systems behave, how state changes, and how risks propagate — not just generate code.

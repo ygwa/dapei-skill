@@ -214,11 +214,14 @@ export function validateCommandsDir(commandsDir, opts = {}) {
 function loadCapabilityIds(repoRoot) {
   // Best-effort static parse of capability files (no TS imports needed).
   // We cannot evaluate TS; fall back to scanning capability files for `id:` patterns.
-  // Source directories cover the legacy `packages/core` layout, the extracted
-  // CDR package (`packages/cdr`), AND the doc-gen package (which owns the
-  // `cdr.doc.generate` capability but does not re-export it through cdr).
+  // Source directories cover the core capability domains
+  // (`packages/core/src/capabilities/domains`, composed by
+  // `packages/catalog/src`), the extracted CDR package (`packages/cdr`),
+  // AND the doc-gen package (which owns the `cdr.doc.generate` capability
+  // but does not re-export it through cdr).
   const sourceDirs = [
     join(repoRoot, "packages/core/src/capabilities/domains"),
+    join(repoRoot, "packages/catalog/src"),
     join(repoRoot, "packages/cdr/src"),
     join(repoRoot, "packages/doc-gen/src"),
   ];

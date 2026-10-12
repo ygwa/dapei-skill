@@ -4133,12 +4133,12 @@ export const cdrBootstrap: AnyCap = {
 // ---------------------------------------------------------------------------
 // 24. cdr.context.envelope — v1.0.0
 //
-// Build a structured "context envelope" for a single cognitive asset so the
-// desktop P3→P5 jump can inject it into the agent session without dumping
-// the entire YAML. Read-only; never writes any docs/as-is/* or
-// .dapei/cognitive/*. Persists nothing on disk.
+// Build a structured "context envelope" for a single cognitive asset so an
+// agent session can inject it without dumping the entire YAML. Read-only;
+// never writes any docs/as-is/* or .dapei/cognitive/*. Persists nothing on
+// disk.
 //
-// ADR-0018 (M3-4 / M3-5). See .omo/plans/desktop-m3.md §M3-4.
+// ADR-0018 (M3-4 / M3-5).
 // ---------------------------------------------------------------------------
 
 const ENVELOPE_SUMMARY_MAX_CHARS = 500;
@@ -4258,8 +4258,8 @@ function findRelatedIds(
 
   if (kind === "behavior") {
     // Heuristic: state_machines + domains + business_rules in same repo.
-    // (Real ref-based walk lives in ADR-0019 / M3-6 advisor; for v1.0.0
-    // we keep the heuristic and let the desktop UI show a "siblings" hint
+    // (The real ref-based walk is follow-up work; v1.0.0 keeps the
+    // id/keyword heuristic and lets callers show a "siblings" hint
     // rather than a precise cross-link.)
     for (const sm of index.state_machines) {
       if (sameRepo(sm)) out.add(`sm:${sm.entity}`);
