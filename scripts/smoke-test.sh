@@ -35,7 +35,7 @@ REQUIRED=(
   "$TEST_DIR/.dapei/feature.schema.yaml"
   "$TEST_DIR/.dapei/workflows/feature-lifecycle.yaml"
   "$TEST_DIR/.dapei/cognitive/index.yaml"
-  "$TEST_DIR/.dapei/schemas/behavior.schema.yaml"
+  "$TEST_DIR/.dapei/rules/layering.yaml"
   "$TEST_DIR/docs/agents.md"
   "$TEST_DIR/docs/as-is/behavior"
   "$TEST_DIR/docs/as-is/state-machines"

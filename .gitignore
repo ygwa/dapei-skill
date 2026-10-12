@@ -12,6 +12,10 @@
 /features/*/context/context-index.yaml
 # Generated on every guardrail run (report mode); see feature.guardrail
 /features/*/reports/guardrail-report.md
+# This repo's own workspace runtime state (derived; products ship templates via
+# runtime/templates/**, see ADR-0024)
+/.dapei/audit/
+/.dapei/cognitive/
 
 # Dependencies
 node_modules/

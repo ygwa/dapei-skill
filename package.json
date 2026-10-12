@@ -8,6 +8,8 @@
   },
   "scripts": {
     "first-run": "node scripts/first-run.mjs",
+    "gen:assets": "node scripts/gen-embedded-assets.mjs",
+    "check:assets": "node scripts/gen-embedded-assets.mjs --check",
     "typecheck": "tsc -p tsconfig.json",
     "validate:skills": "node scripts/validate-skills.mjs",
     "build": "esbuild engine/dapei-engine.ts --bundle --platform=node --format=esm --outfile=dist/dapei-engine.js --external:node:* --minify",
@@ -19,7 +21,7 @@
     "test:ai-behavior": "node --experimental-strip-types --test tests/ai-behavior/*.test.mjs",
     "smoke": "bash scripts/smoke-test.sh",
     "smoke:bundle": "node scripts/smoke-bundle.mjs",
-    "verify": "npm run typecheck && npm run validate:skills && npm run build && npm run test && npm run smoke && npm run smoke:bundle"
+    "verify": "npm run check:assets && npm run typecheck && npm run validate:skills && npm run build && npm run test && npm run smoke && npm run smoke:bundle"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",

@@ -5,21 +5,22 @@ import { CapabilityError } from "../../types.ts";
 import type { CapabilityResult, CapabilitySpec } from "../../types.ts";
 import { copyIfMissing, ensureDir, isConformingWorkspace, isEffectivelyEmpty, read, runSafe, workspacePaths, write } from "@dapei/runtime-adapters/system";
 import { parseReposYamlNames } from "../shared.ts";
+import { EMBEDDED_TEMPLATE_ASSETS } from "../../generated/embedded-assets.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;
 
 /**
- * Locate the engine home: the directory that ships the workspace
- * scaffolds (`runtime/templates/` plus `.dapei/commands.yaml`).
+ * Locate the engine home: the directory that ships the workspace scaffolds
+ * (`runtime/templates/**`).
  *
  * `DAPEI_ENGINE_HOME` is an explicit override (set by the `scripts/dapei`
- * shell wrapper). When it is unset — i.e. whenever a consumer other than
- * that wrapper calls `workspace.init` — we derive the location from this
- * module's own path by walking up the directory tree. Falling back to the
- * *target* workspace root would silently copy nothing, so a missing
- * engine home is a hard `ENGINE_HOME_NOT_FOUND` error instead.
+ * shell wrapper). When it is unset we derive the location from this module's
+ * own path by walking up the directory tree. Returns `null` when the engine is
+ * running from a shipped bundle with no source tree next to it — in that case
+ * the templates come from `generated/embedded-assets.ts` instead (see
+ * `copyTemplateAsset` and ADR-0024).
  */
-function resolveEngineHome(): string {
+function resolveEngineHome(): string | null {
   const candidates: string[] = [];
   const override = process.env.DAPEI_ENGINE_HOME;
   if (override) candidates.push(override);
@@ -31,14 +32,43 @@ function resolveEngineHome(): string {
     dir = parent;
   }
   for (const candidate of candidates) {
-    if (existsSync(join(candidate, "runtime", "templates")) && existsSync(join(candidate, ".dapei", "commands.yaml"))) {
+    if (existsSync(join(candidate, "runtime", "templates", "dapei", "commands.yaml"))) {
       return candidate;
     }
   }
-  throw new CapabilityError(
-    "ENGINE_HOME_NOT_FOUND",
-    `could not locate the dapei engine home (a directory containing runtime/templates/ and .dapei/commands.yaml). Set DAPEI_ENGINE_HOME to override. Searched: ${candidates.join(", ")}`
-  );
+  return null;
+}
+
+/**
+ * Copy one template asset into the workspace being initialised.
+ *
+ * Disk first (a source checkout must always use what you can edit), embedded
+ * second (a shipped bundle has no source tree). In disk mode a missing asset is
+ * an error — silently initialising a workspace without `commands.yaml` or the
+ * workflow definition is exactly the failure mode this capability used to have.
+ */
+function copyTemplateAsset(engineHome: string | null, relPath: string, target: string): void {
+  if (existsSync(target)) return;
+  if (engineHome) {
+    const src = join(engineHome, "runtime", "templates", relPath);
+    if (existsSync(src)) {
+      copyIfMissing(src, target);
+      return;
+    }
+    throw new CapabilityError(
+      "TEMPLATE_MISSING",
+      `engine home ${engineHome} has no runtime/templates/${relPath}`
+    );
+  }
+  const embedded = EMBEDDED_TEMPLATE_ASSETS[relPath];
+  if (embedded === undefined) {
+    throw new CapabilityError(
+      "TEMPLATE_MISSING",
+      `template ${relPath} is neither on disk (no engine home found) nor embedded in this build; run \`npm run gen:assets\``
+    );
+  }
+  ensureDir(dirname(target));
+  write(target, embedded);
 }
 
 
@@ -49,16 +79,14 @@ export const workspaceInit: AnyCap = {
   outputs: [
     ".dapei/workspace.yaml",
     ".dapei/commands.yaml",
-    ".dapei/*.schema.yaml",
+    ".dapei/feature.schema.yaml",
+    ".dapei/repos.schema.yaml",
     ".dapei/workflows/",
     ".dapei/rules/",
-    ".dapei/schemas/",
     ".dapei/cognitive/index.yaml",
     "runtime/templates/",
     "runtime/ai-rules/",
-    "docs/.vitepress/",
-    "docs/scripts/",
-    "package.json"
+    "docs/"
   ],
   async execute(ctx): Promise<CapabilityResult> {
     const p = workspacePaths(ctx.rootDir);
@@ -77,15 +105,14 @@ export const workspaceInit: AnyCap = {
     }
 
     const dirs = [
-      join(p.dapeiDir, "workflows"), join(p.dapeiDir, "rules"), join(p.dapeiDir, "cognitive"), join(p.dapeiDir, "schemas"),
+      join(p.dapeiDir, "workflows"), join(p.dapeiDir, "rules"), join(p.dapeiDir, "cognitive"),
       p.reposDir, p.featuresDir,
       join(p.docsDir, "as-is"), join(p.docsDir, "as-is", "behavior"), join(p.docsDir, "as-is", "state-machines"),
       join(p.docsDir, "as-is", "domains"), join(p.docsDir, "architecture"), join(p.docsDir, "standards"),
       join(p.docsDir, "business"), join(p.docsDir, "domain"), join(p.docsDir, "glossary"),
       join(p.docsDir, "workflows"), join(p.docsDir, "decisions"), join(p.docsDir, "feature-impact"),
       join(p.docsDir, "integrations"), join(p.docsDir, "observability"), join(p.docsDir, "playbooks"), join(p.docsDir, "specs"),
-      join(p.runtimeDir, "templates"), join(p.runtimeDir, "ai-rules"),
-      join(p.docsDir, ".vitepress"), join(p.docsDir, ".vitepress", "theme"), join(p.docsDir, "scripts"), join(p.docsDir, "compiled")
+      join(p.runtimeDir, "templates"), join(p.runtimeDir, "ai-rules")
     ];
     dirs.forEach(ensureDir);
 
@@ -95,28 +122,32 @@ export const workspaceInit: AnyCap = {
     }
 
     const engineHome = resolveEngineHome();
-    const sourceDapei = join(engineHome, ".dapei");
-    const sourceTemplates = join(engineHome, "runtime", "templates");
-    const files = ["commands.yaml", "feature.schema.yaml", "repos.schema.yaml", "workflows/feature-lifecycle.yaml", "rules/api.yaml", "rules/ddd.yaml", "rules/layering.yaml", "rules/naming.yaml"];
-    files.forEach((f) => copyIfMissing(join(sourceDapei, f), join(p.dapeiDir, f)));
-    const schemaFiles = ["evidence.schema.yaml", "behavior.schema.yaml", "state-machine.schema.yaml", "cognitive-index.schema.yaml"];
-    schemaFiles.forEach((f) => copyIfMissing(join(sourceDapei, "schemas", f), join(p.dapeiDir, "schemas", f)));
-    copyIfMissing(join(sourceDapei, "cognitive", "index.yaml"), join(p.dapeiDir, "cognitive", "index.yaml"));
-    copyIfMissing(join(sourceDapei, "rules", "cognitive.yaml"), join(p.dapeiDir, "rules", "cognitive.yaml"));
-    for (const name of ["01-current-state.md.template", "02-gap-analysis.md.template", "03-business-design.md.template", "04-technical-design.md.template", "05-task-breakdown.md.template", "06-acceptance.md.template"]) {
-      copyIfMissing(join(sourceTemplates, name), join(p.runtimeDir, "templates", name));
+    const templateFiles: Array<[string, string]> = [
+      ["dapei/commands.yaml", join(p.dapeiDir, "commands.yaml")],
+      ["dapei/feature.schema.yaml", join(p.dapeiDir, "feature.schema.yaml")],
+      ["dapei/repos.schema.yaml", join(p.dapeiDir, "repos.schema.yaml")],
+      ["dapei/workflows/feature-lifecycle.yaml", join(p.dapeiDir, "workflows", "feature-lifecycle.yaml")],
+      ["dapei/rules/api.yaml", join(p.dapeiDir, "rules", "api.yaml")],
+      ["dapei/rules/cognitive.yaml", join(p.dapeiDir, "rules", "cognitive.yaml")],
+      ["dapei/rules/ddd.yaml", join(p.dapeiDir, "rules", "ddd.yaml")],
+      ["dapei/rules/layering.yaml", join(p.dapeiDir, "rules", "layering.yaml")],
+      ["dapei/rules/naming.yaml", join(p.dapeiDir, "rules", "naming.yaml")],
+      ["dapei/cognitive/index.yaml", join(p.dapeiDir, "cognitive", "index.yaml")],
+      ["01-current-state.md.template", join(p.runtimeDir, "templates", "01-current-state.md.template")],
+      ["02-gap-analysis.md.template", join(p.runtimeDir, "templates", "02-gap-analysis.md.template")],
+      ["03-business-design.md.template", join(p.runtimeDir, "templates", "03-business-design.md.template")],
+      ["04-technical-design.md.template", join(p.runtimeDir, "templates", "04-technical-design.md.template")],
+      ["05-task-breakdown.md.template", join(p.runtimeDir, "templates", "05-task-breakdown.md.template")],
+      ["06-acceptance.md.template", join(p.runtimeDir, "templates", "06-acceptance.md.template")]
+    ];
+    for (const [rel, target] of templateFiles) {
+      copyTemplateAsset(engineHome, rel, target);
     }
-    copyIfMissing(join(engineHome, "runtime", "ai-rules", "README.md"), join(p.runtimeDir, "ai-rules", "README.md"));
 
-    // Copy VitePress config & compilation script templates
-    const sourceTemplatesDocs = join(engineHome, "runtime", "templates", "docs");
-    copyIfMissing(join(sourceTemplatesDocs, ".vitepress", "config.mts"), join(p.docsDir, ".vitepress", "config.mts"));
-    copyIfMissing(join(sourceTemplatesDocs, ".vitepress", "theme", "index.ts"), join(p.docsDir, ".vitepress", "theme", "index.ts"));
-    copyIfMissing(join(sourceTemplatesDocs, ".vitepress", "theme", "custom.css"), join(p.docsDir, ".vitepress", "theme", "custom.css"));
-    copyIfMissing(join(sourceTemplatesDocs, "scripts", "build-cognitive-pages.ts"), join(p.docsDir, "scripts", "build-cognitive-pages.ts"));
-    copyIfMissing(join(sourceTemplatesDocs, "index.md"), join(p.docsDir, "index.md"));
-
-    // Ensure placeholders for standard documentation to prevent 404s
+    // Scaffolding for the standard documentation areas, so the tree a user
+    // sees matches the layout the skills describe. These are plain markdown
+    // placeholders — the workspace has no site builder of its own; the portal
+    // is produced by `cdr.doc.generate` (see ADR-0024).
     const placeholderFiles = [
       { path: join(p.docsDir, "architecture", "README.md"), title: "Architecture & Boundary" },
       { path: join(p.docsDir, "standards", "README.md"), title: "Standards & Rules" },
@@ -129,56 +160,17 @@ export const workspaceInit: AnyCap = {
       }
     });
 
-    // Merge VitePress dev dependencies and package scripts into the host
-    // package.json. A merge that fails (unparseable host manifest) is
-    // reported rather than silently swallowed, so callers can see that
-    // the workspace did not get the docs tooling wired up.
-    const packageJsonPath = join(p.rootDir, "package.json");
-    const reportFragments = ["workspace initialized"];
-    const artifactPaths = [".dapei/workspace.yaml", ".dapei/commands.yaml"];
-    const newScripts = {
-      "docs:build-assets": "node --experimental-strip-types docs/scripts/build-cognitive-pages.ts",
-      "docs:dev": "npm run docs:build-assets && vitepress dev docs",
-      "docs:build": "npm run docs:build-assets && vitepress build docs",
-      "docs:preview": "vitepress preview docs"
-    };
-    const newDevDeps = {
-      "vitepress": "^1.5.0",
-      "vue": "^3.5.13",
-      "js-yaml": "^4.2.0"
-    };
-
-    if (existsSync(packageJsonPath)) {
-      try {
-        const current = JSON.parse(read(packageJsonPath));
-        current.scripts = { ...current.scripts, ...newScripts };
-        current.devDependencies = { ...current.devDependencies, ...newDevDeps };
-        write(packageJsonPath, JSON.stringify(current, null, 2) + "\n");
-        reportFragments.push("merged docs scripts + devDependencies into package.json");
-        artifactPaths.push("package.json");
-      } catch (e) {
-        const reason = e instanceof Error ? e.message : String(e);
-        reportFragments.push(`package.json merge skipped: ${reason}`);
-      }
-    } else {
-      const initPkg = {
-        name: basename(p.rootDir),
-        version: "1.0.0",
-        private: true,
-        type: "module",
-        scripts: newScripts,
-        devDependencies: newDevDeps
-      };
-      write(packageJsonPath, JSON.stringify(initPkg, null, 2) + "\n");
-      reportFragments.push("created package.json with docs scripts + devDependencies");
-      artifactPaths.push("package.json");
-    }
-
     if (!existsSync(join(p.docsDir, "agents.md"))) {
       write(join(p.docsDir, "agents.md"), "# Workspace Agents\n\nUse this workspace as the durable source of engineering context.\n");
     }
 
-    return { ok: true, data: { message: `workspace initialized at ${p.rootDir}` }, sideEffects: ["filesystem"], reportFragments, artifactPaths };
+    return {
+      ok: true,
+      data: { message: `workspace initialized at ${p.rootDir}` },
+      sideEffects: ["filesystem"],
+      reportFragments: ["workspace initialized"],
+      artifactPaths: [".dapei/workspace.yaml", ".dapei/commands.yaml"]
+    };
   }
 };
 

@@ -148,67 +148,45 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Validate schemas
+      - name: Check embedded template assets are fresh
+        run: npm run check:assets
+
+      - name: Validate shipped templates and workspace YAML
         run: |
-          echo "=== Validating schemas ==="
-          for schema in .dapei/schemas/*.yaml .dapei/*.schema.yaml; do
-            echo "Checking $schema..."
-            node -e "
-              const fs = require('fs');
-              const yaml = require('js-yaml');
-              const Ajv = require('ajv/dist/2020');
-              const addFormats = require('ajv-formats');
-
-              const schemaContent = fs.readFileSync('$schema', 'utf8');
-              const schemaObj = yaml.load(schemaContent);
-
-              const ajv = new Ajv({ allErrors: true });
-              addFormats(ajv);
-
-              // Test that schema itself is valid JSON Schema
-              try {
-                ajv.compile(schemaObj);
-                console.log('  OK - valid JSON Schema');
-              } catch (e) {
-                console.error('  ERROR - invalid JSON Schema:', e.message);
-                process.exit(1);
-              }
-            " || exit 1
-          done
-
-      - name: Validate commands.yaml
-        run: |
-          echo "=== Validating commands.yaml ==="
           node -e "
-            const fs = require('fs');
+            const fs = require('fs'), path = require('path');
             const yaml = require('js-yaml');
-
-            const content = fs.readFileSync('.dapei/commands.yaml', 'utf8');
-            const doc = yaml.load(content);
-
-            if (!doc.version) throw new Error('missing version');
-            if (!Array.isArray(doc.commands)) throw new Error('commands must be array');
-
-            for (const cmd of doc.commands) {
-              if (!cmd.name) throw new Error('command missing name');
-              if (!cmd.cli) throw new Error('command ' + cmd.name + ' missing cli');
-              if (!cmd.purpose) throw new Error('command ' + cmd.name + ' missing purpose');
-              if (!Array.isArray(cmd.workflow)) throw new Error('command ' + cmd.name + ' workflow must be array');
+            const Ajv = require('ajv/dist/2020');
+            const addFormats = require('ajv-formats');
+            const list = (dir, re) => fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => re.test(f)).map(f => path.join(dir, f)) : [];
+            let checked = 0;
+            for (const root of ['runtime/templates/dapei', '.dapei']) {
+              if (!fs.existsSync(root)) { console.log('  ' + root + ': absent, skipped'); continue; }
+              const commands = path.join(root, 'commands.yaml');
+              if (fs.existsSync(commands)) {
+                const doc = yaml.load(fs.readFileSync(commands, 'utf8'));
+                if (!doc.version) throw new Error(commands + ': missing version');
+                if (!Array.isArray(doc.commands)) throw new Error(commands + ': commands must be an array');
+                for (const cmd of doc.commands) {
+                  for (const field of ['name', 'cli', 'purpose']) {
+                    if (!cmd[field]) throw new Error(commands + ': ' + (cmd.name || '?') + ' missing ' + field);
+                  }
+                  if (!Array.isArray(cmd.workflow)) throw new Error(commands + ': ' + cmd.name + ' workflow must be an array');
+                }
+                checked++;
+              }
+              const schemas = [...list(root, /\.schema\.yaml$/), ...list(path.join(root, 'schemas'), /\.ya?ml$/)];
+              if (schemas.length > 0) {
+                const ajv = new Ajv({ allErrors: true });
+                addFormats(ajv);
+                for (const file of schemas) { ajv.compile(yaml.load(fs.readFileSync(file, 'utf8'))); checked++; }
+              }
+              for (const sub of ['rules', 'workflows']) {
+                for (const file of list(path.join(root, sub), /\.ya?ml$/)) {
+                  if (!yaml.load(fs.readFileSync(file, 'utf8'))) throw new Error(file + ': empty or invalid YAML');
+                  checked++;
+                }
+              }
             }
-            console.log('  OK - commands.yaml is valid');
+            console.log('  OK - ' + checked + ' template/workspace YAML files valid');
           "
-
-      - name: Validate rules YAML syntax
-        run: |
-          echo "=== Validating rules ==="
-          for rule in .dapei/rules/*.yaml; do
-            echo "Checking $rule..."
-            node -e "
-              const fs = require('fs');
-              const yaml = require('js-yaml');
-              const content = fs.readFileSync('$rule', 'utf8');
-              const doc = yaml.load(content);
-              if (!doc) throw new Error('empty or invalid YAML');
-              console.log('  OK - valid YAML');
-            " || exit 1
-          done

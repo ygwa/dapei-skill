@@ -1,0 +1,31 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: dapei repos registry
+type: object
+required:
+  - version
+  - repos
+properties:
+  version:
+    type: string
+    enum: ["0.1"]
+  repos:
+    type: array
+    items:
+      type: object
+      required:
+        - name
+        - path
+        - url
+        - added-at
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        url:
+          type: string
+        added-at:
+          type: string
+          format: date-time
+        default-branch:
+          type: string

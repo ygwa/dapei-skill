@@ -57,8 +57,8 @@ test('cdr.profile populates the codegraph block when the CLI is available', asyn
     assert.equal(result.data.codegraph.available, true);
     assert.match(result.data.codegraph.version || '', /fake|1\.8/);
     assert.equal(result.data.codegraph.backend, 'native');
-    // The on-disk profile YAML also carries the block (consumers
-    // like build-cognitive-pages.ts read from disk).
+    // The on-disk profile YAML also carries the block (consumers read it
+    // from disk rather than from the capability result).
     const onDisk = (await import('node:fs')).readFileSync(join(tmp, 'docs/as-is/profiles/mall-order.yaml'), 'utf8');
     assert.match(onDisk, /codegraph:/);
     assert.match(onDisk, /available: true/);

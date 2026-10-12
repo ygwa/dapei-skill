@@ -1,0 +1,449 @@
+version: 0.1
+commands:
+  - name: init-workspace
+    cli: "@dapei init workspace"
+    capability: workspace.init
+    purpose: bootstrap context os structure for one engineering workspace
+    inputs: []
+    workflow:
+      - validate-root-structure
+      - init-dapei-metadata
+      - init-docs-and-runtime
+      - emit-workspace-report
+    outputs:
+      - .dapei/workspace.yaml
+      - docs/workflows
+
+  - name: create-feature
+    cli: "@dapei create feature <name> --repos <repo1,repo2>"
+    capability: feature.create
+    purpose: create an isolated feature workspace with mapped repos and baseline context
+    inputs:
+      - feature_name
+      - repos
+      - objective
+    workflow:
+      - validate-feature-name
+      - create-feature-dirs
+      - ensure-repos-available-or-interactive-clone
+      - map-repo-worktrees
+      - init-feature-manifest
+      - init-context-memory-task-report
+      - create-feature-agent-context
+    outputs:
+      - features/<feature>/feature.yaml
+      - features/<feature>/agents.md
+      - features/<feature>/context/runtime-context.md
+
+  - name: build-context
+    cli: "@dapei context build <feature> --stage <stage>"
+    capability: context.build
+    purpose: build an auditable layered runtime context bundle for one feature stage
+    inputs:
+      - feature_name
+      - stage
+    workflow:
+      - load-workspace-context-policy
+      - collect-docs-knowledge
+      - collect-repo-evidence
+      - collect-feature-context
+      - emit-context-bundle
+    outputs:
+      - features/<feature>/context/runtime-context.md
+
+  - name: analyze-repos
+    cli: "@dapei repos analyze <name|--all>"
+    capability: repos.analyze
+    purpose: reverse-engineer imported repositories into durable workspace docs
+    inputs:
+      - repo_name
+    workflow:
+      - scan-repo-metadata
+      - detect-stack-and-tests
+      - collect-structural-evidence
+      - update-as-is-docs
+    outputs:
+      - docs/as-is/repo-inventory.md
+      - docs/architecture/technical-current-state.md
+
+  - name: run-workflow
+    cli: "@dapei run workflow <feature> --stage <stage>"
+    # Not `workflow.run`: the registered id is workflow.runStage.
+    capability: workflow.runStage
+    purpose: execute one stage in feature lifecycle dag
+    inputs:
+      - feature_name
+      - stage
+    workflow:
+      - load-layered-context
+      - run-stage-checklist
+      - persist-memory
+      - update-progress-report
+    outputs:
+      - features/<feature>/reports/feature-progress.md
+
+  - name: report-feature
+    cli: "@dapei report feature <name>"
+    capability: feature.report
+    purpose: generate structured status, risk, and architecture drift report
+    inputs:
+      - feature_name
+    workflow:
+      - collect-changes
+      - collect-memory
+      - run-guardrails
+      - emit-report-pack
+    outputs:
+      - features/<feature>/reports/daily-report.md
+      - features/<feature>/reports/architecture-review.md
+
+  - name: validate-feature
+    cli: "@dapei validate feature <name>"
+    # Not `validation.validate`: the registered id is validation.run.
+    capability: validation.run
+    purpose: run repeatable local validation and emit test and validation reports
+    inputs:
+      - feature_name
+    workflow:
+      - detect-repo-test-commands
+      - execute-local-checks
+      - run-guardrails
+      - emit-validation-report
+    outputs:
+      - features/<feature>/reports/test-report.md
+      - features/<feature>/reports/validation-report.md
+
+  - name: close-feature
+    cli: "@dapei close feature <name>"
+    capability: feature.close
+    purpose: verify feature status, backfill decision logs, and document feature impact in docs/
+    inputs:
+      - feature_name
+    workflow:
+      - check-reports
+      - archive-decisions
+      - create-feature-impact-doc
+      - update-feature-manifest-status
+    outputs:
+      - docs/decisions/<feature>-decisions.md
+      - docs/feature-impact/<feature>.md
+
+  - name: workspace-validate
+    cli: "@dapei workspace validate"
+    capability: workspace.validate
+    purpose: check if workspace conforms to dapei structure specification
+    inputs: []
+    workflow:
+      - check-dapei-dir
+      - check-repos-dir
+      - check-features-dir
+    outputs: []
+
+  - name: workspace-status
+    cli: "@dapei workspace status"
+    capability: workspace.status
+    purpose: show workspace overview - repo count, feature count, conformance
+    inputs: []
+    workflow:
+      - count-repos
+      - count-features
+      - check-conformance
+    outputs: []
+
+  - name: workflow-status
+    cli: "@dapei workflow status <feature>"
+    capability: workflow.status
+    purpose: get current stage and completed stages for a feature
+    inputs:
+      - feature_name
+    workflow:
+      - read-progress
+      - list-completed-stages
+    outputs:
+      - features/<feature>/reports/feature-progress.md
+
+  - name: feature-status
+    cli: "@dapei feature status"
+    capability: feature.status
+    purpose: list all features and their current stages
+    inputs: []
+    workflow:
+      - scan-features
+      - emit-status
+    outputs: []
+
+  - name: feature-stage
+    cli: "@dapei feature stage <feature> <action> [--stage <stage>]"
+    capability: feature.stage
+    purpose: get or set the current stage of a feature
+    inputs:
+      - feature_name
+      - action
+      - stage
+    workflow:
+      - get-stage
+      - set-stage
+    outputs:
+      - features/<feature>/reports/feature-progress.md
+
+  - name: feature-tasks
+    cli: "@dapei feature tasks <feature> <action> [--content <content>]"
+    capability: feature.tasks
+    purpose: list or append to feature backlog tasks
+    inputs:
+      - feature_name
+      - action
+      - content
+    workflow:
+      - read-backlog
+      - append-task
+    outputs:
+      - features/<feature>/tasks/backlog.md
+
+  - name: validation-detect
+    cli: "@dapei validation detect <repo>"
+    capability: validation.detect
+    purpose: detect available test and validation commands for a repo
+    inputs:
+      - repo_name
+    workflow:
+      - read-manifest
+      - detect-commands
+    outputs: []
+
+  - name: validation-execute
+    cli: "@dapei validation execute <repo> <command>"
+    capability: validation.execute
+    purpose: execute a validation command and return output
+    inputs:
+      - repo_name
+      - command
+    workflow:
+      - run-command
+      - capture-output
+    outputs: []
+
+  - name: memory-append
+    cli: "@dapei memory append <feature> <type> <content>"
+    capability: memory.append
+    purpose: record a decision, risk, question, or note to feature memory
+    inputs:
+      - feature_name
+      - type
+      - content
+    workflow:
+      - append-memory-entry
+    outputs:
+      - features/<feature>/memory/<type>.md
+
+  - name: repos-remove
+    cli: "@dapei repos remove <name> [--force]"
+    capability: repos.remove
+    purpose: remove a repo from the registry and delete its directory
+    inputs:
+      - repo_name
+      - force
+    workflow:
+      - check-worktree-usage
+      - remove-from-registry
+      - delete-repo
+    outputs: []
+
+  - name: workspace-report
+    cli: "@dapei workspace report"
+    capability: workspace.report
+    purpose: generate a workspace-level health report aggregating repos and features
+    inputs: []
+    workflow:
+      - collect-repos-status
+      - collect-features-progress
+      - emit-workspace-report
+    outputs: []
+
+  - name: audit-query
+    cli: "@dapei audit query [--since <date>] [--until <date>] [--capability <cap>] [--feature <feat>]"
+    capability: audit.query
+    purpose: query the capability audit log with filters
+    inputs:
+      - since
+      - until
+      - capability
+      - feature
+    workflow:
+      - parse-audit-log
+      - filter-entries
+    outputs: []
+
+  - name: cdr-profile
+    cli: "@dapei profile repo <name>"
+    capability: cdr.profile
+    purpose: generate a tech profile YAML for one repo (language, framework, manifest files, directory tree, test commands)
+    inputs:
+      - repo_name
+    workflow:
+      - resolve-repo-path
+      - detect-language-and-framework
+      - scan-manifest-files
+      - emit-profile-yaml
+    outputs:
+      - docs/as-is/profiles/<repo>.yaml
+
+  - name: cdr-entries-prepare
+    cli: "@dapei discover entries for <repo>"
+    capability: cdr.entries.prepare
+    purpose: scan a repo for entry-point candidate files (controller, route, resource, handler, listener, consumer, scheduler, job)
+    inputs:
+      - repo_name
+    workflow:
+      - resolve-repo-path
+      - scan-for-entry-patterns
+      - emit-entries-candidates-yaml
+    outputs:
+      - docs/as-is/entries/<repo>.yaml
+
+  - name: cdr-entries-confirm
+    cli: "@dapei confirm entry <entry_id> in <repo>"
+    capability: cdr.entries.confirm
+    purpose: mark one entry candidate as confirmed and attach a human-written summary for downstream behavior mining
+    inputs:
+      - repo_name
+      - entry_id
+      - summary
+    workflow:
+      - load-entries-yaml
+      - mark-entry-confirmed
+      - write-summary
+    outputs:
+      - docs/as-is/entries/<repo>.yaml
+
+  - name: cdr-state-derive
+    cli: "@dapei discover states for <entity> in <repo>"
+    # The registered id is cdr.state.derive (inference-level state-machine
+    # draft). The bare `discover states` wording above belongs to
+    # cognitive.state.suggest, so this entry carries an explicit routing
+    # sample naming the state-machine vocabulary it actually runs.
+    capability: cdr.state.derive
+    intent: "@dapei derive state machine for Order in mall-order"
+    purpose: derive a state-machine draft from a specified list of confirmed behaviors' writes and events (inference-level, Agent must confirm)
+    inputs:
+      - entity
+      - behaviors
+      - repo
+    workflow:
+      - load-behaviors-for-entity
+      - extract-states-from-writes-and-events
+      - build-transitions
+      - emit-draft-state-machine
+    outputs:
+      - docs/as-is/state-machines/<entity>.yaml
+
+  - name: cdr-behavior-upsert
+    cli: "@dapei upsert behavior <id> (via cognitive.artifact.upsert)"
+    # The registered id is cdr.behavior.upsert (schema-validated behavior
+    # write with the mandatory evidence block), not the generic
+    # cognitive.artifact.upsert named in the CLI line, so this entry carries
+    # an explicit routing sample instead of relying on that wording.
+    capability: cdr.behavior.upsert
+    intent: "@dapei upsert behavior order-create for mall-order"
+    purpose: validate a behavior YAML and insert it into the cognitive index (used by Agent after tracing an entry; evidence-block required)
+    inputs:
+      - id
+      - repo
+      - entry
+      - writes
+      - events
+      - calls
+      - risks
+      - confidence
+      - sources
+    workflow:
+      - validate-evidence-block
+      - validate-behavior-schema
+      - write-behavior-yaml
+      - update-cognitive-index
+    outputs:
+      - docs/as-is/behavior/<id>.yaml
+      - .dapei/cognitive/index.yaml
+
+  - name: cdr-domain-compose
+    cli: "@dapei compose domain <name> from <behaviors>"
+    capability: cdr.domain.compose
+    purpose: cluster behaviors into a domain YAML with required derived_from reference (P1 rule enforcement)
+    inputs:
+      - domain
+      - description
+      - behaviors
+    workflow:
+      - verify-behaviors-in-index
+      - compose-domain-yaml
+      - validate-derived-from
+      - write-domain-yaml
+    outputs:
+      - docs/as-is/domains/<domain>.yaml
+
+  - name: cdr-capability-map-init
+    cli: "@dapei init capability map for <product>"
+    capability: cdr.capability.map.init
+    purpose: initialize the L1 product capability map referencing existing domain artifacts
+    inputs:
+      - product
+      - capabilities
+    workflow:
+      - validate-capability-ids
+      - emit-capability-map-yaml
+    outputs:
+      - docs/as-is/capabilities/product-map.yaml
+
+  - name: cdr-index-list
+    cli: "@dapei list assets [--repo <repo>] [--kind <fact|inference|unknown>]"
+    capability: cdr.index.list
+    purpose: list all cognitive assets (behaviors, state machines, domains, capability maps, unknowns) with optional filters
+    inputs:
+      - repo
+      - kind
+    workflow:
+      - load-cognitive-index
+      - filter-by-inputs
+      - render-summary
+    outputs: []
+
+  - name: cdr-doc-generate
+    cli: "@dapei generate documentation portal [--output-dir <dir>]"
+    capability: cdr.doc.generate
+    purpose: compile docs/as-is/* cognitive assets into a VitePress-ready static site with Mermaid diagrams and confidence badges
+    inputs:
+      - output_dir
+    workflow:
+      - ensure-output-dirs
+      - load-all-cognitive-assets
+      - render-l1-capability-pages
+      - render-l2-domain-pages
+      - render-l3-behavior-and-state-pages
+      - render-profile-pages
+      - render-business-rules-pages
+      - emit-vitepress-config
+    outputs:
+      - .dapei/docs-portal/
+
+  - name: cdr-business-compose
+    cli: "@dapei compose business <id>"
+    capability: cdr.business.compose
+    purpose: validate a business-rule YAML (invariant | constraint | authorization | sla | compensation) and write docs/as-is/business-rules/<id>.yaml with evidence-block + cognitive index update
+    inputs:
+      - id
+      - kind
+      - description
+      - expr
+      - applies_to
+      - repo
+      - confidence
+      - sources
+    workflow:
+      - validate-evidence-block
+      - validate-business-rule-schema
+      - write-business-rule-yaml
+      - update-cognitive-index
+    outputs:
+      - docs/as-is/business-rules/<id>.yaml
+      - .dapei/cognitive/index.yaml
+
