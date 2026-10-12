@@ -1,5 +1,5 @@
 import { CapabilityError } from "./types.ts";
-import type { Json } from "./types.ts";
+import type { InputSchema, Json, PropertyDef } from "./types.ts";
 
 function jsonTypeOf(v: Json): "string" | "number" | "boolean" | "object" | "array" | "null" {
   if (v === null) return "null";
@@ -63,23 +63,11 @@ export interface CapabilityMapSpec {
 // Error messages carry the dotted/bracketed path so callers see
 // e.g. `field 'sources[0].file' must be string` rather than the
 // top-level field name alone.
+//
+// The `PropertyDef` / `InputSchema` shapes live in `types.ts` (the
+// source of truth shared with `CapabilitySpec['inputSchema']`) and are
+// imported above.
 // ---------------------------------------------------------------------------
-
-export interface PropertyDef {
-  type?: "string" | "number" | "boolean" | "object" | "array";
-  enum?: Array<string | number | boolean>;
-  minLength?: number;
-  items?: PropertyDef;
-  properties?: Record<string, PropertyDef>;
-  required?: string[];
-  additionalProperties?: boolean;
-}
-
-export interface InputSchema {
-  required?: string[];
-  properties?: Record<string, PropertyDef>;
-  additionalProperties?: boolean;
-}
 
 function validateProperty(
   value: Json,

@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, copyFileSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, relative } from "node:path";
-import type { CapabilitySpec } from "../../types.ts";
+import type { CapabilitySpec, Json } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
 import { atomicWrite, ensureDir, read, run, runSafe, safeJoinWithin, workspacePaths, write } from "@dapei/runtime-adapters/system";
 import { assertStageConfirmation, assertStagePrereqs, defaultBranch, featureRepoNames, requireFields, yamlStageList } from "../shared.ts";
@@ -594,8 +594,13 @@ export const featureClose: AnyCap = {
       // v2.0 — link every CDR asset touched during this feature's
       // lifetime to the feature name. Idempotent: re-running
       // cdr.feature.link on the same feature is a no-op.
-      const { runCapability } = await import("../../index.ts");
-      const linkResult = await runCapability("cdr.feature.link", { feature }, ctx);
+      if (!ctx.dispatch) {
+        throw new CapabilityError(
+          "DISPATCH_UNAVAILABLE",
+          "feature.close requires ctx.dispatch to run 'cdr.feature.link'"
+        );
+      }
+      const linkResult = await ctx.dispatch("cdr.feature.link", { feature });
       const linkData = linkResult.result.data as { assets_tagged: number };
 
       // --- cognitive.unlink section (new in M3-1) ---
@@ -936,6 +941,17 @@ export const featureGapAnalysis: AnyCap = {
 
     let relatedSection = "";
     if (maxEnvelopes > 0 && keywords.length > 0) {
+      // Cross-capability dispatch is required to bound each envelope.
+      // A missing dispatcher is a wiring bug, not a "bad envelope", so
+      // fail loudly instead of silently producing a scaffold without
+      // its related-context section.
+      if (!ctx.dispatch) {
+        throw new CapabilityError(
+          "DISPATCH_UNAVAILABLE",
+          "feature.gap.analysis requires ctx.dispatch to run 'cdr.context.envelope'"
+        );
+      }
+      const dispatch = ctx.dispatch;
       try {
         const index = loadCognitiveIndex(ctx.rootDir);
         const ranked = index.behaviors
@@ -950,7 +966,6 @@ export const featureGapAnalysis: AnyCap = {
           .slice(0, maxEnvelopes);
 
         if (ranked.length > 0) {
-          const { runCapability } = await import("../../index.ts");
           const lines: string[] = ["> Auto-injected by `feature.gap.analysis`. Each envelope is bounded to ~8KB by `cdr.context.envelope`.\n"];
           for (const { b } of ranked) {
             try {
@@ -961,15 +976,18 @@ export const featureGapAnalysis: AnyCap = {
                 include_related: 0
               };
               if (b.repo) envInput.repo = String(b.repo);
-              const { result } = await runCapability(
+              const { result } = await dispatch(
                 "cdr.context.envelope",
-                envInput as Record<string, import("../../types.ts").Json>,
-                ctx
+                envInput as Record<string, Json>
               );
-              if (result?.ok && result.data?.envelope) {
-                const env = result.data.envelope as Record<string, unknown>;
-                const summary = typeof env.summary === "string" ? env.summary : "";
-                lines.push(`- **${b.id}**${b.repo ? ` (${String(b.repo)})` : ""}: ${summary.slice(0, 280)}`);
+              if (result?.ok && result.data && typeof result.data === "object" && !Array.isArray(result.data)) {
+                const env = (result.data as Record<string, Json>).envelope;
+                if (env && typeof env === "object" && !Array.isArray(env)) {
+                  const summary = typeof (env as Record<string, Json>).summary === "string"
+                    ? String((env as Record<string, Json>).summary)
+                    : "";
+                  lines.push(`- **${b.id}**${b.repo ? ` (${String(b.repo)})` : ""}: ${summary.slice(0, 280)}`);
+                }
               }
             } catch { /* one bad envelope must not block the scaffold */ }
           }

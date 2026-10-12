@@ -117,10 +117,13 @@ export const reposAdd: AnyCap = {
     const sideEffects: string[] = [managementMode === "submodule" ? "git submodule add" : "git clone", "repos registry"];
     const data: Record<string, unknown> = { name, url };
     if (autoProfile) {
-      // Dynamic import: a static import would create an init-time cycle
-      // (index.ts → capabilities/index.ts → repos.ts).
-      const { runCapability } = await import("../../index.ts");
-      const { result } = await runCapability("cdr.profile", { repo: name }, ctx);
+      if (!ctx.dispatch) {
+        throw new CapabilityError(
+          "DISPATCH_UNAVAILABLE",
+          "repos.add requires ctx.dispatch to run 'cdr.profile'"
+        );
+      }
+      const { result } = await ctx.dispatch("cdr.profile", { repo: name });
       const d = result.data as { path: string };
       data.profile_path = d.path;
       sideEffects.push(`cdr.profile: ${d.path}`);
@@ -269,9 +272,13 @@ export const reposAnalyze: AnyCap = {
 
     // ---- CDR-backed path (default) ----
     if (useCdr) {
-      // Dynamic import: a static import would create an init-time cycle
-      // (index.ts → capabilities/index.ts → repos.ts).
-      const { runCapability } = await import("../../index.ts");
+      if (!ctx.dispatch) {
+        throw new CapabilityError(
+          "DISPATCH_UNAVAILABLE",
+          "repos.analyze requires ctx.dispatch to run 'cdr.profile'"
+        );
+      }
+      const dispatch = ctx.dispatch;
       const profiles: Array<{
         name: string;
         profile_path: string;
@@ -283,7 +290,7 @@ export const reposAnalyze: AnyCap = {
       for (const name of names) {
         const rp = join(p.reposDir, name);
         if (!existsSync(join(rp, ".git"))) continue;
-        const r = await runCapability("cdr.profile", { repo: name }, ctx);
+        const r = await dispatch("cdr.profile", { repo: name });
         const d = r.result.data as {
           repo: string;
           path: string;

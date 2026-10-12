@@ -14,7 +14,8 @@
 //   cdr     → core, runtime-adapters
 //   doc-gen → core, runtime-adapters
 
-import { coreCapabilitySpecs, registerCapabilitySpecs, runCapability, type AnyCap } from "@dapei/core";
+import { coreCapabilitySpecs, runCapabilityWith, type AnyCap } from "@dapei/core";
+import type { CapabilityContext, Json } from "@dapei/core/types";
 import {
   cdrProfile,
   cdrEntriesCandidate,
@@ -78,11 +79,9 @@ export const capabilities: Record<string, AnyCap> = Object.fromEntries(
   capabilitySpecs.map((spec) => [spec.id, spec])
 );
 
-// Register the full spec set with the kernel so that internal core
-// callers (which resolve capabilities through core's `runCapability`)
-// can dispatch cdr/doc-gen capabilities too. The specs themselves are
-// exported above; `runCapability` is re-exported from core so there is
-// exactly one runner implementation.
-registerCapabilitySpecs(capabilitySpecs);
-
-export { runCapability };
+// The composition root owns the full spec set, so it binds the generic
+// runner (`runCapabilityWith`) to it here. There is exactly one runner
+// implementation, shared with any other composition root.
+export function runCapability(id: string, input: Record<string, Json>, ctx: CapabilityContext) {
+  return runCapabilityWith(capabilitySpecs, id, input, ctx);
+}

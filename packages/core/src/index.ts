@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, isAbsolute } from "node:path";
 import { coreCapabilitySpecs, type AnyCap } from "./capabilities/index.ts";
@@ -28,8 +28,12 @@ export interface AuditEntry {
   reportFragments: string[];
   /** Workspace-relative paths the capability wrote or modified. */
   artifactPaths?: string[];
-  /** Stable hash of the file contents after the capability returned. */
-  afterHash?: string;
+  /**
+   * Stable content hashes of the artifacts the capability wrote,
+   * keyed by workspace-relative path. Best-effort: missing or
+   * unreadable files are omitted rather than failing the call.
+   */
+  afterHashes?: Record<string, string>;
 }
 
 function ensureAuditDir(rootDir: string): string {
@@ -49,31 +53,24 @@ function safeHash(absPath: string): string | undefined {
 }
 
 /**
- * The capability registry used by `runCapability`.
- *
- * `coreCapabilitySpecs` are the kernel-owned capabilities (workspace,
- * repos, feature, cognitive, ...). Capabilities implemented by sibling
- * packages (`packages/cdr`, `packages/doc-gen`) are NOT imported by
- * core — the composition root (`packages/catalog`) registers the full
- * spec list here at import time via `registerCapabilitySpecs`. This
- * keeps the package graph acyclic (catalog → core/cdr/doc-gen) while
- * still letting internal core callers (e.g. feature.close invoking
- * cdr.feature.link) resolve any registered capability through
- * `runCapability`.
+ * Rotation threshold for the workspace audit log. When `capability.log`
+ * grows past this size the runner rotates it to `capability.log.1`
+ * (replacing any existing `.1`) before appending the new entry, so the
+ * audit directory can't grow without bound.
  */
-let registeredSpecs: AnyCap[] = coreCapabilitySpecs;
-
-export function registerCapabilitySpecs(specs: AnyCap[]): void {
-  registeredSpecs = specs;
-}
+const AUDIT_LOG_MAX_BYTES = 5 * 1024 * 1024;
 
 /**
  * Generic capability runner. Validates the input against the spec's
  * schema, enforces the confirm gate, auto-populates `ctx.feature` from
- * the input envelope, appends the audit-log entry, and returns
- * `{ spec, result, ctx }`. This is the single implementation shared by
- * `runCapability` (registered specs) and the composition root's
- * `runCapability` in `packages/catalog`.
+ * the input envelope, injects the cross-capability dispatcher
+ * (`ctx.dispatch`), appends the audit-log entry, and returns
+ * `{ spec, result, ctx }`.
+ *
+ * The spec set is passed in explicitly: core no longer holds a
+ * module-level registry, so composition roots (e.g.
+ * `packages/catalog`) bind the full spec list with a thin wrapper and
+ * callers cannot be affected by import order.
  */
 export async function runCapabilityWith(
   specs: AnyCap[],
@@ -103,11 +100,23 @@ export async function runCapabilityWith(
   const envelopeFeature = typeof input.feature === "string" && (input.feature as string).trim()
     ? (input.feature as string).trim()
     : undefined;
-  const effectiveCtx: CapabilityContext = ctx.feature
+  const baseCtx: CapabilityContext = ctx.feature
     ? ctx
     : envelopeFeature
       ? { ...ctx, feature: envelopeFeature }
       : ctx;
+
+  // v2.0 — inject the cross-capability dispatcher. Capabilities call
+  // sibling capabilities through `ctx.dispatch` instead of importing
+  // them, so core stays free of a module-level spec registry. The
+  // dispatcher resolves against the same spec set this call was
+  // resolved from and hands the child the caller's original context
+  // (without the dispatcher itself, and without this call's
+  // feature stamping leaking into the child).
+  const effectiveCtx: CapabilityContext = {
+    ...baseCtx,
+    dispatch: (childId, childInput) => runCapabilityWith(specs, childId, childInput, ctx)
+  };
 
   const startedAt = Date.now();
   const result = await spec.execute(effectiveCtx, input as any);
@@ -129,10 +138,10 @@ export async function runCapabilityWith(
       : {})
   };
 
-  // after_hash — capture a stable hash of each artifact the capability
+  // after_hashes — capture a stable hash of each artifact the capability
   // claims to have written. Computed from the abs path the capability
-  // returned. Hashing is best-effort: a missing or unreadable file
-  // leaves afterHash undefined rather than failing the call.
+  // returned. Hashing is best-effort: a missing or unreadable file is
+  // omitted rather than failing the call.
   if (result.artifactPaths && result.artifactPaths.length > 0) {
     const hashes: Record<string, string> = {};
     for (const rel of result.artifactPaths) {
@@ -140,24 +149,38 @@ export async function runCapabilityWith(
       const h = safeHash(abs);
       if (h) hashes[rel] = h;
     }
-    if (Object.keys(hashes).length > 0) {
-      (log as AuditEntry & { afterHashes?: Record<string, string> }).afterHashes = hashes;
-    }
+    if (Object.keys(hashes).length > 0) log.afterHashes = hashes;
   }
 
-  const auditFile = join(ensureAuditDir(effectiveCtx.rootDir), "capability.log");
-  appendFileSync(auditFile, `${JSON.stringify(log)}\n`, "utf8");
+  // Audit append is best-effort: a capability that already succeeded (and
+  // may already have mutated the workspace) must not be reported as a
+  // failure because the audit directory is unwritable. On failure we
+  // surface a warning instead.
+  try {
+    const auditFile = join(ensureAuditDir(effectiveCtx.rootDir), "capability.log");
+    rotateAuditLog(auditFile);
+    appendFileSync(auditFile, `${JSON.stringify(log)}\n`, "utf8");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    result.reportFragments.push(`audit log write failed: ${message}`);
+    console.error(`[dapei] audit log write failed: ${message}`);
+  }
   return { spec, result, ctx: effectiveCtx };
 }
 
 /**
- * Run a capability against the currently registered spec set. Internal
- * core callers (cross-domain invocations such as feature.close →
- * cdr.feature.link) use this; consumers outside core get the same
- * behaviour from the composition root's `runCapability`.
+ * Rotate the audit log when it exceeds `AUDIT_LOG_MAX_BYTES`, renaming
+ * it to `<file>.1` (replacing any existing `.1`). Best-effort: rotation
+ * failures are swallowed so the caller's append attempt is unaffected.
  */
-export async function runCapability(id: string, input: Record<string, Json>, ctx: CapabilityContext) {
-  return runCapabilityWith(registeredSpecs, id, input, ctx);
+function rotateAuditLog(auditFile: string): void {
+  try {
+    if (!existsSync(auditFile)) return;
+    if (statSync(auditFile).size <= AUDIT_LOG_MAX_BYTES) return;
+    renameSync(auditFile, `${auditFile}.1`);
+  } catch {
+    /* rotation is best-effort; never block the append */
+  }
 }
 
 /**
