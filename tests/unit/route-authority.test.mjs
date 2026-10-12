@@ -38,7 +38,7 @@ import { load } from 'js-yaml';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..');
 
-const router = await import('../../packages/router/src/index.ts');
+const router = await import('@dapei/router');
 
 // ---------------------------------------------------------------------------
 // Registry: the union of the capability spec modules.
@@ -54,9 +54,9 @@ const router = await import('../../packages/router/src/index.ts');
 // spec carries `id` plus at least one of `inputSchema` / `execute` /
 // `version`, which is what the walk below keys on.
 const SPEC_MODULES = [
-  '../../packages/core/src/capabilities/index.ts',
-  '../../packages/cdr/src/capabilities.ts',
-  '../../packages/doc-gen/src/doc-gen.ts'
+  '@dapei/core/capabilities',
+  '@dapei/cdr/capabilities',
+  '@dapei/doc-gen/doc-gen'
 ];
 
 // Capability ids are dotted lower-camel words: workspace.init,

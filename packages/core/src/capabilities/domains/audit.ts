@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
-import { read, workspacePaths } from "../../../../runtime-adapters/src/system.ts";
+import { read, workspacePaths } from "@dapei/runtime-adapters/system";
 import { requireFields } from "../shared.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;

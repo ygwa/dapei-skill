@@ -3,7 +3,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CapabilityError } from "../../types.ts";
 import type { CapabilityResult, CapabilitySpec } from "../../types.ts";
-import { copyIfMissing, ensureDir, isConformingWorkspace, isEffectivelyEmpty, read, runSafe, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
+import { copyIfMissing, ensureDir, isConformingWorkspace, isEffectivelyEmpty, read, runSafe, workspacePaths, write } from "@dapei/runtime-adapters/system";
 import { parseReposYamlNames } from "../shared.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;

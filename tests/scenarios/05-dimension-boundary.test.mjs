@@ -23,7 +23,7 @@ const FIXTURE = join(REPO_ROOT, 'tests', 'fixtures', 'sample-node-repo');
 
 if (!process.env.DAPEI_ENGINE_HOME) process.env.DAPEI_ENGINE_HOME = REPO_ROOT;
 
-const core = await import('../../packages/catalog/src/index.ts');
+const core = await import('@dapei/catalog');
 
 function cleanTmp(t) { rmSync(t, { recursive: true, force: true }); }
 function initFixtureRepo(targetPath) {

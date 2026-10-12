@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '../..');
 
-const capabilities = await import('../../packages/catalog/src/index.ts');
+const capabilities = await import('@dapei/catalog');
 const tsCapabilities = Object.keys(capabilities.capabilities);
 
 test('all registered TS capabilities have unique IDs', () => {

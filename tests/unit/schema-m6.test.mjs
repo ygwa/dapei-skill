@@ -12,7 +12,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { validateInputSchema } = await import('../../packages/core/src/schema.ts');
+const { validateInputSchema } = await import('@dapei/core/schema');
 
 // ---------------------------------------------------------------------------
 // Flat shape (regression — pre-M6 behaviour)

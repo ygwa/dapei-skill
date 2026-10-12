@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
-import { ensureDir, read, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
+import { ensureDir, read, workspacePaths, write } from "@dapei/runtime-adapters/system";
 import { assertStageConfirmation, assertStagePrereqs, requireFields, yamlStageList, yamlStageOutputs } from "../shared.ts";
 import { guardStageAdvance } from "../../guardrail.ts";
 import { contextBuild } from "./context.ts";

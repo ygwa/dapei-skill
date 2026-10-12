@@ -25,8 +25,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..');
 const FIXTURE = join(REPO_ROOT, 'tests', 'fixtures', 'sample-node-repo');
 
-const core = await import('../../packages/catalog/src/index.ts');
-const registryMod = await import('../../packages/core/src/capability-registry.ts');
+const core = await import('@dapei/catalog');
+const registryMod = await import('@dapei/core/capability-registry');
 
 function cleanTmp(t) { rmSync(t, { recursive: true, force: true }); }
 function initFixtureRepo(targetPath) {

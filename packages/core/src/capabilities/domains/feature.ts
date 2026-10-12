@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
-import { atomicWrite, ensureDir, read, run, runSafe, safeJoinWithin, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
+import { atomicWrite, ensureDir, read, run, runSafe, safeJoinWithin, workspacePaths, write } from "@dapei/runtime-adapters/system";
 import { assertStageConfirmation, assertStagePrereqs, defaultBranch, featureRepoNames, requireFields, yamlStageList } from "../shared.ts";
 import { guardStageAdvance } from "../../guardrail.ts";
 import { loadCognitiveIndex } from "../../cognitive-index.ts";

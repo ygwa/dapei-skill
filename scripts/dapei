@@ -1,8 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENGINE="$SCRIPT_ROOT/engine/dapei-engine.ts"
-export DAPEI_ENGINE_HOME="$SCRIPT_ROOT"
+# dapei — thin adapter to the capability engine.
+#
+# Two runtime modes, chosen by what actually exists in the checkout:
+#   * source mode — `engine/dapei-engine.ts` through node's type stripping
+#                   (daily development: what you edit is what runs)
+#   * bundle mode — `dist/dapei-engine.js`, the shipped single-file artifact
+#                   built by `npm run build` (no TypeScript, no workspace
+#                   links, no type-stripping flag)
+#
+# Source wins when both exist so an edited .ts can never be shadowed by a stale
+# bundle. Force the shipped artifact with DAPEI_USE_BUNDLE=1 (CI does this).
 
-exec node --experimental-strip-types "$ENGINE" "$@"
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export DAPEI_ENGINE_HOME="${DAPEI_ENGINE_HOME:-$SCRIPT_ROOT}"
+
+SOURCE_ENGINE="$SCRIPT_ROOT/engine/dapei-engine.ts"
+BUNDLE_ENGINE="$SCRIPT_ROOT/dist/dapei-engine.js"
+
+if [[ "${DAPEI_USE_BUNDLE:-}" != "1" && -f "$SOURCE_ENGINE" ]]; then
+  exec node --experimental-strip-types "$SOURCE_ENGINE" "$@"
+fi
+
+if [[ -f "$BUNDLE_ENGINE" ]]; then
+  exec node "$BUNDLE_ENGINE" "$@"
+fi
+
+echo "[dapei][error] no engine found: expected $SOURCE_ENGINE or $BUNDLE_ENGINE (run 'npm run build')" >&2
+exit 1

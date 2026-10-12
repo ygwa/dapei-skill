@@ -11,7 +11,7 @@ const REPO_ROOT = join(__dirname, '..', '..');
 const DOC_GEN_NM = join(REPO_ROOT, 'packages/doc-gen/node_modules');
 const VP_BIN = join(DOC_GEN_NM, 'vitepress/bin/vitepress.js');
 
-const core = await import('../../packages/catalog/src/index.ts');
+const core = await import('@dapei/catalog');
 
 async function generatePortalInTmp() {
   const tmp = mkdtempSync(join(tmpdir(), 'dapei-vp-int-'));

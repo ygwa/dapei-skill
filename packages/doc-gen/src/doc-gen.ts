@@ -1,10 +1,10 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join, relative, basename } from "node:path";
-import type { CapabilitySpec } from "../../core/src/types.ts";
-import { CapabilityError } from "../../core/src/types.ts";
-import { cognitivePaths, loadCognitiveIndex } from "../../core/src/cognitive-index.ts";
-import { parseYamlDocument, stringifyYamlDocument, type YamlValue } from "../../core/src/yaml-doc.ts";
-import { ensureDir, read, write, workspacePaths, listFilesRecursively } from "../../runtime-adapters/src/system.ts";
+import type { CapabilitySpec } from "@dapei/core/types";
+import { CapabilityError } from "@dapei/core/types";
+import { cognitivePaths, loadCognitiveIndex } from "@dapei/core/cognitive-index";
+import { parseYamlDocument, stringifyYamlDocument, type YamlValue } from "@dapei/core/yaml-doc";
+import { ensureDir, read, write, workspacePaths, listFilesRecursively } from "@dapei/runtime-adapters/system";
 
 export type AnyCap = CapabilitySpec<any, any>;
 

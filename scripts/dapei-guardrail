@@ -12,13 +12,27 @@ set -euo pipefail
 # non-blocking — the guardrail only fails this script when the engine itself
 # errors, or when the workspace sets `guardrail_mode` to a blocking mode and the
 # capability refuses to report success.
+#
+# The engine is resolved the same way as in `scripts/dapei`: source when the
+# checkout has it, otherwise the built bundle.
 
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENGINE="$SCRIPT_ROOT/engine/dapei-engine.ts"
-export DAPEI_ENGINE_HOME="$SCRIPT_ROOT"
+export DAPEI_ENGINE_HOME="${DAPEI_ENGINE_HOME:-$SCRIPT_ROOT}"
+
+SOURCE_ENGINE="$SCRIPT_ROOT/engine/dapei-engine.ts"
+BUNDLE_ENGINE="$SCRIPT_ROOT/dist/dapei-engine.js"
+
+if [[ "${DAPEI_USE_BUNDLE:-}" != "1" && -f "$SOURCE_ENGINE" ]]; then
+  ENGINE=(--experimental-strip-types "$SOURCE_ENGINE")
+elif [[ -f "$BUNDLE_ENGINE" ]]; then
+  ENGINE=("$BUNDLE_ENGINE")
+else
+  echo "[dapei][error] no engine found: expected $SOURCE_ENGINE or $BUNDLE_ENGINE (run 'npm run build')" >&2
+  exit 1
+fi
 
 run_guardrail() {
-  node --experimental-strip-types "$ENGINE" run \
+  node "${ENGINE[@]}" run \
     --capability feature.guardrail \
     --input "{\"feature\":\"$1\"}"
 }

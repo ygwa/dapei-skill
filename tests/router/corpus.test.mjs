@@ -20,7 +20,7 @@ import { load } from 'js-yaml';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CORPUS_PATH = join(__dirname, 'fixtures', 'intent-corpus.yaml');
 
-const router = await import('../../packages/router/src/index.ts');
+const router = await import('@dapei/router');
 
 const corpus = load(readFileSync(CORPUS_PATH, 'utf8'));
 if (!corpus || typeof corpus !== 'object') {

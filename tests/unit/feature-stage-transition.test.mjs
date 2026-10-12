@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const core = await import("../../packages/catalog/src/index.ts");
+const core = await import("@dapei/catalog");
 
 const WORKFLOW_YAML = `
 - id: analyze-current-state

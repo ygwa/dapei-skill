@@ -5,7 +5,9 @@
   "type": "module",
   "description": "VitePress documentation portal generator for dapei cognitive assets",
   "exports": {
-    "./doc-gen": "./src/doc-gen.ts"
+    ".": "./src/index.ts",
+    "./doc-gen": "./src/doc-gen.ts",
+    "./package.json": "./package.json"
   },
   "scripts": {
     "dev": "vitepress dev",

@@ -6,7 +6,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'node:child_process';
 
-const core = await import('../../packages/catalog/src/index.ts');
+const core = await import('@dapei/catalog');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const mallOrderFixture = join(__dirname, '../fixtures/mall-order');
 const mallPaymentFixture = join(__dirname, '../fixtures/mall-payment');
@@ -91,7 +91,7 @@ test('cdr v0.8: end-to-end reverse-cluster pipeline → L1 portal', async () => 
     // The suggest capability must NOT have created a domain.yaml.
     // workspace.init pre-creates the domains directory as part of the
     // standard docs/ tree, so we check for yaml files inside it instead.
-    const { listFilesRecursively } = await import('../../packages/runtime-adapters/src/system.ts');
+    const { listFilesRecursively } = await import('@dapei/runtime-adapters/system');
     const domainFiles = listFilesRecursively(join(tmp, 'docs/as-is/domains'), ['.yaml', '.yml'], 50);
     assert.equal(domainFiles.length, 0,
       'suggest never creates a domain artifact — only suggestions file');
@@ -220,7 +220,7 @@ test('cdr v0.8: business-rule co-apply clusters behaviors that share no events',
 });
 
 test('cdr v0.8: router intents route to the right capability', async () => {
-  const router = await import('../../packages/router/src/index.ts');
+  const router = await import('@dapei/router');
   assert.equal(router.routeIntent('suggest domains').capability, 'cdr.domain.suggest');
   assert.equal(router.routeIntent('synth capability map for E-Commerce Mall').capability,
     'cdr.capability.map.synth');

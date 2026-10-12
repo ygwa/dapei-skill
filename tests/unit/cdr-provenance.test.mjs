@@ -26,10 +26,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-const core = await import('../../packages/catalog/src/index.ts');
-const provenance = await import('../../packages/core/src/provenance.ts');
-const { parseYamlDocument } = await import('../../packages/core/src/yaml-doc.ts');
-const { loadCognitiveIndex } = await import('../../packages/core/src/cognitive-index.ts');
+const core = await import('@dapei/catalog');
+const provenance = await import('@dapei/core/provenance');
+const { parseYamlDocument } = await import('@dapei/core/yaml-doc');
+const { loadCognitiveIndex } = await import('@dapei/core/cognitive-index');
 
 const FIXTURE_ROOT = join(import.meta.dirname || '.', '..', 'fixtures', 'sample-node-repo');
 

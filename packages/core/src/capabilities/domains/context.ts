@@ -3,7 +3,7 @@ import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
 import { loadCognitiveIndex } from "../../cognitive-index.ts";
-import { listFilesRecursively, read, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
+import { listFilesRecursively, read, workspacePaths, write } from "@dapei/runtime-adapters/system";
 import { detectRepoLanguage, featureRepoNames, requireFields } from "../shared.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;

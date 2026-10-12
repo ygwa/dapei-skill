@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const core = await import('../../packages/catalog/src/index.ts');
+const core = await import('@dapei/catalog');
 
 test('workspace.init creates workspace metadata', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'dapei-core-'));

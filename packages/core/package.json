@@ -5,15 +5,18 @@
   "type": "module",
   "description": "dapei kernel: capability registry, schema validation, audit log, core capabilities",
   "exports": {
-    "./index": "./src/index.ts",
+    ".": "./src/index.ts",
     "./types": "./src/types.ts",
-    "./guardrail": "./src/guardrail.ts",
-    "./schema": "./src/schema.ts",
     "./evidence": "./src/evidence.ts",
+    "./schema": "./src/schema.ts",
     "./yaml-doc": "./src/yaml-doc.ts",
     "./cognitive-index": "./src/cognitive-index.ts",
     "./provenance": "./src/provenance.ts",
-    "./capabilities": "./src/capabilities/index.ts"
+    "./guardrail": "./src/guardrail.ts",
+    "./capability-registry": "./src/capability-registry.ts",
+    "./capabilities": "./src/capabilities/index.ts",
+    "./internal/shared": "./src/capabilities/shared.ts",
+    "./package.json": "./package.json"
   },
   "dependencies": {
     "@dapei/runtime-adapters": "workspace:*"

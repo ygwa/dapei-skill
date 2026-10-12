@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { CapabilityError } from "../../types.ts";
-import { ensureDir, read, run, runSafe, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
+import { ensureDir, read, run, runSafe, workspacePaths, write } from "@dapei/runtime-adapters/system";
 import { defaultBranch, detectRepoLanguage, detectTestCommands, parseReposYamlNames, requireFields } from "../shared.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;

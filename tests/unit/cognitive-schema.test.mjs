@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateArtifact, validateEvidenceFields, parseConfidence } from '../../packages/core/src/evidence.ts';
-import { parseYamlDocument } from '../../packages/core/src/yaml-doc.ts';
+import { validateArtifact, validateEvidenceFields, parseConfidence } from '@dapei/core/evidence';
+import { parseYamlDocument } from '@dapei/core/yaml-doc';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixtureRoot = join(__dirname, '../fixtures/sample-node-repo');

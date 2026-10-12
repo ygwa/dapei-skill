@@ -12,7 +12,7 @@ import {
 } from "../../cognitive-index.ts";
 import { parseYamlDocument, stringifyYamlDocument, type YamlValue } from "../../yaml-doc.ts";
 import { parseReposYamlNames, requireFields } from "../shared.ts";
-import { ensureDir, read, runSafe, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
+import { ensureDir, read, runSafe, workspacePaths, write } from "@dapei/runtime-adapters/system";
 
 export type AnyCap = CapabilitySpec<any, any>;
 

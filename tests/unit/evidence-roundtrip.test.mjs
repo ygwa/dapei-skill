@@ -15,8 +15,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { validateArtifact, validateBehaviorArtifact } from '../../packages/core/src/evidence.ts';
-import { parseYamlDocument, stringifyYamlDocument } from '../../packages/core/src/yaml-doc.ts';
+import { validateArtifact, validateBehaviorArtifact } from '@dapei/core/evidence';
+import { parseYamlDocument, stringifyYamlDocument } from '@dapei/core/yaml-doc';
 
 const PROVENANCE_KEYS = ['created_by_feature', 'updated_by_feature', 'created_at', 'updated_at'];
 const PROVENANCE_TS = '2026-06-24T00:00:00.000Z';

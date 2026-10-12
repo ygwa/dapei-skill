@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readdirSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { runSafe } from "../../runtime-adapters/src/system.ts";
+import { runSafe } from "@dapei/runtime-adapters/system";
 import { loadCognitiveIndex } from "./cognitive-index.ts";
 import { defaultBranch, featureRepoNames } from "./capabilities/shared.ts";
 import { CapabilityError } from "./types.ts";

@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { CapabilityError } from "../types.ts";
 import type { Json } from "../types.ts";
-import { read, runSafe } from "../../../runtime-adapters/src/system.ts";
+import { read, runSafe } from "@dapei/runtime-adapters/system";
 
 export function requireFields(input: Record<string, Json>, required: string[]): void {
   for (const key of required) {

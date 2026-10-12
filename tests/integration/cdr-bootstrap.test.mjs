@@ -155,7 +155,7 @@ test('round 1 regression: cdr.doc.generate still produces a buildable portal', a
   // portal-generation behavior into round 3 acceptance.
   const workspace = emptyWorkspace();
   try {
-    const core = await import('../../packages/catalog/src/index.ts');
+    const core = await import('@dapei/catalog');
     await core.runCapability('workspace.init', {}, { rootDir: workspace, now: new Date() });
 
     mkdirSync(join(workspace, 'repos/demo/src'), { recursive: true });

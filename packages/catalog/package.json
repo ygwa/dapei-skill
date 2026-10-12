@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Composition root: composes the core, cdr, and doc-gen capability specs into the engine's public surface",
   "exports": {
-    "./index": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
   },
   "dependencies": {
     "@dapei/core": "workspace:*",

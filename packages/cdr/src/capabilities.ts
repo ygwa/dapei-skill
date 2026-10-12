@@ -1,10 +1,10 @@
 import { existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { basename, isAbsolute, join, relative } from "node:path";
-import type { CapabilitySpec } from "../../core/src/types.ts";
-import { CapabilityError } from "../../core/src/types.ts";
-import { assertValidArtifact, validateArtifact, parseConfidence, type SourceRef } from "../../core/src/evidence.ts";
-import type { ArtifactType } from "../../core/src/evidence.ts";
+import type { CapabilitySpec } from "@dapei/core/types";
+import { CapabilityError } from "@dapei/core/types";
+import { assertValidArtifact, validateArtifact, parseConfidence, type SourceRef } from "@dapei/core/evidence";
+import type { ArtifactType } from "@dapei/core/evidence";
 import {
   artifactRelativePath,
   cognitivePaths,
@@ -18,12 +18,12 @@ import {
   type RepoSnapshot,
   type StaleAsset,
   type StaleSource
-} from "../../core/src/cognitive-index.ts";
-import { parseYamlDocument, stringifyYamlDocument, type YamlValue } from "../../core/src/yaml-doc.ts";
-import { requireFields, detectRepoLanguage, detectTestCommands, parseReposYamlNames, featureRepoNames } from "../../core/src/capabilities/shared.ts";
-import { ensureDir, read, write, runSafe, workspacePaths, listFilesRecursively, safeJoinWithin, atomicWrite } from "../../runtime-adapters/src/system.ts";
-import { CodeGraphAdapter } from "../../runtime-adapters/src/codegraph.ts";
-import { applyProvenance, provenanceFromContext } from "../../core/src/provenance.ts";
+} from "@dapei/core/cognitive-index";
+import { parseYamlDocument, stringifyYamlDocument, type YamlValue } from "@dapei/core/yaml-doc";
+import { requireFields, detectRepoLanguage, detectTestCommands, parseReposYamlNames, featureRepoNames } from "@dapei/core/internal/shared";
+import { ensureDir, read, write, runSafe, workspacePaths, listFilesRecursively, safeJoinWithin, atomicWrite } from "@dapei/runtime-adapters/system";
+import { CodeGraphAdapter } from "@dapei/runtime-adapters/codegraph";
+import { applyProvenance, provenanceFromContext } from "@dapei/core/provenance";
 
 export type AnyCap = CapabilitySpec<any, any>;
 
@@ -2001,7 +2001,7 @@ export const cdrStateDerive: AnyCap = {
     additionalProperties: false
   },
   async execute(ctx, input) {
-    requireFields(input as Record<string, import("../../core/src/types.ts").Json>, ["entity", "behaviors"]);
+    requireFields(input as Record<string, import("@dapei/core/types").Json>, ["entity", "behaviors"]);
     const entity = String(input.entity);
     const behaviorIds: string[] = Array.isArray(input.behaviors)
       ? input.behaviors.map((b: unknown) => String(b))
@@ -4322,7 +4322,7 @@ export const cdrContextEnvelope: AnyCap = {
     additionalProperties: false
   },
   async execute(ctx, input) {
-    requireFields(input as Record<string, import("../../core/src/types.ts").Json>, ["target", "id"]);
+    requireFields(input as Record<string, import("@dapei/core/types").Json>, ["target", "id"]);
     const target = String(input.target);
     const id = String(input.id);
     const repo = input.repo ? String(input.repo) : undefined;

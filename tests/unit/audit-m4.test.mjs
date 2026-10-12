@@ -22,7 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-const core = await import('../../packages/catalog/src/index.ts');
+const core = await import('@dapei/catalog');
 
 const FIXTURE_ROOT = join(import.meta.dirname || '.', '..', 'fixtures', 'sample-node-repo');
 

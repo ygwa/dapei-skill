@@ -5,8 +5,9 @@
   "type": "module",
   "description": "Cognitive Domain Repository capabilities",
   "exports": {
+    ".": "./src/index.ts",
     "./capabilities": "./src/capabilities.ts",
-    "./index": "./src/index.ts"
+    "./package.json": "./package.json"
   },
   "dependencies": {
     "@dapei/core": "workspace:*",

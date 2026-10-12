@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const mod = await import('../../packages/core/src/capability-registry.ts');
+const mod = await import('@dapei/core/capability-registry');
 
 test('registry rejects duplicate ids', () => {
   const r = new mod.CapabilityRegistry();

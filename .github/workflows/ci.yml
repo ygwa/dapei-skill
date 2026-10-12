@@ -53,7 +53,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run smoke test
+      - name: Build engine bundle
+        run: npm run build
+
+      - name: Run smoke test (source mode)
+        run: bash scripts/smoke-test.sh
+
+      - name: Run smoke test (shipped bundle)
+        env:
+          DAPEI_USE_BUNDLE: '1'
         run: bash scripts/smoke-test.sh
 
   test-layers:
@@ -82,6 +90,9 @@ jobs:
 
       - name: Build engine bundle (esbuild)
         run: npm run build
+
+      - name: Shipped engine bundle smoke (dist/dapei-engine.js)
+        run: npm run smoke:bundle
 
       - name: Unit tests (tests/unit)
         run: npm run test:unit

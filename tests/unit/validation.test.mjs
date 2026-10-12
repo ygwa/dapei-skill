@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-const core = await import('../../packages/catalog/src/index.ts');
+const core = await import('@dapei/catalog');
 
 test('validationRun returns errors array in result', async () => {
   const tmp = mkdtempSync(join(tmpdir(), 'dapei-val-'));

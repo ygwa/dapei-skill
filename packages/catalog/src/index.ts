@@ -14,7 +14,7 @@
 //   cdr     → core, runtime-adapters
 //   doc-gen → core, runtime-adapters
 
-import { coreCapabilitySpecs, registerCapabilitySpecs, runCapability, type AnyCap } from "../../core/src/index.ts";
+import { coreCapabilitySpecs, registerCapabilitySpecs, runCapability, type AnyCap } from "@dapei/core";
 import {
   cdrProfile,
   cdrEntriesCandidate,
@@ -40,8 +40,8 @@ import {
   cdrFeatureLink,
   cdrBootstrap,
   cdrContextEnvelope
-} from "../../cdr/src/capabilities.ts";
-import { docGenerate } from "../../doc-gen/src/doc-gen.ts";
+} from "@dapei/cdr/capabilities";
+import { docGenerate } from "@dapei/doc-gen";
 
 export const capabilitySpecs: AnyCap[] = [
   ...coreCapabilitySpecs,

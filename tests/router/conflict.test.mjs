@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const router = await import('../../packages/router/src/index.ts');
+const router = await import('@dapei/router');
 
 test('introspectConflicts: returns a structured result', () => {
   const { conflicts, text } = router.introspectConflicts();

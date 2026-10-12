@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-const core = await import('../../packages/catalog/src/index.ts');
+const core = await import('@dapei/catalog');
 
 function cleanTmp(tmp) {
   rmSync(tmp, { recursive: true, force: true });

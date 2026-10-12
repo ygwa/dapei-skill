@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { CapabilitySpec } from "../../types.ts";
 import { detectTestCommands, featureRepoNames, requireFields } from "../shared.ts";
-import { read, run, workspacePaths, write } from "../../../../runtime-adapters/src/system.ts";
+import { read, run, workspacePaths, write } from "@dapei/runtime-adapters/system";
 import { runGuardrail } from "../../guardrail.ts";
 
 export type AnyCap = CapabilitySpec<any, any>;

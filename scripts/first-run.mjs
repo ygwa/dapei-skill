@@ -15,7 +15,10 @@
  *
  * All engine work goes through `dapei-engine run --capability ...` as a
  * subprocess: the bootstrap never imports engine TypeScript directly, so it
- * needs no build step and no `--experimental-strip-types` on this file.
+ * needs no build step and no `--experimental-strip-types` on this file. The
+ * engine itself is resolved like everywhere else — source when the checkout
+ * has `engine/dapei-engine.ts`, otherwise the built `dist/dapei-engine.js`
+ * (force with DAPEI_USE_BUNDLE=1).
  *
  * Exit codes:
  *   0 — success
@@ -30,7 +33,8 @@ import { execFileSync, execSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
-const ENGINE = join(REPO_ROOT, "engine/dapei-engine.ts");
+const SOURCE_ENGINE = join(REPO_ROOT, "engine/dapei-engine.ts");
+const BUNDLE_ENGINE = join(REPO_ROOT, "dist/dapei-engine.js");
 
 const COGNITIVE_DIR = ".dapei/cognitive";
 const PORTAL_DIR = ".dapei/docs-portal";
@@ -48,13 +52,25 @@ function fail(msg, code = 1) {
 }
 
 /**
+ * Resolve the engine invocation prefix: source mode when the checkout has the
+ * TypeScript entry, otherwise the built single-file bundle.
+ */
+function engineInvocation() {
+  if (process.env.DAPEI_USE_BUNDLE !== "1" && existsSync(SOURCE_ENGINE)) {
+    return ["--experimental-strip-types", SOURCE_ENGINE];
+  }
+  if (existsSync(BUNDLE_ENGINE)) return [BUNDLE_ENGINE];
+  throw new Error(`no engine found: need ${SOURCE_ENGINE} or ${BUNDLE_ENGINE} (run 'npm run build')`);
+}
+
+/**
  * Run one capability through the engine CLI and return its stdout.
  * Throws on a non-zero exit (unknown capability, schema failure, capability error).
  */
 function runCapability(capability, input, workspace) {
   return execFileSync(
     process.execPath,
-    ["--experimental-strip-types", ENGINE, "run", "--capability", capability, "--input", JSON.stringify(input)],
+    [...engineInvocation(), "run", "--capability", capability, "--input", JSON.stringify(input)],
     {
       cwd: workspace,
       env: { ...process.env, DAPEI_WORKSPACE_ROOT: workspace, DAPEI_ENGINE_HOME: REPO_ROOT },

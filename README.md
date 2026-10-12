@@ -22,7 +22,7 @@ This is a collection of those experiences, packaged as a skill for AI agents to 
 
 | | |
 | --- | --- |
-| **Node.js** | `>= 22.6.0` (needed for `--experimental-strip-types` on the engine) |
+| **Node.js** | `>= 22.6.0` for a source checkout (the engine runs TypeScript through `--experimental-strip-types`). The shipped bundle `dist/dapei-engine.js` (built by `npm run build`) needs no flags and runs on `>= 20` |
 | **Git** | recent version with worktree support (Git 2.20+) |
 | **AI tool** | any that loads skills from a known path: Claude Code, Cursor, Copilot, Windsurf, … |
 | **OS** | macOS, Linux, or WSL2. Native Windows is not tested. |
@@ -73,6 +73,7 @@ The full process we actually use — not theory, but lessons learned through rea
 - **Cognitive Runtime layer**: Agent-driven behavior analysis with structured YAML artifacts and evidence validation (`cognitive.discover`, `cognitive.artifact.upsert`, …)
 - Atomic Capability layer: `dapei-engine` executes typed capabilities such as `workspace.init`, `repos.analyze`, `workflow.runStage`
 - Composition root: `packages/catalog` assembles the capability specs from `packages/core` (kernel + core capabilities), `packages/cdr` (cognitive discovery) and `packages/doc-gen` (portal). The kernel never imports upward, so the package graph stays acyclic
+- Packaging: the six `packages/*` are real pnpm workspace packages that import each other **by name** (`@dapei/core/types`, `@dapei/cdr/capabilities`, …) through their `exports` maps — cross-package relative paths are rejected by `tests/unit/package-boundaries.test.mjs`, which also enforces declared dependencies and an acyclic graph. The shipped artifact is the single-file bundle `dist/dapei-engine.js` (`npm run build`, esbuild): `scripts/dapei` runs the source when a checkout has `engine/dapei-engine.ts`, and the bundle otherwise (`DAPEI_USE_BUNDLE=1` forces the bundle; `npm run smoke:bundle` exercises it)
 - Runtime substrate layer: worktree/filesystem/git remains the deterministic source of truth
 
 North Star: **让 AI 持续参与系统认知** — understand how systems behave, how state changes, and how risks propagate — not just generate code.

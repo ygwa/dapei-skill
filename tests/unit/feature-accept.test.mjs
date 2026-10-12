@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const core = await import("../../packages/catalog/src/index.ts");
+const core = await import("@dapei/catalog");
 
 async function setupFeature(tmp, opts = {}) {
   await core.runCapability("workspace.init", {}, { rootDir: tmp, now: new Date() });

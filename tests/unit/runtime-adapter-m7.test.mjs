@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-const system = await import('../../packages/runtime-adapters/src/system.ts');
+const system = await import('@dapei/runtime-adapters/system');
 
 const {
   safeJoinWithin,

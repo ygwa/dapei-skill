@@ -179,6 +179,34 @@ registered by `catalog`, a kernel capability that internally calls a CDR capabil
 through the registered set (e.g. `feature.close` → `cdr.feature.link`). Importing `packages/core`
 alone gives you the kernel specs only.
 
+### Import rules (enforced, not aspirational)
+
+Cross-package imports go through the package name and its `exports` map — never a relative path
+out of the package:
+
+```ts
+import { CapabilityError } from "@dapei/core/types.ts";   // not ../../core/src/types.ts
+import { runCapability } from "@dapei/catalog";           // the composition root
+import { ensureDir } from "@dapei/runtime-adapters/system";
+```
+
+Sibling capability packages reach the kernel's shared helpers through
+`@dapei/core/internal/shared` (the `internal/` prefix marks a surface that exists only for them).
+
+`tests/unit/package-boundaries.test.mjs` fails the build when a relative path escapes a package,
+when an imported `@dapei/*` package/subpath is not declared in `dependencies` (or the subpath is
+missing from the target's `exports`), when a declared dependency is unused, or when the package
+graph gains a cycle. Add a new subpath to the owning package's `exports` before importing it.
+
+### Runtime modes
+
+`scripts/dapei` resolves the engine in two modes: **source** (`engine/dapei-engine.ts` via node's
+type stripping) when the checkout has it, otherwise the **bundle** (`dist/dapei-engine.js`, built
+by `npm run build`, no flags needed). Source wins so an edited `.ts` is never shadowed by a stale
+bundle; set `DAPEI_USE_BUNDLE=1` to force the shipped artifact. CI smoke-tests both: the whole
+smoke suite runs once through the source and `npm run smoke:bundle` runs `workspace.init`,
+`cdr.index.list` and `route` through the bundle.
+
 ### Boundary with Feature dimension
 
 CDR writes only to **workspace-dimension** paths (`docs/as-is/*`, `.dapei/cognitive/*`, `.dapei/docs-portal/`). It never writes into `features/<feature>/`. The Agent working in a feature workspace reads CDR outputs as read-only context via `context.build` (injected into `features/<feature>/context/related-cognitive-context.md`).

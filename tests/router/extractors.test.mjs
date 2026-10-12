@@ -22,7 +22,7 @@ const {
   extractCdrProductName,
   extractCdrDescription,
   STAGES
-} = await import('../../packages/router/src/extractors.ts');
+} = await import('@dapei/router/extractors');
 
 test('extractFeatureName: explicit feature: prefix wins', () => {
   assert.equal(extractFeatureName('feature: payment-refactor stuff'), 'payment-refactor');

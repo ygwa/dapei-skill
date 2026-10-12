@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'url';
 
-const core = await import('../../packages/catalog/src/index.ts');
-const router = await import('../../packages/router/src/index.ts');
+const core = await import('@dapei/catalog');
+const router = await import('@dapei/router');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixtureRoot = join(__dirname, '../fixtures/sample-node-repo');
 

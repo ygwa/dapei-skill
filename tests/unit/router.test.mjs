@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const router = await import('../../packages/router/src/index.ts');
+const router = await import('@dapei/router');
 
 test('route init workspace intent', () => {
   const r = router.routeIntent('initialize workspace');

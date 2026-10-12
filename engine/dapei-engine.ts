@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
-import { runCapability } from "../packages/catalog/src/index.ts";
-import { routeIntent } from "../packages/router/src/index.ts";
-import { CapabilityError } from "../packages/core/src/types.ts";
+import { runCapability } from "@dapei/catalog";
+import { routeIntent } from "@dapei/router";
+import { CapabilityError } from "@dapei/core/types";
 
 type Cli = { cmd: "run" | "route" | "legacy"; args: string[] };
 

@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./index": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./extractors": "./src/extractors.ts",
+    "./matcher": "./src/matcher.ts",
+    "./conflict": "./src/conflict.ts",
+    "./routes-table": "./src/routes-table.ts",
+    "./package.json": "./package.json"
   }
 }

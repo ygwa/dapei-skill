@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { read, write, workspacePaths } from "../../runtime-adapters/src/system.ts";
+import { read, write, workspacePaths } from "@dapei/runtime-adapters/system";
 import { parseYamlDocument, stringifyYamlDocument } from "./yaml-doc.ts";
 import type { ArtifactType } from "./evidence.ts";
 import { parseConfidence } from "./evidence.ts";

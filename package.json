@@ -18,10 +18,17 @@
     "test:router": "node --experimental-strip-types --test tests/router/*.test.mjs",
     "test:ai-behavior": "node --experimental-strip-types --test tests/ai-behavior/*.test.mjs",
     "smoke": "bash scripts/smoke-test.sh",
-    "verify": "npm run typecheck && npm run validate:skills && npm run build && npm run test && npm run smoke"
+    "smoke:bundle": "node scripts/smoke-bundle.mjs",
+    "verify": "npm run typecheck && npm run validate:skills && npm run build && npm run test && npm run smoke && npm run smoke:bundle"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",
+    "@dapei/catalog": "workspace:*",
+    "@dapei/cdr": "workspace:*",
+    "@dapei/core": "workspace:*",
+    "@dapei/doc-gen": "workspace:*",
+    "@dapei/router": "workspace:*",
+    "@dapei/runtime-adapters": "workspace:*",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.9.1",
     "ajv": "^8.20.0",

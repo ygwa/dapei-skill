@@ -18,7 +18,7 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync, existsSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const core = await import("../../packages/core/src/index.ts");
+const core = await import("@dapei/core");
 
 const WORKFLOW_WITH_GATES = `version: 0.1
 name: feature-lifecycle

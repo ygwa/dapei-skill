@@ -6,6 +6,7 @@
   "description": "Filesystem, process, and codegraph runtime adapters",
   "exports": {
     "./system": "./src/system.ts",
-    "./codegraph": "./src/codegraph.ts"
+    "./codegraph": "./src/codegraph.ts",
+    "./package.json": "./package.json"
   }
 }
